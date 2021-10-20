@@ -551,7 +551,17 @@
             </dependency>
             <dependency>
                 <groupId>io.debezium</groupId>
+                <artifactId>debezium-connector-yugabytedb</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.debezium</groupId>
                 <artifactId>debezium-connector-postgres-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.debezium</groupId>
+                <artifactId>debezium-connector-yugabytedb-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -18,10 +18,10 @@
       -->
         <version.postgres.server>9.6</version.postgres.server>
         <postgres.host>${docker.host.address}</postgres.host>
-        <postgres.port>5432</postgres.port>
-        <postgres.user>postgres</postgres.user>
-        <postgres.password>postgres</postgres.password>
-        <postgres.db.name>postgres</postgres.db.name>
+        <postgres.port>5433</postgres.port>
+        <postgres.user>yugabyte</postgres.user>
+        <postgres.password>yugabyte</postgres.password>
+        <postgres.db.name>yugabyte</postgres.db.name>
         <postgres.encoding>UTF8</postgres.encoding>
         <postgres.system.lang>en_US.utf8</postgres.system.lang>
         <postgres.image>debezium/postgres:${version.postgres.server}</postgres.image>
@@ -37,6 +37,20 @@
     </properties>
 
     <dependencies>
+
+        <dependency>
+            <groupId>org.yb</groupId>
+            <artifactId>yb-client</artifactId>
+            <version>0.8.6-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>org.yb</groupId>
+            <artifactId>yb-client</artifactId>
+            <version>0.8.6-SNAPSHOT</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>io.debezium</groupId>
             <artifactId>debezium-core</artifactId>
@@ -237,7 +251,7 @@
                         <database.user>${postgres.user}</database.user>
                         <database.password>${postgres.password}</database.password>
                         <database.dbname>${postgres.db.name}</database.dbname>
-                        <plugin.name>${decoder.plugin.name}</plugin.name>
+                        <!--<plugin.name>${decoder.plugin.name}</plugin.name>-->
                         <skipLongRunningTests>${skipLongRunningTests}</skipLongRunningTests>
                     </systemPropertyVariables>
                 </configuration>
@@ -326,7 +340,7 @@
                                     <filter>
                                         <packages>
                                             <include>
-                                                <item>io.debezium.connector.postgresql.spi</item>
+                                                <item>io.debezium.connector.yugabytedb.spi</item>
                                             </include>
                                         </packages>
                                     </filter>

@@ -7,17 +7,7 @@ package io.debezium.config;
 
 import java.time.DateTimeException;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -1213,6 +1203,21 @@ public final class Field {
         }
         catch (NumberFormatException e) {
             problems.accept(field, value, "An integer is expected");
+            return 1;
+        }
+        return 0;
+    }
+
+    public static int isUuid(Configuration config, Field field, ValidationOutput problems) {
+        String value = config.getString(field);
+        if (value == null) {
+            return 0;
+        }
+        try {
+            UUID.fromString(value);
+        }
+        catch (IllegalAccessError e) {
+            problems.accept(field, value, "An UUID string is expected");
             return 1;
         }
         return 0;

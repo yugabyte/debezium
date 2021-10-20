@@ -127,6 +127,13 @@
       </dependency>
       <dependency>
         <groupId>io.debezium</groupId>
+        <artifactId>debezium-connector-yugabytedb</artifactId>
+        <classifier>plugin</classifier>
+        <type>zip</type>
+        <version>${version.debezium.connector}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.debezium</groupId>
         <artifactId>debezium-connector-sqlserver</artifactId>
         <classifier>plugin</classifier>
         <type>zip</type>
@@ -391,6 +398,12 @@
         </dependency>
         <dependency>
           <groupId>io.debezium</groupId>
+          <artifactId>debezium-connector-yugabytedb</artifactId>
+          <classifier>plugin</classifier>
+          <type>zip</type>
+        </dependency>
+        <dependency>
+          <groupId>io.debezium</groupId>
           <artifactId>debezium-connector-sqlserver</artifactId>
           <classifier>plugin</classifier>
           <type>zip</type>
@@ -457,6 +470,13 @@
                           </dependencySet>
                           <dependencySet>
                             <outputDirectory>debezium-connector-postgresql</outputDirectory>
+                            <unpack>true</unpack>
+                            <includes>
+                              <include>io.apicurio:apicurio-registry-distro-connect-converter:zip</include>
+                            </includes>
+                          </dependencySet>
+                          <dependencySet>
+                            <outputDirectory>debezium-connector-yugabytedb</outputDirectory>
                             <unpack>true</unpack>
                             <includes>
                               <include>io.apicurio:apicurio-registry-distro-connect-converter:zip</include>
