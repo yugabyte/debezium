@@ -227,7 +227,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             }
         }
 
-        validateTServerConnection(configValues, config);
+        // validateTServerConnection(configValues, config);
     }
 
     @Override
