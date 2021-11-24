@@ -256,10 +256,10 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         YBTable table = this.syncClient.openTableByUUID(tId);
         String streamId = this.connectorConfig.streamId();
         if (streamId.equals("ad6cdaa9-812c-426e-a2f9-c04e387f55a0"))
-            streamId = syncClient.createCDCStreamFinal(table, "PROTO").getStreamId();
-        // streamId = syncClient.createCDCStream2(table).getStreamId();
+            // streamId = syncClient.createCDCStreamFinal(table, "PROTO").getStreamId();
+            // streamId = syncClient.createCDCStream2(table).getStreamId();
 
-        LOGGER.info(String.format("Created new stream with id %s", streamId));
+            LOGGER.info(String.format("Created new stream with id %s", streamId));
 
         Set<String> tableIds;
         tableIds = new HashSet<>();
