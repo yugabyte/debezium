@@ -1,6 +1,6 @@
 package decoderbufs;
 
-option java_package="io.debezium.connector.postgresql.proto";
+option java_package="io.debezium.connector.yugabytedb.proto";
 option java_outer_classname = "PgProto";
 option optimize_for = SPEED;
 
