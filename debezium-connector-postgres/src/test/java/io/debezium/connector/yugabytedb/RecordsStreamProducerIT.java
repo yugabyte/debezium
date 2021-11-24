@@ -133,11 +133,11 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 .with(PostgresConnectorConfig.SCHEMA_EXCLUDE_LIST, "postgis");
 
         // todo DBZ-766 are these really needed?
-        if (TestHelper.decoderPlugin() == PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) {
-            configBuilder = configBuilder.with("database.replication", "database")
-                    .with("database.preferQueryMode", "simple")
-                    .with("assumeMinServerVersion.set", "9.4");
-        }
+        // if (TestHelper.decoderPlugin() == PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) {
+        // configBuilder = configBuilder.with("database.replication", "database")
+        // .with("database.preferQueryMode", "simple")
+        // .with("assumeMinServerVersion.set", "9.4");
+        // }
 
         Testing.Print.enable();
     }

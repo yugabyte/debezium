@@ -20,7 +20,6 @@ import org.yb.cdc.CdcService;
 import io.debezium.connector.yugabytedb.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.yugabytedb.PostgresType;
 import io.debezium.connector.yugabytedb.TypeRegistry;
-import io.debezium.connector.yugabytedb.UnchangedToastedReplicationMessageColumn;
 import io.debezium.connector.yugabytedb.connection.AbstractReplicationMessageColumn;
 import io.debezium.connector.yugabytedb.connection.ReplicationMessage;
 import io.debezium.connector.yugabytedb.connection.ReplicationMessageColumnValueResolver;
@@ -101,10 +100,6 @@ public class PgProtoReplicationMessage implements ReplicationMessage {
                     final Optional<CdcService.TypeInfo> typeInfo = Optional.ofNullable(hasTypeMetadata() && typeInfoList != null ? typeInfoList.get(index) : null);
                     final String columnName = Strings.unquoteIdentifierPart(datum.getColumnName());
                     final PostgresType type = typeRegistry.get((int) datum.getColumnType());
-                    if (datum.hasDatumMissing()) {
-                        return new UnchangedToastedReplicationMessageColumn(columnName, type, typeInfo.map(CdcService.TypeInfo::getModifier).orElse(null),
-                                typeInfo.map(CdcService.TypeInfo::getValueOptional).orElse(Boolean.FALSE), hasTypeMetadata());
-                    }
 
                     final String fullType = typeInfo.map(CdcService.TypeInfo::getModifier).orElse(null);
                     return new AbstractReplicationMessageColumn(columnName, type, fullType,

@@ -132,7 +132,8 @@ public abstract class RelationalDatabaseSchema implements DatabaseSchema<TableId
      */
     protected void buildAndRegisterSchema(Table table) {
         if (tableFilter.isIncluded(table.id())) {
-            TableSchema schema = schemaBuilder.create(schemaPrefix, getEnvelopeSchemaName(table), table, columnFilter, columnMappers, customKeysMapper);
+            TableSchema schema = schemaBuilder.create(schemaPrefix,
+                    getEnvelopeSchemaName(table), table, columnFilter, columnMappers, customKeysMapper);
             schemasByTableId.put(table.id(), schema);
         }
     }

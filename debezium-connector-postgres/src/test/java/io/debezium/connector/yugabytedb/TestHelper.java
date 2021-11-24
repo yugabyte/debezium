@@ -14,7 +14,6 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.ZoneOffset;
@@ -307,14 +306,14 @@ public final class TestHelper {
     }
 
     protected static void dropPublication(String publicationName) {
-        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
-            try {
-                execute("DROP PUBLICATION " + publicationName);
-            }
-            catch (Exception e) {
-                LOGGER.debug("Error while dropping publication: '" + publicationName + "'", e);
-            }
-        }
+        // if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
+        // try {
+        // execute("DROP PUBLICATION " + publicationName);
+        // }
+        // catch (Exception e) {
+        // LOGGER.debug("Error while dropping publication: '" + publicationName + "'", e);
+        // }
+        // }
     }
 
     protected static boolean publicationExists() {
@@ -322,17 +321,17 @@ public final class TestHelper {
     }
 
     protected static boolean publicationExists(String publicationName) {
-        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
-            try (PostgresConnection connection = create()) {
-                String query = String.format("SELECT pubname FROM pg_catalog.pg_publication WHERE pubname = '%s'", publicationName);
-                try {
-                    return connection.queryAndMap(query, ResultSet::next);
-                }
-                catch (SQLException e) {
-                    // ignored
-                }
-            }
-        }
+        // if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
+        // try (PostgresConnection connection = create()) {
+        // String query = String.format("SELECT pubname FROM pg_catalog.pg_publication WHERE pubname = '%s'", publicationName);
+        // try {
+        // return connection.queryAndMap(query, ResultSet::next);
+        // }
+        // catch (SQLException e) {
+        // // ignored
+        // }
+        // }
+        // }
         return false;
     }
 
@@ -391,7 +390,6 @@ public final class TestHelper {
                 typeRegistry,
                 config.hStoreHandlingMode(),
                 config.binaryHandlingMode(),
-                config.intervalHandlingMode(),
-                null/* config.toastedValuePlaceholder() */);
+                config.intervalHandlingMode());
     }
 }

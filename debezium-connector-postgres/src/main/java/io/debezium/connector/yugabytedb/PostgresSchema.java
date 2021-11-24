@@ -67,8 +67,10 @@ public class PostgresSchema extends RelationalDatabaseSchema {
         this.readToastableColumns = config.skipRefreshSchemaOnMissingToastableData();
     }
 
-    private static TableSchemaBuilder getTableSchemaBuilder(PostgresConnectorConfig config, PostgresValueConverter valueConverter) {
-        return new TableSchemaBuilder(valueConverter, SchemaNameAdjuster.create(), config.customConverterRegistry(), config.getSourceInfoStructMaker().schema(),
+    private static TableSchemaBuilder getTableSchemaBuilder(PostgresConnectorConfig config,
+                                                            PostgresValueConverter valueConverter) {
+        return new TableSchemaBuilder(valueConverter, SchemaNameAdjuster.create(),
+                config.customConverterRegistry(), config.getSourceInfoStructMaker().schema(),
                 config.getSanitizeFieldNames());
     }
 
@@ -80,9 +82,11 @@ public class PostgresSchema extends RelationalDatabaseSchema {
      * @return this object so methods can be chained together; never null
      * @throws SQLException if there is a problem obtaining the schema from the database server
      */
-    protected PostgresSchema refresh(PostgresConnection connection, boolean printReplicaIdentityInfo) throws SQLException {
+    protected PostgresSchema refresh(PostgresConnection connection,
+                                     boolean printReplicaIdentityInfo) throws SQLException {
         // read all the information from the DB
-        connection.readSchema(tables(), null, null, getTableFilter(), null, true);
+        connection.readSchema(tables(), null, null,
+                getTableFilter(), null, true);
         if (printReplicaIdentityInfo) {
             // print out all the replica identity info
             tableIds().forEach(tableId -> printReplicaIdentityInfo(connection, tableId));

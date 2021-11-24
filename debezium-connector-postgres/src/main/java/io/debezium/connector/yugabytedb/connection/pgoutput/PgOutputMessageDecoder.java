@@ -33,7 +33,6 @@ import io.debezium.connector.yugabytedb.PostgresConnectorConfig;
 import io.debezium.connector.yugabytedb.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.yugabytedb.PostgresType;
 import io.debezium.connector.yugabytedb.TypeRegistry;
-import io.debezium.connector.yugabytedb.UnchangedToastedReplicationMessageColumn;
 import io.debezium.connector.yugabytedb.connection.*;
 import io.debezium.connector.yugabytedb.connection.ReplicationMessage.Column;
 import io.debezium.connector.yugabytedb.connection.ReplicationMessage.NoopMessage;
@@ -663,15 +662,6 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                             @Override
                             public String toString() {
                                 return columnName + "(" + typeExpression + ")=" + valueStr;
-                            }
-                        });
-            }
-            else if (type == 'u') {
-                columns.add(
-                        new UnchangedToastedReplicationMessageColumn(columnName, columnType, typeExpression, optional, true) {
-                            @Override
-                            public String toString() {
-                                return columnName + "(" + typeExpression + ") - Unchanged toasted column";
                             }
                         });
             }

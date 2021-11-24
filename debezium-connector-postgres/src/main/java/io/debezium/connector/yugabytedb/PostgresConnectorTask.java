@@ -72,7 +72,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
         heartbeatConnection = new PostgresConnection(connectorConfig.getJdbcConfig());
 
-        //CDCSDK check if we need databaseCharset.
+        // CDCSDK check if we need databaseCharset.
         // Do it in CO-ordinator and send it as TaskConfig
         // charsetname and then load the class here.
         final Charset databaseCharset = heartbeatConnection.getDatabaseCharset();
@@ -275,8 +275,9 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
     @Override
     public List<SourceRecord> doPoll() throws InterruptedException {
-        final List<DataChangeEvent> records = queue.poll();
 
+        final List<DataChangeEvent> records = queue.poll();
+        LOGGER.info("SKSK doPoll Got the records from queue " + records);
         final List<SourceRecord> sourceRecords = records.stream()
                 .map(DataChangeEvent::getRecord)
                 .collect(Collectors.toList());

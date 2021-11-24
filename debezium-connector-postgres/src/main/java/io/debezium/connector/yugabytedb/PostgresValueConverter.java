@@ -149,9 +149,6 @@ public class PostgresValueConverter extends JdbcValueConverters {
 
     private final JsonFactory jsonFactory;
 
-    private final String toastPlaceholderString;
-    private final byte[] toastPlaceholderBinary;
-
     public static PostgresValueConverter of(PostgresConnectorConfig connectorConfig, Charset databaseCharset, TypeRegistry typeRegistry) {
         return new PostgresValueConverter(
                 databaseCharset,
@@ -163,15 +160,13 @@ public class PostgresValueConverter extends JdbcValueConverters {
                 typeRegistry,
                 connectorConfig.hStoreHandlingMode(),
                 connectorConfig.binaryHandlingMode(),
-                connectorConfig.intervalHandlingMode(),
-                connectorConfig.toastedValuePlaceholder());
+                connectorConfig.intervalHandlingMode());
     }
 
     protected PostgresValueConverter(Charset databaseCharset, DecimalMode decimalMode,
                                      TemporalPrecisionMode temporalPrecisionMode, ZoneOffset defaultOffset,
                                      BigIntUnsignedMode bigIntUnsignedMode, boolean includeUnknownDatatypes, TypeRegistry typeRegistry,
-                                     HStoreHandlingMode hStoreMode, BinaryHandlingMode binaryMode, IntervalHandlingMode intervalMode,
-                                     byte[] toastPlaceholder) {
+                                     HStoreHandlingMode hStoreMode, BinaryHandlingMode binaryMode, IntervalHandlingMode intervalMode) {
         super(decimalMode, temporalPrecisionMode, defaultOffset, null, bigIntUnsignedMode, binaryMode);
         this.databaseCharset = databaseCharset;
         this.jsonFactory = new JsonFactory();
@@ -179,8 +174,6 @@ public class PostgresValueConverter extends JdbcValueConverters {
         this.typeRegistry = typeRegistry;
         this.hStoreMode = hStoreMode;
         this.intervalMode = intervalMode;
-        this.toastPlaceholderBinary = toastPlaceholder;
-        this.toastPlaceholderString = new String(toastPlaceholder);
     }
 
     @Override
@@ -1007,9 +1000,6 @@ public class PostgresValueConverter extends JdbcValueConverters {
      */
     @Override
     protected Object convertBinaryToBytes(Column column, Field fieldDefn, Object data) {
-        if (data == UnchangedToastedReplicationMessageColumn.UNCHANGED_TOAST_VALUE) {
-            return toastPlaceholderBinary;
-        }
         if (data instanceof PgArray) {
             data = ((PgArray) data).toString();
         }
@@ -1037,17 +1027,11 @@ public class PostgresValueConverter extends JdbcValueConverters {
      */
     @Override
     protected Object convertString(Column column, Field fieldDefn, Object data) {
-        if (data == UnchangedToastedReplicationMessageColumn.UNCHANGED_TOAST_VALUE) {
-            return toastPlaceholderString;
-        }
         return super.convertString(column, fieldDefn, data);
     }
 
     @Override
     protected Object handleUnknownData(Column column, Field fieldDefn, Object data) {
-        if (data == UnchangedToastedReplicationMessageColumn.UNCHANGED_TOAST_VALUE) {
-            return toastPlaceholderString;
-        }
         return super.handleUnknownData(column, fieldDefn, data);
     }
 }

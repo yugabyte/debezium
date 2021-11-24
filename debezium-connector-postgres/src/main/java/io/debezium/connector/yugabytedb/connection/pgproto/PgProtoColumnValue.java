@@ -15,7 +15,6 @@ import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
 
 import org.postgresql.geometric.PGpoint;
 import org.postgresql.jdbc.PgArray;
@@ -322,16 +321,20 @@ public class PgProtoColumnValue extends AbstractColumnValue<Common.DatumMessage>
         // 3. For larger arrays and especially 64-bit integers and the like it is less efficient sending string
         // representations over the wire.
         try {
-            /*byte[] data = asByteArray();
-            if (data == null) {
-                return null;
-            }*/
+            /*
+             * byte[] data = asByteArray();
+             * if (data == null) {
+             * return null;
+             * }
+             */
             final String dataString = asString();
             return new PgArray(connection.get(), type.getOid(), dataString);
-            /*String dataString = new String(data, Charset.forName("UTF-8"));
-            PgArray arrayData = new PgArray(connection.get(), (int) value.getColumnType(), dataString);
-            Object deserializedArray = arrayData.getArray();
-            return Arrays.asList((Object[]) deserializedArray);*/
+            /*
+             * String dataString = new String(data, Charset.forName("UTF-8"));
+             * PgArray arrayData = new PgArray(connection.get(), (int) value.getColumnType(), dataString);
+             * Object deserializedArray = arrayData.getArray();
+             * return Arrays.asList((Object[]) deserializedArray);
+             */
         }
         catch (SQLException e) {
             LOGGER.warn("Unexpected exception trying to process PgArray column '{}'", value.getColumnName(), e);

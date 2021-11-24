@@ -60,14 +60,12 @@ public class PostgresChangeEventSourceFactory implements ChangeEventSourceFactor
     public SnapshotChangeEventSource<PostgresPartition, PostgresOffsetContext> getSnapshotChangeEventSource(SnapshotProgressListener snapshotProgressListener) {
         return new PostgresSnapshotChangeEventSource(
                 configuration,
+                taskContext,
                 snapshotter,
-                jdbcConnection,
                 schema,
                 dispatcher,
                 clock,
-                snapshotProgressListener,
-                slotCreatedInfo,
-                startingSlotInfo);
+                snapshotProgressListener);
     }
 
     @Override

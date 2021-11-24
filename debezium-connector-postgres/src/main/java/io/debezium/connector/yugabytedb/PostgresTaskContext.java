@@ -34,20 +34,10 @@ public class PostgresTaskContext extends CdcSourceTaskContext {
     private final TopicSelector<TableId> topicSelector;
     private final PostgresSchema schema;
 
-    /*
-     * private ElapsedTimeStrategy refreshXmin;
-     * private Long lastXmin;
-     */
-
     protected PostgresTaskContext(PostgresConnectorConfig config, PostgresSchema schema, TopicSelector<TableId> topicSelector) {
         super(config.getContextName(), config.getLogicalName(), Collections::emptySet);
 
         this.config = config;
-        /*
-         * if (config.xminFetchInterval().toMillis() > 0) {
-         * this.refreshXmin = ElapsedTimeStrategy.constant(Clock.SYSTEM, config.xminFetchInterval().toMillis());
-         * }
-         */
         this.topicSelector = topicSelector;
         assert schema != null;
         this.schema = schema;
@@ -68,37 +58,6 @@ public class PostgresTaskContext extends CdcSourceTaskContext {
     protected void refreshSchema(PostgresConnection connection, boolean printReplicaIdentityInfo) throws SQLException {
         schema.refresh(connection, printReplicaIdentityInfo);
     }
-
-    /*
-     * Long getSlotXmin(PostgresConnection connection) throws SQLException {
-     * // when xmin fetch is set to 0, we don't track it to ignore any performance of querying the
-     * // slot periodically
-     * if (config.xminFetchInterval().toMillis() <= 0) {
-     * return null;
-     * }
-     * assert (this.refreshXmin != null);
-     * 
-     * if (this.refreshXmin.hasElapsed()) {
-     * lastXmin = getCurrentSlotState(connection).slotCatalogXmin();
-     * if (LOGGER.isDebugEnabled()) {
-     * LOGGER.debug("Fetched new xmin from slot of {}", lastXmin);
-     * }
-     * }
-     * else {
-     * if (LOGGER.isTraceEnabled()) {
-     * LOGGER.trace("reusing xmin value of {}", lastXmin);
-     * }
-     * }
-     * 
-     * return lastXmin;
-     * }
-     */
-
-    /*
-     * private SlotState getCurrentSlotState(PostgresConnection connection) throws SQLException {
-     * return connection.getReplicationSlotState(config.slotName(), config.plugin().getPostgresPluginName());
-     * }
-     */
 
     protected ReplicationConnection createReplicationConnection(boolean doSnapshot) throws SQLException {
         /*

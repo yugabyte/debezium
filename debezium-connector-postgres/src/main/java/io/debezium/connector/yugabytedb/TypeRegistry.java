@@ -181,7 +181,7 @@ public class TypeRegistry {
                 r = PostgresType.UNKNOWN;
             }
         }
-        //new IllegalArgumentException().printStackTrace();
+        // new IllegalArgumentException().printStackTrace();
         return r;
     }
 

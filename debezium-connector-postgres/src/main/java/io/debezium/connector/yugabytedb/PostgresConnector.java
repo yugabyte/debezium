@@ -77,10 +77,7 @@ public class PostgresConnector extends RelationalBaseSourceConnector {
     @Override
     protected void validateConnection(Map<String, ConfigValue> configValues, Configuration config) {
         final ConfigValue databaseValue = configValues.get(RelationalDatabaseConnectorConfig.DATABASE_NAME.name());
-        // final ConfigValue slotNameValue = configValues.get(PostgresConnectorConfig.SLOT_NAME.name());
-        final ConfigValue pluginNameValue = configValues.get(PostgresConnectorConfig.PLUGIN_NAME.name());
-        if (!databaseValue.errorMessages().isEmpty() /* || !slotNameValue.errorMessages().isEmpty() */
-                || !pluginNameValue.errorMessages().isEmpty()) {
+        if (!databaseValue.errorMessages().isEmpty()) {
             return;
         }
 
@@ -96,48 +93,10 @@ public class PostgresConnector extends RelationalBaseSourceConnector {
                 LOGGER.info("Successfully tested connection for {} with user '{}'", connection.connectionString(),
                         connection.username());
                 // check server wal_level
-                // CDCSDK No need to check wal_level
+                // TODO: CDCSDK No need to check wal_level
                 // 1. check for the StreamID
-                /*
-                 * final String walLevel = connection.queryAndMap(
-                 * "SHOW wal_level",
-                 * connection.singleResultMapper(rs -> rs.getString("wal_level"), "Could not fetch wal_level"));
-                 * if (!"logical".equals(walLevel)) {
-                 * final String errorMessage = "Postgres server wal_level property must be \"logical\" but is: " + walLevel;
-                 * LOGGER.error(errorMessage);
-                 * hostnameValue.addErrorMessage(errorMessage);
-                 * }
-                 */
                 // check user for LOGIN and REPLICATION roles
-                // CDCSDK We will check in future for user login and roles.
-                /*
-                 * if (!connection.queryAndMap(
-                 * "SELECT r.rolcanlogin AS rolcanlogin, r.rolreplication AS rolreplication," +
-                 * // for AWS the user might not have directly the rolreplication rights, but can be assigned
-                 * // to one of those role groups: rds_superuser, rdsadmin or rdsrepladmin
-                 * " CAST(array_position(ARRAY(SELECT b.rolname" +
-                 * " FROM pg_catalog.pg_auth_members m" +
-                 * " JOIN pg_catalog.pg_roles b ON (m.roleid = b.oid)" +
-                 * " WHERE m.member = r.oid), 'rds_superuser') AS BOOL) IS TRUE AS aws_superuser" +
-                 * ", CAST(array_position(ARRAY(SELECT b.rolname" +
-                 * " FROM pg_catalog.pg_auth_members m" +
-                 * " JOIN pg_catalog.pg_roles b ON (m.roleid = b.oid)" +
-                 * " WHERE m.member = r.oid), 'rdsadmin') AS BOOL) IS TRUE AS aws_admin" +
-                 * ", CAST(array_position(ARRAY(SELECT b.rolname" +
-                 * " FROM pg_catalog.pg_auth_members m" +
-                 * " JOIN pg_catalog.pg_roles b ON (m.roleid = b.oid)" +
-                 * " WHERE m.member = r.oid), 'rdsrepladmin') AS BOOL) IS TRUE AS aws_repladmin" +
-                 * " FROM pg_roles r WHERE r.rolname = current_user",
-                 * connection.singleResultMapper(rs -> rs.getBoolean("rolcanlogin")
-                 * && (rs.getBoolean("rolreplication")
-                 * || rs.getBoolean("aws_superuser")
-                 * || rs.getBoolean("aws_admin")
-                 * || rs.getBoolean("aws_repladmin")),
-                 * "Could not fetch roles"))) {
-                 * final String errorMessage = "Postgres roles LOGIN and REPLICATION are not assigned to user: " + connection.username();
-                 * LOGGER.error(errorMessage);
-                 * }
-                 */
+                // TODO: CDCSDK We will check in future for user login and roles.
             }
             catch (SQLException e) {
                 LOGGER.error("Failed testing connection for {} with user '{}'", connection.connectionString(),

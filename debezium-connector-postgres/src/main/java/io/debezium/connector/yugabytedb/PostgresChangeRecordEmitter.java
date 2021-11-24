@@ -7,11 +7,9 @@ package io.debezium.connector.yugabytedb;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -19,7 +17,10 @@ import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.header.ConnectHeaders;
 import org.postgresql.core.BaseConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.debezium.connector.yugabytedb.connection.PostgresConnection;
 import io.debezium.connector.yugabytedb.connection.ReplicationMessage;
@@ -45,15 +46,13 @@ import io.debezium.util.Strings;
  * @author Horia Chiorean (hchiorea@redhat.com), Jiri Pechanec
  */
 public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresChangeRecordEmitter.class);
 
     private final ReplicationMessage message;
     private final PostgresSchema schema;
     private final PostgresConnectorConfig connectorConfig;
     private final PostgresConnection connection;
     private final TableId tableId;
-//    private final boolean unchangedToastColumnMarkerMissing;
-//    private final boolean nullToastedValuesMissingFromOld;
-//    private final Map<String, Object> cachedOldToastedValues = new HashMap<>();
 
     public PostgresChangeRecordEmitter(Partition partition, OffsetContext offset, Clock clock, PostgresConnectorConfig connectorConfig, PostgresSchema schema,
                                        PostgresConnection connection, TableId tableId,
@@ -66,8 +65,6 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
         this.connection = connection;
 
         this.tableId = tableId;
-//        this.unchangedToastColumnMarkerMissing = !connectorConfig.plugin().hasUnchangedToastColumnMarker();
-//        this.nullToastedValuesMissingFromOld = !connectorConfig.plugin().sendsNullToastedValuesInOld();
         Objects.requireNonNull(this.tableId);
     }
 
@@ -90,6 +87,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
     @Override
     public void emitChangeRecords(DataCollectionSchema schema, Receiver receiver) throws InterruptedException {
         schema = synchronizeTableSchema(schema);
+        LOGGER.info("SKSK the schema of the table is " + schema);
         super.emitChangeRecords(schema, receiver);
     }
 
@@ -144,14 +142,14 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
         // CDCSDK we don't need to, as we will get DDL as part of change stream
         // keep updating that.
         // check if we need to refresh our local schema due to DB schema changes for this table
-//        if (schemaChanged(columns, table, metadataInMessage)) {
-//            // Refresh the schema so we get information about primary keys
-//            refreshTableFromDatabase(tableId);
-//            // Update the schema with metadata coming from decoder message
-//            if (metadataInMessage) {
-//                schema.refresh(tableFromFromMessage(columns, schema.tableFor(tableId)));
-//            }
-//        }
+        // if (schemaChanged(columns, table, metadataInMessage)) {
+        // // Refresh the schema so we get information about primary keys
+        // refreshTableFromDatabase(tableId);
+        // // Update the schema with metadata coming from decoder message
+        // if (metadataInMessage) {
+        // schema.refresh(tableFromFromMessage(columns, schema.tableFor(tableId)));
+        // }
+        // }
         return schema.schemaFor(tableId);
     }
 
@@ -181,35 +179,9 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
             int position = getPosition(columnName, table, values);
             if (position != -1) {
                 Object value = column.getValue(() -> (BaseConnection) connection.connection(), connectorConfig.includeUnknownDatatypes());
-//                if (sourceOfToasted) {
-//                    cachedOldToastedValues.put(columnName, value);
-//                }
-//                else {
-//                    if (value == UnchangedToastedReplicationMessageColumn.UNCHANGED_TOAST_VALUE) {
-//                        final Object candidate = cachedOldToastedValues.get(columnName);
-//                        if (candidate != null) {
-//                            value = candidate;
-//                        }
-//                    }
-//                }
                 values[position] = value;
             }
         }
-//        if (unchangedToastColumnMarkerMissing) {
-//            for (String columnName : undeliveredToastableColumns) {
-//                int position = getPosition(columnName, table, values);
-//                if (position != -1) {
-//                    final Object candidate = cachedOldToastedValues.get(columnName);
-//                    if (oldValues && nullToastedValuesMissingFromOld) {
-//                        // wal2json connector does not send null toasted value among old values
-//                        values[position] = null;
-//                    }
-//                    else {
-//                        values[position] = candidate != null ? candidate : UnchangedToastedReplicationMessageColumn.UNCHANGED_TOAST_VALUE;
-//                    }
-//                }
-//            }
-//        }
         return values;
     }
 
@@ -397,5 +369,60 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
     @Override
     protected boolean skipEmptyMessages() {
         return true;
+    }
+
+    // In case of YB, the update schema is different
+    @Override
+    protected void emitUpdateRecord(Receiver receiver, TableSchema tableSchema)
+            throws InterruptedException {
+
+        Object[] oldColumnValues = getOldColumnValues();
+        Object[] newColumnValues = getNewColumnValues();
+
+        Struct oldKey = tableSchema.keyFromColumnData(oldColumnValues);
+        Struct newKey = tableSchema.keyFromColumnData(newColumnValues);
+
+        Struct newValue = tableSchema.valueFromColumnData(newColumnValues);
+        Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);
+
+        if (skipEmptyMessages() && (newColumnValues == null || newColumnValues.length == 0)) {
+            logger.warn("no new values found for table '{}' from update message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
+            return;
+        }
+        // some configurations does not provide old values in case of updates
+        // in this case we handle all updates as regular ones
+        if (oldKey == null || Objects.equals(oldKey, newKey)) {
+            Struct envelope = tableSchema.getEnvelopeSchema().update(oldValue, newValue, getOffset().getSourceInfo(), getClock().currentTimeAsInstant());
+            receiver.changeRecord(getPartition(), tableSchema, Operation.UPDATE, newKey, envelope, getOffset(), null);
+        }
+        // PK update -> emit as delete and re-insert with new key
+        else {
+            ConnectHeaders headers = new ConnectHeaders();
+            headers.add(PK_UPDATE_NEWKEY_FIELD, newKey, tableSchema.keySchema());
+
+            Struct envelope = tableSchema.getEnvelopeSchema().delete(oldValue, getOffset().getSourceInfo(), getClock().currentTimeAsInstant());
+            receiver.changeRecord(getPartition(), tableSchema, Operation.DELETE, oldKey, envelope, getOffset(), headers);
+
+            headers = new ConnectHeaders();
+            headers.add(PK_UPDATE_OLDKEY_FIELD, oldKey, tableSchema.keySchema());
+
+            envelope = tableSchema.getEnvelopeSchema().create(newValue, getOffset().getSourceInfo(), getClock().currentTimeAsInstant());
+            receiver.changeRecord(getPartition(), tableSchema, Operation.CREATE, newKey, envelope, getOffset(), headers);
+        }
+    }
+
+    @Override
+    protected void emitDeleteRecord(Receiver receiver, TableSchema tableSchema) throws InterruptedException {
+        Object[] oldColumnValues = getOldColumnValues();
+        Struct oldKey = tableSchema.keyFromColumnData(oldColumnValues);
+        Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);
+
+        if (skipEmptyMessages() && (oldColumnValues == null || oldColumnValues.length == 0)) {
+            logger.warn("no old values found for table '{}' from delete message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
+            return;
+        }
+
+        Struct envelope = tableSchema.getEnvelopeSchema().delete(oldValue, getOffset().getSourceInfo(), getClock().currentTimeAsInstant());
+        receiver.changeRecord(getPartition(), tableSchema, Operation.DELETE, oldKey, envelope, getOffset(), null);
     }
 }

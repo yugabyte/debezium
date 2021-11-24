@@ -28,10 +28,7 @@ import io.debezium.connector.AbstractSourceInfo;
 import io.debezium.connector.SourceInfoStructMaker;
 import io.debezium.connector.yugabytedb.connection.MessageDecoder;
 import io.debezium.connector.yugabytedb.connection.MessageDecoderContext;
-import io.debezium.connector.yugabytedb.connection.pgoutput.PgOutputMessageDecoder;
 import io.debezium.connector.yugabytedb.connection.pgproto.PgProtoMessageDecoder;
-import io.debezium.connector.yugabytedb.connection.wal2json.NonStreamingWal2JsonMessageDecoder;
-import io.debezium.connector.yugabytedb.connection.wal2json.StreamingWal2JsonMessageDecoder;
 import io.debezium.connector.yugabytedb.snapshot.AlwaysSnapshotter;
 import io.debezium.connector.yugabytedb.snapshot.InitialOnlySnapshotter;
 import io.debezium.connector.yugabytedb.snapshot.InitialSnapshotter;
@@ -354,22 +351,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     }
 
     public enum LogicalDecoder implements EnumeratedValue {
-        PGOUTPUT("pgoutput") {
-            @Override
-            public MessageDecoder messageDecoder(MessageDecoderContext config) {
-                return new PgOutputMessageDecoder(config);
-            }
-
-            @Override
-            public String getPostgresPluginName() {
-                return getValue();
-            }
-
-            @Override
-            public boolean supportsTruncate() {
-                return true;
-            }
-        },
         DECODERBUFS("decoderbufs") {
             @Override
             public MessageDecoder messageDecoder(MessageDecoderContext config) {
@@ -383,120 +364,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
             @Override
             public boolean supportsTruncate() {
-                return false;
-            }
-        },
-        WAL2JSON_STREAMING("wal2json_streaming") {
-            @Override
-            public MessageDecoder messageDecoder(MessageDecoderContext config) {
-                return new StreamingWal2JsonMessageDecoder();
-            }
-
-            @Override
-            public String getPostgresPluginName() {
-                return "wal2json";
-            }
-
-            @Override
-            public boolean supportsTruncate() {
-                return false;
-            }
-
-            @Override
-            public boolean hasUnchangedToastColumnMarker() {
-                return false;
-            }
-
-            @Override
-            public boolean sendsNullToastedValuesInOld() {
-                return false;
-            }
-        },
-        WAL2JSON_RDS_STREAMING("wal2json_rds_streaming") {
-            @Override
-            public MessageDecoder messageDecoder(MessageDecoderContext config) {
-                return new StreamingWal2JsonMessageDecoder();
-            }
-
-            @Override
-            public boolean forceRds() {
-                return true;
-            }
-
-            @Override
-            public String getPostgresPluginName() {
-                return "wal2json";
-            }
-
-            @Override
-            public boolean supportsTruncate() {
-                return false;
-            }
-
-            @Override
-            public boolean hasUnchangedToastColumnMarker() {
-                return false;
-            }
-
-            @Override
-            public boolean sendsNullToastedValuesInOld() {
-                return false;
-            }
-        },
-        WAL2JSON("wal2json") {
-            @Override
-            public MessageDecoder messageDecoder(MessageDecoderContext config) {
-                return new NonStreamingWal2JsonMessageDecoder();
-            }
-
-            @Override
-            public String getPostgresPluginName() {
-                return "wal2json";
-            }
-
-            @Override
-            public boolean supportsTruncate() {
-                return false;
-            }
-
-            @Override
-            public boolean hasUnchangedToastColumnMarker() {
-                return false;
-            }
-
-            @Override
-            public boolean sendsNullToastedValuesInOld() {
-                return false;
-            }
-        },
-        WAL2JSON_RDS("wal2json_rds") {
-            @Override
-            public MessageDecoder messageDecoder(MessageDecoderContext config) {
-                return new NonStreamingWal2JsonMessageDecoder();
-            }
-
-            @Override
-            public boolean forceRds() {
-                return true;
-            }
-
-            @Override
-            public String getPostgresPluginName() {
-                return "wal2json";
-            }
-
-            @Override
-            public boolean supportsTruncate() {
-                return false;
-            }
-
-            @Override
-            public boolean hasUnchangedToastColumnMarker() {
-                return false;
-            }
-
-            @Override
-            public boolean sendsNullToastedValuesInOld() {
                 return false;
             }
         };
@@ -660,7 +527,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 9))
             .withWidth(Width.MEDIUM)
             .withImportance(Importance.HIGH)
-            .withValidation(Field::isUuid)
+            // .withValidation(Field::isUuid)
             .withDescription("ID of the Stream created in YugabyteDB");
 
     public static final Field PLUGIN_NAME = Field.create("plugin.name")
@@ -671,26 +538,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.MEDIUM)
             .withDescription("The name of the Postgres logical decoding plugin installed on the server. " +
                     "Supported values are '" + LogicalDecoder.DECODERBUFS.getValue()
-                    + "', '" + LogicalDecoder.WAL2JSON.getValue()
-                    + "', '" + LogicalDecoder.PGOUTPUT.getValue()
-                    + "', '" + LogicalDecoder.WAL2JSON_STREAMING.getValue()
-                    + "', '" + LogicalDecoder.WAL2JSON_RDS.getValue()
-                    + "' and '" + LogicalDecoder.WAL2JSON_RDS_STREAMING.getValue()
                     + "'. " +
                     "Defaults to '" + LogicalDecoder.DECODERBUFS.getValue() + "'.");
-
-    /*
-     * public static final Field SLOT_NAME = Field.create("slot.name")
-     * .withDisplayName("Slot")
-     * .withType(Type.STRING)
-     * .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 1))
-     * .withWidth(Width.MEDIUM)
-     * .withImportance(Importance.MEDIUM)
-     * .withDefault(ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
-     * .withValidation(PostgresConnectorConfig::validateReplicationSlotName)
-     * .withDescription("The name of the Postgres logical decoding slot created for streaming changes from a plugin." +
-     * "Defaults to 'debezium");
-     */
 
     public static final Field DELETE_STREAM_ON_STOP = Field.create("stream.delete.on.stop")
             .withDisplayName("Delete stream on stop")
@@ -702,17 +551,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     "Whether or not to delete the logical replication stream when the connector finishes orderly" +
                             "By default the replication is kept so that on restart progress can resume from the last recorded location");
 
-    /*
-     * public static final Field PUBLICATION_NAME = Field.create("publication.name")
-     * .withDisplayName("Publication")
-     * .withType(Type.STRING)
-     * .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 8))
-     * .withWidth(Width.MEDIUM)
-     * .withImportance(Importance.MEDIUM)
-     * .withDefault(ReplicationConnection.Builder.DEFAULT_PUBLICATION_NAME)
-     * .withDescription("The name of the Postgres 10+ publication used for streaming changes from a plugin." +
-     * "Defaults to '" + ReplicationConnection.Builder.DEFAULT_PUBLICATION_NAME + "'");
-     */
     public enum AutoCreateMode implements EnumeratedValue {
         /**
          * No Publication will be created, it's expected the user
@@ -1079,28 +917,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return LogicalDecoder.parse(getConfig().getString(PLUGIN_NAME));
     }
 
-    /*
-     * protected String slotName() {
-     * return getConfig().getString(SLOT_NAME);
-     * }
-     * 
-     * protected boolean dropSlotOnStop() {
-     * if (getConfig().hasKey(DROP_SLOT_ON_STOP.name())) {
-     * return getConfig().getBoolean(DROP_SLOT_ON_STOP);
-     * }
-     * // Return default value
-     * return getConfig().getBoolean(DROP_SLOT_ON_STOP);
-     * }
-     * 
-     * public String publicationName() {
-     * return getConfig().getString(PUBLICATION_NAME);
-     * }
-     * 
-     * protected AutoCreateMode publicationAutocreateMode() {
-     * return AutoCreateMode.parse(getConfig().getString(PUBLICATION_AUTOCREATE_MODE));
-     * }
-     */
-
     protected String streamParams() {
         return getConfig().getString(STREAM_PARAMS);
     }
@@ -1161,16 +977,16 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     @Override
     protected SourceInfoStructMaker<? extends AbstractSourceInfo> getSourceInfoStructMaker(Version version) {
-        switch (version) {
-            case V1:
-                return new LegacyV1PostgresSourceInfoStructMaker(Module.name(), Module.version(), this);
-            default:
-                return new PostgresSourceInfoStructMaker(Module.name(), Module.version(), this);
-        }
+        // switch (version) {
+        // case V1:
+        // return new LegacyV1PostgresSourceInfoStructMaker(Module.name(), Module.version(), this);
+        // default:
+        return new PostgresSourceInfoStructMaker(Module.name(), Module.version(), this);
+        // }
     }
 
     private static final ConfigDefinition CONFIG_DEFINITION = RelationalDatabaseConnectorConfig.CONFIG_DEFINITION.edit()
-            .name("Postgres")
+            .name("YugabyteDB")
             .type(
                     HOSTNAME,
                     PORT,
@@ -1181,10 +997,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     MASTER_PORT,
                     STREAM_ID,
                     PLUGIN_NAME,
-                    // SLOT_NAME,
-                    // PUBLICATION_NAME,
-                    // PUBLICATION_AUTOCREATE_MODE,
-                    // DROP_SLOT_ON_STOP,
                     STREAM_PARAMS,
                     ON_CONNECT_STATEMENTS,
                     SSL_MODE,
@@ -1196,16 +1008,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     RETRY_DELAY_MS,
                     SSL_SOCKET_FACTORY,
                     STATUS_UPDATE_INTERVAL_MS,
-                    TCP_KEEPALIVE/*
-                                  * ,
-                                  * XMIN_FETCH_INTERVAL
-                                  */)
+                    TCP_KEEPALIVE)
             .events(
                     INCLUDE_UNKNOWN_DATATYPES,
-                    DatabaseHeartbeatImpl.HEARTBEAT_ACTION_QUERY/*
-                                                                 * ,
-                                                                 * TOASTED_VALUE_PLACEHOLDER
-                                                                 */)
+                    DatabaseHeartbeatImpl.HEARTBEAT_ACTION_QUERY)
             .connector(
                     SNAPSHOT_MODE,
                     SNAPSHOT_MODE_CLASS,
@@ -1225,19 +1031,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public static ConfigDef configDef() {
         return CONFIG_DEFINITION.configDef();
-    }
-
-    // Source of the validation rules - https://doxygen.postgresql.org/slot_8c.html#afac399f07320b9adfd2c599cf822aaa3
-    private static int validateReplicationSlotName(Configuration config, Field field, Field.ValidationOutput problems) {
-        final String name = config.getString(field);
-        int errors = 0;
-        if (name != null) {
-            if (!name.matches("[a-z0-9_]{1,63}")) {
-                problems.accept(field, name, "Valid replication slot name must contain only digits, lowercase characters and underscores with length <= 63");
-                ++errors;
-            }
-        }
-        return errors;
     }
 
     private static int validateTruncateHandlingMode(Configuration config, Field field, Field.ValidationOutput problems) {

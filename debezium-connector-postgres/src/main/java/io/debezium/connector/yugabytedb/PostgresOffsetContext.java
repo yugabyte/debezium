@@ -59,7 +59,8 @@ public class PostgresOffsetContext implements OffsetContext {
         this.lastSnapshotRecord = lastSnapshotRecord;
         if (this.lastSnapshotRecord) {
             postSnapshotCompletion();
-        } else {
+        }
+        else {
             sourceInfo.setSnapshot(snapshot ? SnapshotRecord.TRUE : SnapshotRecord.FALSE);
         }
         this.transactionContext = transactionContext;
@@ -149,8 +150,7 @@ public class PostgresOffsetContext implements OffsetContext {
     }
 
     OpId lsn() {
-        return sourceInfo.lsn() == null ?
-                new OpId(0, 0, null, 0) : sourceInfo.lsn();
+        return sourceInfo.lsn() == null ? new OpId(0, 0, null, 0) : sourceInfo.lsn();
     }
 
     OpId lastCompletelyProcessedLsn() {
@@ -246,7 +246,8 @@ public class PostgresOffsetContext implements OffsetContext {
                     false,
                     new TransactionContext(),
                     new SignalBasedIncrementalSnapshotContext<>());
-        } catch (SQLException e) {
+        }
+        catch (SQLException e) {
             throw new ConnectException("Database processing error", e);
         }
     }

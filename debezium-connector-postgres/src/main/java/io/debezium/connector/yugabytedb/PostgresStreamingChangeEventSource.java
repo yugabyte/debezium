@@ -9,12 +9,12 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.kafka.connect.errors.ConnectException;
 import org.postgresql.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yb.cdc.CdcService;
 import org.yb.client.*;
+import org.yb.master.Master;
 
 import io.debezium.connector.yugabytedb.connection.OpId;
 import io.debezium.connector.yugabytedb.connection.PostgresConnection;
@@ -32,7 +32,6 @@ import io.debezium.relational.TableId;
 import io.debezium.util.Clock;
 import io.debezium.util.DelayStrategy;
 import io.debezium.util.ElapsedTimeStrategy;
-import org.yb.master.Master;
 
 /**
  *
@@ -181,12 +180,12 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
             if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
                 // Need to CDCSDK see what can be done.
-//                try {
-//                    connection.commit();
-//                }
-//                catch (SQLException throwables) {
-//                    throwables.printStackTrace();
-//                }
+                // try {
+                // connection.commit();
+                // }
+                // catch (SQLException throwables) {
+                // throwables.printStackTrace();
+                // }
             }
             if (asyncYBClient != null) {
                 try {
@@ -231,8 +230,6 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
     private GetChangesResponse getChangeResponse(PostgresOffsetContext offsetContext) throws Exception {
 
-
-
         return null;
     }
 
@@ -246,19 +243,21 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         ListTablesResponse tablesResp = syncClient.getTablesList();
         String tId = "";
+        // this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded();
+
         for (Master.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
             LOGGER.info("SKSK The table name is " + tableInfo.getName());
             if (tableInfo.getName().equals("t1") &&
                     tableInfo.getNamespace().getName().equals("yugabyte")) {
-                tId =  tableInfo.getId().toStringUtf8();
+                tId = tableInfo.getId().toStringUtf8();
             }
         }
         LOGGER.info("SKSK the table uuid is " + tId);
         YBTable table = this.syncClient.openTableByUUID(tId);
         String streamId = this.connectorConfig.streamId();
         if (streamId.equals("ad6cdaa9-812c-426e-a2f9-c04e387f55a0"))
-            streamId = syncClient.createCDCStream2(table, "PROTO").getStreamId();
-        //streamId = syncClient.createCDCStream2(table).getStreamId();
+            streamId = syncClient.createCDCStreamFinal(table, "PROTO").getStreamId();
+        // streamId = syncClient.createCDCStream2(table).getStreamId();
 
         LOGGER.info(String.format("Created new stream with id %s", streamId));
 
@@ -289,8 +288,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                 (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
 
+            Thread.sleep(1000);
             OpId cp = offsetContext.lsn();
-            //GetChangesResponse response = getChangeResponse(offsetContext);
+            // GetChangesResponse response = getChangeResponse(offsetContext);
             LOGGER.info("Going to fetch from OpId " + cp);
 
             GetChangesResponse response = this.syncClient.getChangesCDCSDK3(
@@ -324,7 +324,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                             }
                             if (message.getOperation() == Operation.COMMIT) {
                                 LOGGER.info("LSN in case of COMMIT is " + lsn);
-                                offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()), null,
+                                offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()),
+                                        null,
                                         null/* taskContext.getSlotXmin(connection) */);
                                 commitMessage(partition, offsetContext, lsn);
                             }
@@ -340,8 +341,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                             LOGGER.info("LSN in case of COMMIT is " + lsn);
                             offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()), null,
                                     null/* taskContext.getSlotXmin(connection) */);
-                            //offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()), null,
-                            //        null/* taskContext.getSlotXmin(connection) */);
+                            // offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()), null,
+                            // null/* taskContext.getSlotXmin(connection) */);
                             commitMessage(partition, offsetContext, lsn);
                             dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext);
                         }
@@ -531,10 +532,10 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
     private void probeConnectionIfNeeded() throws SQLException {
         // CDCSDK Find out why it fails.
-//        if (connectionProbeTimer.hasElapsed()) {
-//            connection.prepareQuery("SELECT 1");
-//            connection.commit();
-//        }
+        // if (connectionProbeTimer.hasElapsed()) {
+        // connection.prepareQuery("SELECT 1");
+        // connection.commit();
+        // }
     }
 
     private void commitMessage(PostgresPartition partition, PostgresOffsetContext offsetContext, final OpId lsn) throws SQLException, InterruptedException {
@@ -582,29 +583,31 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
     @Override
     public void commitOffset(Map<String, ?> offset) {
-        //try {
+        // try {
         LOGGER.info("SKSK the commitoffset is " + offset);
-            ReplicationStream replicationStream = null;// this.replicationStream.get();
-            final OpId commitLsn = null;//OpId.valueOf((String) offset.get(PostgresOffsetContext.LAST_COMMIT_LSN_KEY));
-            final OpId changeLsn = OpId.valueOf((String) offset.get(PostgresOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
-            final OpId lsn = (commitLsn != null) ? commitLsn : changeLsn;
+        ReplicationStream replicationStream = null;// this.replicationStream.get();
+        final OpId commitLsn = null;// OpId.valueOf((String) offset.get(PostgresOffsetContext.LAST_COMMIT_LSN_KEY));
+        final OpId changeLsn = OpId.valueOf((String) offset.get(PostgresOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
+        final OpId lsn = (commitLsn != null) ? commitLsn : changeLsn;
 
-            if (replicationStream != null && lsn != null) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Flushing LSN to server: {}", lsn);
-                }
-                // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
-                // CDCSDK yugabyte does it automatically.
-                // but we may need an API
-                // replicationStream.flushLsn(lsn);
+        if (replicationStream != null && lsn != null) {
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Flushing LSN to server: {}", lsn);
             }
-            else {
-                LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
-            }
-        //}
-        /*catch (SQLException e) {
-            throw new ConnectException(e);
-        }*/
+            // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
+            // CDCSDK yugabyte does it automatically.
+            // but we may need an API
+            // replicationStream.flushLsn(lsn);
+        }
+        else {
+            LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
+        }
+        // }
+        /*
+         * catch (SQLException e) {
+         * throw new ConnectException(e);
+         * }
+         */
     }
 
     /**

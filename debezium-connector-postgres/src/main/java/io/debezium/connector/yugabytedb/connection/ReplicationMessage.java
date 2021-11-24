@@ -194,6 +194,7 @@ public interface ReplicationMessage {
     default boolean isDDLMessage() {
         return getOperation() == Operation.DDL;
     }
+
     public class TransactionMessage implements ReplicationMessage {
 
         private final String transationId;

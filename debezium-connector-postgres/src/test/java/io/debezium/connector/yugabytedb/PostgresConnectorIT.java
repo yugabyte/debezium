@@ -129,8 +129,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     @After
     public void after() {
         stopConnector();
-        //TestHelper.dropDefaultReplicationSlot();
-        //TestHelper.dropPublication();
+        // TestHelper.dropDefaultReplicationSlot();
+        // TestHelper.dropPublication();
     }
 
     @Test
@@ -2104,16 +2104,17 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.executeDDL("postgres_create_tables.ddl");
         Thread.sleep(1000);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.HOSTNAME, "192.168.1.32")
                 .with(PostgresConnectorConfig.PORT, 5433)
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .with(PostgresConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
-                .with(PostgresConnectorConfig.MASTER_HOSTNAME, "localhost")
+                .with(PostgresConnectorConfig.MASTER_HOSTNAME, "192.168.1.32")
                 .with(PostgresConnectorConfig.MASTER_PORT, "7100")
                 .with(PostgresConnectorConfig.STREAM_ID, "ad6cdaa9-812c-426e-a2f9-c04e387f55a0");
         start(PostgresConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         final long recordsCount = 100;
-        //final int batchSize = 10;
+        // final int batchSize = 10;
 
         // batchInsertRecords(recordsCount, batchSize);
         CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
