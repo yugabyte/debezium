@@ -6,25 +6,23 @@
 
 package io.debezium.connector.yugabytedb;
 
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 
-import io.debezium.relational.*;
-import io.debezium.util.Collect;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.yb.cdc.CdcService;
 
 import io.debezium.annotation.NotThreadSafe;
 import io.debezium.connector.yugabytedb.connection.ServerInfo;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
 import io.debezium.jdbc.JdbcConnection;
+import io.debezium.relational.*;
 import io.debezium.schema.TopicSelector;
+import io.debezium.util.Collect;
 import io.debezium.util.SchemaNameAdjuster;
-import org.yb.cdc.CdcService;
 
 /**
  * Component that records the schema information for the {@link YugabyteDBConnector}. The schema information contains
@@ -104,7 +102,7 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
 
     protected YugabyteDBSchema refresh(CdcService.CDCSDKSchemaPB schemaPB) {
         // and then refresh the schemas
-        //refreshSchemas();
+        // refreshSchemas();
         readSchema(tables(), null, null,
                 getTableFilter(), null, true, schemaPB);
         refreshSchemas();
@@ -115,11 +113,11 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
         try {
             ServerInfo.ReplicaIdentity replicaIdentity = connection.readReplicaIdentityInfo(tableId);
             LOGGER.info("REPLICA IDENTITY for '{}' is '{}'; {}", tableId, replicaIdentity, replicaIdentity.description());
-        } catch (SQLException e) {
+        }
+        catch (SQLException e) {
             LOGGER.warn("Cannot determine REPLICA IDENTITY info for '{}'", tableId);
         }
     }
-
 
     public void readSchema(Tables tables, String databaseCatalog, String schemaNamePattern,
                            Tables.TableFilter tableFilter, Tables.ColumnNameFilter columnFilter,
@@ -127,7 +125,7 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
                            CdcService.CDCSDKSchemaPB schemaPB) {
         // Before we make any changes, get the copy of the set of table IDs ...
         Set<TableId> tableIdsBefore = new HashSet<>(tables.tableIds());
-        //final String catalogName = "yugabyte";
+        // final String catalogName = "yugabyte";
         final String schemaName = "public";
         final String tableName = "t1";
         TableId tableId = new TableId(null, schemaName, tableName);
@@ -197,9 +195,9 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
 
         int position = 1;
         for (CdcService.CDCSDKColumnInfoPB columnMetadata : schemaPB.getColumnInfoList()) {
-            //final String catalogName = "yugabyte";
+            // final String catalogName = "yugabyte";
             final String schemaName = "public";
-            //final String tableName = "test1";
+            // final String tableName = "test1";
             TableId tableId = new TableId(null, schemaName, tableName);
 
             // exclude views and non-captured tables
@@ -232,7 +230,7 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
             column.scale(getScale(oid));
             column.optional(columnMetadata.getIsNullable());
             column.position(position);
-            //TODO: Handle it later, Mark it as false for now
+            // TODO: Handle it later, Mark it as false for now
             column.autoIncremented(false);
             column.generated(false);
             column.nativeType(resolveNativeType(oid));
@@ -283,7 +281,8 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
      * @throws SQLException if there is a problem refreshing the schema from the database server
      */
     protected void refresh(YugabyteDBConnection connection, TableId tableId,
-                           boolean refreshToastableColumns) throws SQLException {
+                           boolean refreshToastableColumns)
+            throws SQLException {
         Tables temp = new Tables();
         readSchema(temp, null, null, tableId::equals,
                 null, true, null);
@@ -361,7 +360,8 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
             if (!connection.connection().getAutoCommit()) {
                 connection.connection().commit();
             }
-        } catch (SQLException e) {
+        }
+        catch (SQLException e) {
             throw new ConnectException("Unable to refresh toastable columns mapping", e);
         }
 

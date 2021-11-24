@@ -217,8 +217,7 @@ public class YugabyteDBConnectorTask
             ErrorHandler errorHandler = new PostgresErrorHandler(connectorConfig.getLogicalName(),
                     queue);
 
-            final PostgresEventMetadataProvider metadataProvider =
-                    new PostgresEventMetadataProvider();
+            final PostgresEventMetadataProvider metadataProvider = new PostgresEventMetadataProvider();
 
             Configuration configuration = connectorConfig.getConfig();
             Heartbeat heartbeat = Heartbeat.create(
@@ -256,8 +255,7 @@ public class YugabyteDBConnectorTask
                     schemaNameAdjuster,
                     jdbcConnection);
 
-            ChangeEventSourceCoordinator<YugabyteDBPartition, YugabyteDBOffsetContext> coordinator
-                    = new PostgresChangeEventSourceCoordinator(
+            ChangeEventSourceCoordinator<YugabyteDBPartition, YugabyteDBOffsetContext> coordinator = new PostgresChangeEventSourceCoordinator(
                     previousOffsets,
                     errorHandler,
                     YugabyteDBConnector.class,

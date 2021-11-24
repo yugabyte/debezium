@@ -83,7 +83,8 @@ public class PostgresSchema extends RelationalDatabaseSchema {
      * @throws SQLException if there is a problem obtaining the schema from the database server
      */
     protected PostgresSchema refresh(PostgresConnection connection,
-                                     boolean printReplicaIdentityInfo) throws SQLException {
+                                     boolean printReplicaIdentityInfo)
+            throws SQLException {
         // read all the information from the DB
         connection.readSchema(tables(), null, null,
                 getTableFilter(), null, true);

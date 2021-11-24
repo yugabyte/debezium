@@ -353,7 +353,7 @@ public class YugabyteDBStreamingChangeEventSource implements StreamingChangeEven
                     }
                     else if (message.isDDLMessage()) {
                         LOGGER.info("Received DDL message {}", message.getSchema().toString()
-                        + " the table is " + message.getTable());
+                                + " the table is " + message.getTable());
                         // TODO: Update the schema
                         // final String catalogName = "yugabyte";
                         TableId tableId = null;
