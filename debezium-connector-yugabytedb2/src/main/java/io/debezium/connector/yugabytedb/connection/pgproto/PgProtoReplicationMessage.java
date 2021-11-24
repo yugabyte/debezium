@@ -93,10 +93,11 @@ public class PgProtoReplicationMessage implements ReplicationMessage {
         return !(rawMessage.getNewTypeinfoList() == null || rawMessage.getNewTypeinfoList().isEmpty());
     }
 
-    private List<ReplicationMessage.Column> transform(List<Common.DatumMessage> messageList, List<CdcService.TypeInfo> typeInfoList) {
+    private List<ReplicationMessage.Column> transform(List<Common.DatumMessagePB> messageList,
+                                                      List<CdcService.TypeInfo> typeInfoList) {
         return IntStream.range(0, messageList.size())
                 .mapToObj(index -> {
-                    final Common.DatumMessage datum = messageList.get(index);
+                    final Common.DatumMessagePB datum = messageList.get(index);
                     final Optional<CdcService.TypeInfo> typeInfo = Optional.ofNullable(hasTypeMetadata() && typeInfoList != null ? typeInfoList.get(index) : null);
                     final String columnName = Strings.unquoteIdentifierPart(datum.getColumnName());
                     final YugabyteDBType type = yugabyteDBTypeRegistry.get((int) datum.getColumnType());
@@ -124,7 +125,9 @@ public class PgProtoReplicationMessage implements ReplicationMessage {
         return true;
     }
 
-    public Object getValue(String columnName, YugabyteDBType type, String fullType, Common.DatumMessage datumMessage, final PgConnectionSupplier connection,
+    public Object getValue(String columnName, YugabyteDBType type, String fullType,
+                           Common.DatumMessagePB datumMessage,
+                           final PgConnectionSupplier connection,
                            boolean includeUnknownDatatypes) {
         final PgProtoColumnValue columnValue = new PgProtoColumnValue(datumMessage);
         return ReplicationMessageColumnValueResolver.resolveValue(columnName, type, fullType, columnValue, connection, includeUnknownDatatypes, yugabyteDBTypeRegistry);

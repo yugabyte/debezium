@@ -227,7 +227,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             }
         }
 
-        // validateTServerConnection(configValues, config);
+        validateTServerConnection(configValues, config);
     }
 
     @Override
@@ -239,8 +239,9 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                                              Configuration config) {
         ConfigValue hostnameValue = configValues.get(YugabyteDBConnectorConfig.MASTER_HOSTNAME.name());
         ConfigValue portValue = configValues.get(YugabyteDBConnectorConfig.MASTER_PORT.name());
-        String hostname = this.props.get(YugabyteDBConnectorConfig.MASTER_HOSTNAME.toString());
-        int port = Integer.parseInt(this.props.get(YugabyteDBConnectorConfig.MASTER_PORT.toString()));
+
+        String hostname = config.getString(YugabyteDBConnectorConfig.MASTER_HOSTNAME.toString());
+        int port = config.getInteger(YugabyteDBConnectorConfig.MASTER_PORT.toString());
         // TODO: Suranjan Check for timeout, socket timeout property
         // TODO: Suranjan check for SSL property too and validate if set
         // TODO: CDCSDK We will check in future for user login and roles.

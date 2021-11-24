@@ -106,7 +106,8 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
                 case UPDATE:
                     return columnValues(message.getOldTupleList(), tableId, true, message.hasTypeMetadata(), true, true);
                 default:
-                    return columnValues(message.getOldTupleList(), tableId, true, message.hasTypeMetadata(), false, true);
+                    return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(),
+                            false, true);
             }
         }
         catch (SQLException e) {
@@ -119,9 +120,13 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
         try {
             switch (getOperation()) {
                 case CREATE:
-                    return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
+                    return columnValues(message.getNewTupleList(), tableId,
+                            true, message.hasTypeMetadata(),
+                            false, false);
                 case UPDATE:
-                    return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
+                    return columnValues(message.getNewTupleList(), tableId,
+                            true, message.hasTypeMetadata(),
+                            false, false);
                 default:
                     return null;
             }

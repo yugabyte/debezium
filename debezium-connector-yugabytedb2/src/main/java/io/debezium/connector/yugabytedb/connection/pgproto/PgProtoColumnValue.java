@@ -38,7 +38,7 @@ import io.debezium.time.Conversions;
  *
  * @author Chris Cranford
  */
-public class PgProtoColumnValue extends AbstractColumnValue<Common.DatumMessage> {
+public class PgProtoColumnValue extends AbstractColumnValue<Common.DatumMessagePB> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PgProtoColumnValue.class);
 
@@ -54,14 +54,14 @@ public class PgProtoColumnValue extends AbstractColumnValue<Common.DatumMessage>
      */
     private static final long TIMESTAMP_MAX = 9223371331200000000L;
 
-    private Common.DatumMessage value;
+    private Common.DatumMessagePB value;
 
-    public PgProtoColumnValue(Common.DatumMessage value) {
+    public PgProtoColumnValue(Common.DatumMessagePB value) {
         this.value = value;
     }
 
     @Override
-    public Common.DatumMessage getRawValue() {
+    public Common.DatumMessagePB getRawValue() {
         return value;
     }
 

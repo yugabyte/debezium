@@ -99,14 +99,18 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
 
     @Override
     protected Object[] getOldColumnValues() {
+
         try {
             switch (getOperation()) {
                 case CREATE:
                     return null;
                 case UPDATE:
-                    return columnValues(message.getOldTupleList(), tableId, true, message.hasTypeMetadata(), true, true);
+                    return null;
+                    //return columnValues(message.getOldTupleList(), tableId, true,
+                    //    message.hasTypeMetadata(), true, true);
                 default:
-                    return columnValues(message.getOldTupleList(), tableId, true, message.hasTypeMetadata(), false, true);
+                    return columnValues(message.getNewTupleList(), tableId, true,
+                        message.hasTypeMetadata(), false, true);
             }
         }
         catch (SQLException e) {
