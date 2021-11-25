@@ -106,11 +106,11 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
                     return null;
                 case UPDATE:
                     return null;
-                    //return columnValues(message.getOldTupleList(), tableId, true,
-                    //    message.hasTypeMetadata(), true, true);
+                // return columnValues(message.getOldTupleList(), tableId, true,
+                // message.hasTypeMetadata(), true, true);
                 default:
-                    return columnValues(message.getNewTupleList(), tableId, true,
-                        message.hasTypeMetadata(), false, true);
+                    return columnValues(message.getOldTupleList(), tableId, true,
+                            message.hasTypeMetadata(), false, true);
             }
         }
         catch (SQLException e) {
