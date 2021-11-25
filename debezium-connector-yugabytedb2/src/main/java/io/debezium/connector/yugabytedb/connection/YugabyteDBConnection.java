@@ -493,7 +493,8 @@ public class YugabyteDBConnection extends JdbcConnection {
     }
 
     @Override
-    public <T extends DatabaseSchema<TableId>> Object getColumnValue(ResultSet rs, int columnIndex, Column column,
+    public <T extends DatabaseSchema<TableId>> Object getColumnValue(ResultSet rs, int columnIndex,
+                                                                     Column column,
                                                                      Table table, T schema)
             throws SQLException {
         try {
@@ -511,7 +512,8 @@ public class YugabyteDBConnection extends JdbcConnection {
 
             switch (type.getOid()) {
                 case PgOid.MONEY:
-                    // TODO author=Horia Chiorean date=14/11/2016 description=workaround for https://github.com/pgjdbc/pgjdbc/issues/100
+                    // TODO author=Horia Chiorean date=14/11/2016
+                    //  description=workaround for https://github.com/pgjdbc/pgjdbc/issues/100
                     final String sMoney = rs.getString(columnIndex);
                     if (sMoney == null) {
                         return sMoney;

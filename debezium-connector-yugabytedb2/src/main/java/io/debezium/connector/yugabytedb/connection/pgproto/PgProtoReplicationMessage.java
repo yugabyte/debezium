@@ -108,7 +108,8 @@ public class PgProtoReplicationMessage implements ReplicationMessage {
 
                         @Override
                         public Object getValue(PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
-                            return PgProtoReplicationMessage.this.getValue(columnName, type, fullType, datum, connection, includeUnknownDatatypes);
+                            return PgProtoReplicationMessage.this.getValue(columnName, type,
+                                    fullType, datum, connection, includeUnknownDatatypes);
                         }
 
                         @Override
@@ -130,7 +131,8 @@ public class PgProtoReplicationMessage implements ReplicationMessage {
                            final PgConnectionSupplier connection,
                            boolean includeUnknownDatatypes) {
         final PgProtoColumnValue columnValue = new PgProtoColumnValue(datumMessage);
-        return ReplicationMessageColumnValueResolver.resolveValue(columnName, type, fullType, columnValue, connection, includeUnknownDatatypes, yugabyteDBTypeRegistry);
+        return ReplicationMessageColumnValueResolver.resolveValue(columnName, type, fullType,
+                columnValue, connection, includeUnknownDatatypes, yugabyteDBTypeRegistry);
     }
 
     public CdcService.CDCSDKSchemaPB getSchema() {

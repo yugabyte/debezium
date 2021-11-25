@@ -96,9 +96,9 @@ public class YugabyteDBStreamingChangeEventSource implements StreamingChangeEven
 
         String masterAddress = connectorConfig.masterHost() + ":" + connectorConfig.masterPort();
         asyncYBClient = new AsyncYBClient.AsyncYBClientBuilder(masterAddress)
-                .defaultAdminOperationTimeoutMs(30000)
-                .defaultOperationTimeoutMs(30000)
-                .defaultSocketReadTimeoutMs(30000)
+                .defaultAdminOperationTimeoutMs(60000)
+                .defaultOperationTimeoutMs(60000)
+                .defaultSocketReadTimeoutMs(60000)
                 .build();
 
         syncClient = new YBClient(asyncYBClient);
@@ -259,7 +259,8 @@ public class YugabyteDBStreamingChangeEventSource implements StreamingChangeEven
         String streamId = this.connectorConfig.streamId();
         if (streamId.equals("ad6cdaa9-812c-426e-a2f9-c04e387f55a0"))
             streamId = syncClient.createCDCStream(table, "yugabyte", "PROTO",
-                    "IMPLICIT").getStreamId();
+                    "IMPLICIT")
+                    .getStreamId();
         // streamId = syncClient.createCDCStream2(table).getStreamId();
 
         LOGGER.info(String.format("Created new stream with id %s", streamId));

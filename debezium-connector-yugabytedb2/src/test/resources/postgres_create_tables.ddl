@@ -42,7 +42,10 @@
 --     PRIMARY KEY(pk));
 
 -- CREATE TABLE t1 (a int primary key , b int[], c int);
-CREATE TABLE t1 (id SERIAL,first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL, PRIMARY KEY(id));
+-- CREATE TABLE t1 (id SERIAL,first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL,
+-- email VARCHAR(255) NOT NULL, PRIMARY KEY(id));
+CREATE TABLE t1 (id SERIAL , arr INT[], PRIMARY KEY(id));
+
 -- CREATE TABLE t1 (pk SERIAL, j JSON, jb JSONB, x XML, u Uuid, PRIMARY KEY(pk));
 -- CREATE TABLE geom_table (pk SERIAL, p POINT, PRIMARY KEY(pk));
 -- CREATE TABLE range_table (pk SERIAL, unbounded_exclusive_tsrange TSRANGE, bounded_inclusive_tsrange TSRANGE, unbounded_exclusive_tstzrange TSTZRANGE, bounded_inclusive_tstzrange TSTZRANGE, unbounded_exclusive_daterange DATERANGE, bounded_exclusive_daterange DATERANGE, int4_number_range INT4RANGE, numerange NUMRANGE, int8_number_range INT8RANGE, PRIMARY KEY(pk));
