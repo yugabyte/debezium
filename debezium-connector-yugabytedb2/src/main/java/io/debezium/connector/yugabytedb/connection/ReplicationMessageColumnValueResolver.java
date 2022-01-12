@@ -19,7 +19,8 @@ import io.debezium.connector.yugabytedb.connection.ReplicationMessage.ColumnValu
  */
 public class ReplicationMessageColumnValueResolver {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ReplicationMessageColumnValueResolver.class);
+    private static final Logger LOGGER = LoggerFactory
+            .getLogger(ReplicationMessageColumnValueResolver.class);
 
     /**
      * Resolve the value of a {@link ColumnValue}.
@@ -33,8 +34,10 @@ public class ReplicationMessageColumnValueResolver {
      * @param yugabyteDBTypeRegistry the postgres type registry
      * @return
      */
-    public static Object resolveValue(String columnName, YugabyteDBType type, String fullType, ColumnValue value, final PgConnectionSupplier connection,
-                                      boolean includeUnknownDatatypes, YugabyteDBTypeRegistry yugabyteDBTypeRegistry) {
+    public static Object resolveValue(String columnName, YugabyteDBType type, String fullType,
+                                      ColumnValue value, final PgConnectionSupplier connection,
+                                      boolean includeUnknownDatatypes,
+                                      YugabyteDBTypeRegistry yugabyteDBTypeRegistry) {
         if (value.isNull()) {
             // nulls are null
             return null;
@@ -43,7 +46,8 @@ public class ReplicationMessageColumnValueResolver {
         // CDCSDK this is for UDT
         // see if we can use this or we may not support this.
         if (!type.isRootType()) {
-            return resolveValue(columnName, type.getParentType(), fullType, value, connection, includeUnknownDatatypes, yugabyteDBTypeRegistry);
+            return resolveValue(columnName, type.getParentType(), fullType, value, connection,
+                    includeUnknownDatatypes, yugabyteDBTypeRegistry);
         }
 
         // CDCSDK this too we can avoid using connection.
@@ -57,7 +61,8 @@ public class ReplicationMessageColumnValueResolver {
         }
 
         switch (type.getName()) {
-            // include all types from https://www.postgresql.org/docs/current/static/datatype.html#DATATYPE-TABLE
+            // include all types from
+            // https://www.postgresql.org/docs/current/static/datatype.html#DATATYPE-TABLE
             // plus aliases from the shorter names produced by older wal2json
             case "boolean":
             case "bool":
@@ -182,11 +187,13 @@ public class ReplicationMessageColumnValueResolver {
             case "tsquery":
             case "tsvector":
             case "txid_snapshot":
-                // catch-all for unknown (extension module/custom) types
+                return value.asString();
+            // catch-all for unknown (extension module/custom) types
             default:
                 break;
         }
 
-        return value.asDefault(yugabyteDBTypeRegistry, type.getOid(), columnName, fullType, includeUnknownDatatypes, connection);
+        return value.asDefault(yugabyteDBTypeRegistry, type.getOid(), columnName, fullType,
+                includeUnknownDatatypes, connection);
     }
 }

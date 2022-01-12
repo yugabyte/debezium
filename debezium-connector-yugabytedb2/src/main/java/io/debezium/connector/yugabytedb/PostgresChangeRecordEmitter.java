@@ -157,13 +157,17 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
         return schema.schemaFor(tableId);
     }
 
-    private Object[] columnValues(List<ReplicationMessage.Column> columns, TableId tableId, boolean refreshSchemaIfChanged, boolean metadataInMessage,
+    private Object[] columnValues(List<ReplicationMessage.Column> columns, TableId tableId,
+                                  boolean refreshSchemaIfChanged, boolean metadataInMessage,
                                   boolean sourceOfToasted, boolean oldValues)
             throws SQLException {
         if (columns == null || columns.isEmpty()) {
             return null;
         }
         final Table table = schema.tableFor(tableId);
+        if (table == null) {
+            schema.dumpTableId();
+        }
         Objects.requireNonNull(table);
 
         // based on the schema columns, create the values on the same position as the columns
@@ -172,11 +176,15 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
         List<ReplicationMessage.Column> columnsWithoutToasted = columns.stream().filter(Predicates.not(ReplicationMessage.Column::isToastedColumn))
                 .collect(Collectors.toList());
         // JSON does not deliver a list of all columns for REPLICA IDENTITY DEFAULT
-        Object[] values = new Object[columnsWithoutToasted.size() < schemaColumns.size() ? schemaColumns.size() : columnsWithoutToasted.size()];
+        Object[] values = new Object[columnsWithoutToasted.size() < schemaColumns.size()
+                ? schemaColumns.size()
+                : columnsWithoutToasted.size()];
 
-        final Set<String> undeliveredToastableColumns = new HashSet<>(schema.getToastableColumnsForTableId(table.id()));
+        final Set<String> undeliveredToastableColumns = new HashSet<>(schema
+                .getToastableColumnsForTableId(table.id()));
         for (ReplicationMessage.Column column : columns) {
-            // DBZ-298 Quoted column names will be sent like that in messages, but stored unquoted in the column names
+            // DBZ-298 Quoted column names will be sent like that in messages,
+            // but stored unquoted in the column names
             final String columnName = Strings.unquoteIdentifierPart(column.getName());
             undeliveredToastableColumns.remove(columnName);
 

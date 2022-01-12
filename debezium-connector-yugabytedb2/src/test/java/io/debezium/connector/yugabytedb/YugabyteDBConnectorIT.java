@@ -2111,10 +2111,11 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
                 .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
                 .with(YugabyteDBConnectorConfig.MASTER_HOSTNAME, "192.168.1.32")
                 .with(YugabyteDBConnectorConfig.MASTER_PORT, "7100")
-                .with(YugabyteDBConnectorConfig.STREAM_ID, "ad6cdaa9-812c-426e-a2f9-c04e387f55a0");
+                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" + ",public.t2")
+                .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
-        final long recordsCount = 100;
+        final long recordsCount = 1000;
         // final int batchSize = 10;
 
         // batchInsertRecords(recordsCount, batchSize);

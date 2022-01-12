@@ -799,52 +799,61 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
 
     protected Object convertGeometry(Column column, Field fieldDefn, Object data) {
         final PostgisGeometry empty = PostgisGeometry.createEmpty();
-        return convertValue(column, fieldDefn, data, io.debezium.data.geometry.Geometry.createValue(fieldDefn.schema(), empty.getWkb(), empty.getSrid()), (r) -> {
-            try {
-                final Schema schema = fieldDefn.schema();
-                if (data instanceof byte[]) {
-                    PostgisGeometry geom = PostgisGeometry.fromHexEwkb(new String((byte[]) data, "ASCII"));
-                    r.deliver(io.debezium.data.geometry.Geometry.createValue(schema, geom.getWkb(), geom.getSrid()));
-                }
-                else if (data instanceof PGobject) {
-                    PGobject pgo = (PGobject) data;
-                    PostgisGeometry geom = PostgisGeometry.fromHexEwkb(pgo.getValue());
-                    r.deliver(io.debezium.data.geometry.Geometry.createValue(schema, geom.getWkb(), geom.getSrid()));
-                }
-                else if (data instanceof String) {
-                    PostgisGeometry geom = PostgisGeometry.fromHexEwkb((String) data);
-                    r.deliver(io.debezium.data.geometry.Geometry.createValue(schema, geom.getWkb(), geom.getSrid()));
-                }
-            }
-            catch (IllegalArgumentException | UnsupportedEncodingException e) {
-                logger.warn("Error converting to a Geometry type", column);
-            }
-        });
+        return convertValue(column, fieldDefn, data, io.debezium.data.geometry.Geometry
+                .createValue(fieldDefn.schema(), empty.getWkb(), empty.getSrid()), (r) -> {
+                    try {
+                        final Schema schema = fieldDefn.schema();
+                        if (data instanceof byte[]) {
+                            PostgisGeometry geom = PostgisGeometry.fromHexEwkb(new String((byte[]) data,
+                                    "ASCII"));
+                            r.deliver(io.debezium.data.geometry.Geometry
+                                    .createValue(schema, geom.getWkb(), geom.getSrid()));
+                        }
+                        else if (data instanceof PGobject) {
+                            PGobject pgo = (PGobject) data;
+                            PostgisGeometry geom = PostgisGeometry.fromHexEwkb(pgo.getValue());
+                            r.deliver(io.debezium.data.geometry.Geometry
+                                    .createValue(schema, geom.getWkb(), geom.getSrid()));
+                        }
+                        else if (data instanceof String) {
+                            PostgisGeometry geom = PostgisGeometry.fromHexEwkb((String) data);
+                            r.deliver(io.debezium.data.geometry.Geometry
+                                    .createValue(schema, geom.getWkb(), geom.getSrid()));
+                        }
+                    }
+                    catch (IllegalArgumentException | UnsupportedEncodingException e) {
+                        logger.warn("Error converting to a Geometry type", column);
+                    }
+                });
     }
 
     protected Object convertGeography(Column column, Field fieldDefn, Object data) {
         final PostgisGeometry empty = PostgisGeometry.createEmpty();
-        return convertValue(column, fieldDefn, data, io.debezium.data.geometry.Geography.createValue(fieldDefn.schema(), empty.getWkb(), empty.getSrid()), (r) -> {
-            final Schema schema = fieldDefn.schema();
-            try {
-                if (data instanceof byte[]) {
-                    PostgisGeometry geom = PostgisGeometry.fromHexEwkb(new String((byte[]) data, "ASCII"));
-                    r.deliver(io.debezium.data.geometry.Geography.createValue(schema, geom.getWkb(), geom.getSrid()));
-                }
-                else if (data instanceof PGobject) {
-                    PGobject pgo = (PGobject) data;
-                    PostgisGeometry geom = PostgisGeometry.fromHexEwkb(pgo.getValue());
-                    r.deliver(io.debezium.data.geometry.Geography.createValue(schema, geom.getWkb(), geom.getSrid()));
-                }
-                else if (data instanceof String) {
-                    PostgisGeometry geom = PostgisGeometry.fromHexEwkb((String) data);
-                    r.deliver(io.debezium.data.geometry.Geography.createValue(schema, geom.getWkb(), geom.getSrid()));
-                }
-            }
-            catch (IllegalArgumentException | UnsupportedEncodingException e) {
-                logger.warn("Error converting to a Geography type", column);
-            }
-        });
+        return convertValue(column, fieldDefn, data, io.debezium.data.geometry.Geography
+                .createValue(fieldDefn.schema(), empty.getWkb(), empty.getSrid()), (r) -> {
+                    final Schema schema = fieldDefn.schema();
+                    try {
+                        if (data instanceof byte[]) {
+                            PostgisGeometry geom = PostgisGeometry.fromHexEwkb(new String((byte[]) data, "ASCII"));
+                            r.deliver(io.debezium.data.geometry.Geography
+                                    .createValue(schema, geom.getWkb(), geom.getSrid()));
+                        }
+                        else if (data instanceof PGobject) {
+                            PGobject pgo = (PGobject) data;
+                            PostgisGeometry geom = PostgisGeometry.fromHexEwkb(pgo.getValue());
+                            r.deliver(io.debezium.data.geometry.Geography
+                                    .createValue(schema, geom.getWkb(), geom.getSrid()));
+                        }
+                        else if (data instanceof String) {
+                            PostgisGeometry geom = PostgisGeometry.fromHexEwkb((String) data);
+                            r.deliver(io.debezium.data.geometry.Geography
+                                    .createValue(schema, geom.getWkb(), geom.getSrid()));
+                        }
+                    }
+                    catch (IllegalArgumentException | UnsupportedEncodingException e) {
+                        logger.warn("Error converting to a Geography type", column);
+                    }
+                });
     }
 
     protected Object convertCitext(Column column, Field fieldDefn, Object data) {

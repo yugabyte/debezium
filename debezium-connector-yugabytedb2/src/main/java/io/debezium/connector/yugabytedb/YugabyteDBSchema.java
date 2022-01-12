@@ -100,12 +100,12 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
         return this;
     }
 
-    protected YugabyteDBSchema refresh(CdcService.CDCSDKSchemaPB schemaPB) {
+    protected YugabyteDBSchema refresh(TableId tableId, CdcService.CDCSDKSchemaPB schemaPB) {
         // and then refresh the schemas
         // refreshSchemas();
         readSchema(tables(), null, null,
-                getTableFilter(), null, true, schemaPB);
-        refreshSchemas();
+                getTableFilter(), null, true, schemaPB, tableId);
+        refreshSchemas(tableId);
         return this;
     }
 
@@ -122,13 +122,14 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
     public void readSchema(Tables tables, String databaseCatalog, String schemaNamePattern,
                            Tables.TableFilter tableFilter, Tables.ColumnNameFilter columnFilter,
                            boolean removeTablesNotFoundInJdbc,
-                           CdcService.CDCSDKSchemaPB schemaPB) {
+                           CdcService.CDCSDKSchemaPB schemaPB,
+                           TableId tableId) {
         // Before we make any changes, get the copy of the set of table IDs ...
         Set<TableId> tableIdsBefore = new HashSet<>(tables.tableIds());
         // final String catalogName = "yugabyte";
-        final String schemaName = "public";
-        final String tableName = "t1";
-        TableId tableId = new TableId(null, schemaName, tableName);
+        // final String schemaName = "public";
+        // final String tableName = "t1";
+        // TableId tableId = new TableId(null, schemaName, tableName);
 
         Map<TableId, List<Column>> columnsByTable = new HashMap<>();
 
@@ -160,8 +161,8 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
 
         if (removeTablesNotFoundInJdbc) {
             // Remove any definitions for tables that were not found in the database metadata ...
-            tableIdsBefore.removeAll(columnsByTable.keySet());
-            tableIdsBefore.forEach(tables::removeTable);
+            // tableIdsBefore.removeAll(columnsByTable.keySet());
+            // tableIdsBefore.forEach(tables::removeTable);
         }
     }
 
@@ -285,7 +286,7 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
             throws SQLException {
         Tables temp = new Tables();
         readSchema(temp, null, null, tableId::equals,
-                null, true, null);
+                null, true, null, tableId);
 
         // the table could be deleted before the event was processed
         if (temp.size() == 0) {
@@ -310,9 +311,16 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
     /**
      * Discard any currently-cached schemas and rebuild them using the filters.
      */
+    protected void refreshSchemas(TableId id) {
+        // clearSchemas();
+        removeSchema(id);
+        // Create TableSchema instances for any existing table ...
+        tableIds().forEach(this::refreshSchema);
+    }
+
     protected void refreshSchemas() {
         clearSchemas();
-
+        // removeSchema(id);
         // Create TableSchema instances for any existing table ...
         tableIds().forEach(this::refreshSchema);
     }
@@ -426,5 +434,9 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
     public boolean tableInformationComplete() {
         // PostgreSQL does not support HistorizedDatabaseSchema - so no tables are recovered
         return false;
+    }
+
+    public void dumpTableId() {
+        LOGGER.info("The relationid to tableid in YugabyteDBSchema is " + this.relationIdToTableId);
     }
 }

@@ -59,7 +59,7 @@ public class YugabyteDBTaskContext extends CdcSourceTaskContext {
     protected void refreshSchema(YugabyteDBConnection connection,
                                  boolean printReplicaIdentityInfo)
             throws SQLException {
-        schema.refresh(connection, printReplicaIdentityInfo);
+        // schema.refresh(connection, printReplicaIdentityInfo);
     }
 
     protected ReplicationConnection createReplicationConnection(boolean doSnapshot)

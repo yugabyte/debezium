@@ -5,9 +5,13 @@
  */
 package io.debezium.connector.yugabytedb;
 
+import static io.debezium.connector.yugabytedb.YugabyteDBSchema.PUBLIC_SCHEMA_NAME;
+
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import org.postgresql.core.BaseConnection;
 import org.slf4j.Logger;
@@ -28,6 +32,7 @@ import io.debezium.heartbeat.Heartbeat;
 import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.source.spi.StreamingChangeEventSource;
+import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 import io.debezium.util.Clock;
 import io.debezium.util.DelayStrategy;
@@ -35,9 +40,10 @@ import io.debezium.util.ElapsedTimeStrategy;
 
 /**
  *
- * @author Horia Chiorean (hchiorea@redhat.com), Jiri Pechanec
+ * @author Suranjan Kumar (skumar@yugabyte.com)
  */
-public class YugabyteDBStreamingChangeEventSource implements StreamingChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> {
+public class YugabyteDBStreamingChangeEventSource implements
+        StreamingChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> {
 
     private static final String KEEP_ALIVE_THREAD_NAME = "keep-alive";
 
@@ -78,6 +84,7 @@ public class YugabyteDBStreamingChangeEventSource implements StreamingChangeEven
     private final AsyncYBClient asyncYBClient;
     private final YBClient syncClient;
     private YugabyteDBTypeRegistry yugabyteDBTypeRegistry;
+    private final Map<String, OpId> checkPointMap;
 
     public YugabyteDBStreamingChangeEventSource(YugabyteDBConnectorConfig connectorConfig, Snapshotter snapshotter,
                                                 YugabyteDBConnection connection, EventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
@@ -91,6 +98,7 @@ public class YugabyteDBStreamingChangeEventSource implements StreamingChangeEven
         pauseNoMessage = DelayStrategy.constant(taskContext.getConfig().getPollInterval().toMillis());
         this.taskContext = taskContext;
         this.snapshotter = snapshotter;
+        checkPointMap = new ConcurrentHashMap<>();
         // this.replicationConnection = replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
 
@@ -173,7 +181,6 @@ public class YugabyteDBStreamingChangeEventSource implements StreamingChangeEven
             // }
             // processMessages(context, partition, offsetContext, stream);
             getChanges2(context, partition, offsetContext);
-
         }
         catch (Throwable e) {
             errorHandler.setProducerThrowable(e);
@@ -242,273 +249,218 @@ public class YugabyteDBStreamingChangeEventSource implements StreamingChangeEven
         LOGGER.info("SKSK The offset is " + offsetContext.getOffset());
 
         LOGGER.info("Processing messages");
-
         ListTablesResponse tablesResp = syncClient.getTablesList();
-        String tId = "";
-        // this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded();
+        Set<String> tIds = new HashSet<>();
 
         for (Master.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
             LOGGER.info("SKSK The table name is " + tableInfo.getName());
-            if (tableInfo.getName().equals("t1") &&
-                    tableInfo.getNamespace().getName().equals("yugabyte")) {
-                tId = tableInfo.getId().toStringUtf8();
+            String fqlTableName = tableInfo.getNamespace().getName() + "." + "" + PUBLIC_SCHEMA_NAME
+                    + "." + tableInfo.getName();
+            TableId tableId = YugabyteDBSchema.parse(fqlTableName);
+            if (this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
+                tIds.add(tableInfo.getId().toStringUtf8());
             }
         }
-        LOGGER.info("SKSK the table uuid is " + tId);
-        YBTable table = this.syncClient.openTableByUUID(tId);
+
+        Map<String, YBTable> tableIdToTable = new HashMap<>();
         String streamId = this.connectorConfig.streamId();
-        if (streamId.equals("ad6cdaa9-812c-426e-a2f9-c04e387f55a0"))
-            streamId = syncClient.createCDCStream(table, "yugabyte", "PROTO",
-                    "IMPLICIT")
-                    .getStreamId();
-        // streamId = syncClient.createCDCStream2(table).getStreamId();
+        LOGGER.info(String.format("Using stream with id %s", streamId));
 
-        LOGGER.info(String.format("Created new stream with id %s", streamId));
-
-        Set<String> tableIds;
-        tableIds = new HashSet<>();
-        tableIds.add(table.getTableId());
-        List<LocatedTablet> tabletLocations = table.getTabletsLocations(30000);
         List<Map<String, List<String>>> tableIdsToTabletIdsMapList = new ArrayList<>(1);
         int concurrency = 1;
-        for (int i = 0; i < concurrency; i++) {
-            tableIdsToTabletIdsMapList.add(new HashMap<>());
-        }
-        int i = 0;
-        String tabletId2 = "";
-        for (String tableId : tableIds) {
+        boolean createStream = true;
+        for (String tId : tIds) {
+            LOGGER.info("SKSK the table uuid is " + tIds);
+            YBTable table = this.syncClient.openTableByUUID(tId);
+            tableIdToTable.put(tId, table);
+            if (createStream) {
+                streamId = this.syncClient.createCDCStream(table, "yugabyte",
+                        "PROTO",
+                        "IMPLICIT").getStreamId();
+                createStream = false;
+            }
+            List<LocatedTablet> tabletLocations = table.getTabletsLocations(30000);
+
+            for (int i = 0; i < concurrency; i++) {
+                tableIdsToTabletIdsMapList.add(new HashMap<>());
+            }
+            int i = 0;
             for (LocatedTablet tablet : tabletLocations) {
                 i++;
                 String tabletId = new String(tablet.getTabletId());
-                tabletId2 = tabletId;
                 LOGGER.info(String.format("Polling for new tablet %s", tabletId));
-                tableIdsToTabletIdsMapList.get(i % concurrency).putIfAbsent(tableId, new ArrayList<>());
-                tableIdsToTabletIdsMapList.get(i % concurrency).get(tableId).add(tabletId);
+                tableIdsToTabletIdsMapList.get(i % concurrency).putIfAbsent(tId, new ArrayList<>());
+                tableIdsToTabletIdsMapList.get(i % concurrency).get(tId).add(tabletId);
             }
+            LOGGER.info("SKSK The final map is " + tableIdsToTabletIdsMapList);
         }
-        LOGGER.info("SKSK The final map is " + tableIdsToTabletIdsMapList);
+        Map<String, List<String>> tableIdsToTabletIds = tableIdsToTabletIdsMapList.get(0);
+        List<AbstractMap.SimpleImmutableEntry<String, String>> listTabletIdTableIdPair;
+        listTabletIdTableIdPair = tableIdsToTabletIds.entrySet().stream()
+                .flatMap(e -> e.getValue().stream()
+                        .map(v -> new AbstractMap.SimpleImmutableEntry<>(v, e.getKey())))
+                .collect(Collectors.toList());
+        LOGGER.debug("The listTabletIdTableId is " + listTabletIdTableIdPair);
 
         int noMessageIterations = 0;
+        for (AbstractMap.SimpleImmutableEntry<String, String> entry : listTabletIdTableIdPair) {
+            final String tabletId = entry.getKey();
+            offsetContext.initSourceInfo(tabletId, this.connectorConfig);
+        }
+        LOGGER.info("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
+
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                 (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
 
-            Thread.sleep(1000);
-            OpId cp = offsetContext.lsn();
-            // GetChangesResponse response = getChangeResponse(offsetContext);
-            LOGGER.info("Going to fetch from OpId " + cp);
+            for (AbstractMap.SimpleImmutableEntry<String, String> entry : listTabletIdTableIdPair) {
+                final String tabletId = entry.getKey();
+                // Thread.sleep(200);
+                YBTable table = tableIdToTable.get(entry.getValue());
+                OpId cp = offsetContext.lsn(tabletId);
+                // GetChangesResponse response = getChangeResponse(offsetContext);
+                LOGGER.info("Going to fetch for tablet " + tabletId + " from OpId " + cp + " " +
+                        "table " + table.getName());
 
-            GetChangesResponse response = this.syncClient.getChangesCDCSDK(
-                    table, streamId, tabletId2,
-                    cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), 0L);
+                GetChangesResponse response = this.syncClient.getChangesCDCSDK(
+                        table, streamId, tabletId,
+                        cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime());
 
-            boolean receivedMessage = response.getResp().getCdcSdkRecordsCount() != 0;
-            response.getResp().getCdcSdkProtoRecordsList().forEach(record -> {
-                CdcService.RowMessage m = record.getRowMessage();
-                PgProtoReplicationMessage message = new PgProtoReplicationMessage(
-                        m, this.yugabyteDBTypeRegistry);
+                boolean receivedMessage = response.getResp().getCdcSdkRecordsCount() != 0;
 
-                final OpId lsn = new OpId(record.getCdcSdkOpId().getTerm(),
-                        record.getCdcSdkOpId().getIndex(),
-                        record.getCdcSdkOpId().getWriteIdKey().toByteArray(),
-                        record.getCdcSdkOpId().getWriteId()); // stream.lastReceivedLsn();
+                for (CdcService.CDCSDKProtoRecordPB record : response
+                        .getResp()
+                        .getCdcSdkProtoRecordsList()) {
+                    CdcService.RowMessage m = record.getRowMessage();
+                    PgProtoReplicationMessage message = new PgProtoReplicationMessage(
+                            m, this.yugabyteDBTypeRegistry);
 
-                if (message.isLastEventForLsn()) {
-                    lastCompletelyProcessedLsn = lsn;
-                }
+                    final OpId lsn = new OpId(record.getCdcSdkOpId().getTerm(),
+                            record.getCdcSdkOpId().getIndex(),
+                            record.getCdcSdkOpId().getWriteIdKey().toByteArray(),
+                            record.getCdcSdkOpId().getWriteId(),
+                            response.getSnapshotTime()); // stream.lastReceivedLsn();
 
-                try {
-                    // Tx BEGIN/END event
-                    if (message.isTransactionalMessage()) {
-                        if (!connectorConfig.shouldProvideTransactionMetadata()) {
-                            LOGGER.info("Received transactional message {}", record);
-                            // Don't skip on BEGIN message as it would flush LSN for the whole transaction
-                            // too early
+                    if (message.isLastEventForLsn()) {
+                        lastCompletelyProcessedLsn = lsn;
+                    }
+
+                    try {
+                        // Tx BEGIN/END event
+                        if (message.isTransactionalMessage()) {
+                            if (!connectorConfig.shouldProvideTransactionMetadata()) {
+                                LOGGER.info("Received transactional message {}", record);
+                                // Don't skip on BEGIN message as it would flush LSN for the whole transaction
+                                // too early
+                                if (message.getOperation() == Operation.BEGIN) {
+                                    LOGGER.info("LSN in case of BEGIN is " + lsn);
+                                }
+                                if (message.getOperation() == Operation.COMMIT) {
+                                    LOGGER.info("LSN in case of COMMIT is " + lsn);
+                                    offsetContext.updateWalPosition(tabletId, lsn,
+                                            lastCompletelyProcessedLsn,
+                                            message.getCommitTime(), String
+                                                    .valueOf(message.getTransactionId()),
+                                            null,
+                                            null/* taskContext.getSlotXmin(connection) */);
+                                    commitMessage(partition, offsetContext, lsn);
+                                }
+                                continue;
+                            }
+
                             if (message.getOperation() == Operation.BEGIN) {
                                 LOGGER.info("LSN in case of BEGIN is " + lsn);
+                                dispatcher.dispatchTransactionStartedEvent(partition,
+                                        message.getTransactionId(), offsetContext);
                             }
-                            if (message.getOperation() == Operation.COMMIT) {
+                            else if (message.getOperation() == Operation.COMMIT) {
                                 LOGGER.info("LSN in case of COMMIT is " + lsn);
-                                offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()),
+                                offsetContext.updateWalPosition(tabletId, lsn,
+                                        lastCompletelyProcessedLsn,
+                                        message.getCommitTime(),
+                                        String.valueOf(message.getTransactionId()),
                                         null,
                                         null/* taskContext.getSlotXmin(connection) */);
                                 commitMessage(partition, offsetContext, lsn);
+                                dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext);
                             }
-                            return;
+                            maybeWarnAboutGrowingWalBacklog(true);
                         }
-                        //
+                        else if (message.isDDLMessage()) {
+                            LOGGER.info("Received DDL message {}", message.getSchema().toString()
+                                    + " the table is " + message.getTable());
+                            // TODO: Update the schema
+                            // final String catalogName = "yugabyte";
+                            TableId tableId = null;
+                            if (message.getOperation() != Operation.NOOP) {
+                                tableId = YugabyteDBSchema.parse(message.getTable());
+                                Objects.requireNonNull(tableId);
+                            }
+                            Table t = schema.tableFor(tableId);
+                            LOGGER.info("The schema is already registered {}", t);
+                            if (t == null) {
+                                schema.refresh(tableId, message.getSchema());
+                            }
+                        }
+                        // DML event
+                        else {
+                            TableId tableId = null;
+                            if (message.getOperation() != Operation.NOOP) {
+                                tableId = YugabyteDBSchema.parse(message.getTable());
+                                Objects.requireNonNull(tableId);
+                            }
+                            LOGGER.info("Received DML record {}", record);
 
-                        if (message.getOperation() == Operation.BEGIN) {
-                            LOGGER.info("LSN in case of BEGIN is " + lsn);
-                            dispatcher.dispatchTransactionStartedEvent(partition, message.getTransactionId(), offsetContext);
-                        }
-                        else if (message.getOperation() == Operation.COMMIT) {
-                            LOGGER.info("LSN in case of COMMIT is " + lsn);
-                            offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()), null,
+                            offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn,
+                                    message.getCommitTime(),
+                                    String.valueOf(message.getTransactionId()), tableId,
                                     null/* taskContext.getSlotXmin(connection) */);
-                            // offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()), null,
-                            // null/* taskContext.getSlotXmin(connection) */);
-                            commitMessage(partition, offsetContext, lsn);
-                            dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext);
+
+                            boolean dispatched = message.getOperation() != Operation.NOOP
+                                    && dispatcher
+                                            .dispatchDataChangeEvent(tableId,
+                                                    new PostgresChangeRecordEmitter(
+                                                            partition,
+                                                            offsetContext,
+                                                            clock,
+                                                            connectorConfig,
+                                                            schema,
+                                                            connection,
+                                                            tableId,
+                                                            message));
+
+                            maybeWarnAboutGrowingWalBacklog(dispatched);
                         }
-                        maybeWarnAboutGrowingWalBacklog(true);
                     }
-                    else if (message.isDDLMessage()) {
-                        LOGGER.info("Received DDL message {}", message.getSchema().toString()
-                                + " the table is " + message.getTable());
-                        // TODO: Update the schema
-                        // final String catalogName = "yugabyte";
-                        TableId tableId = null;
-                        if (message.getOperation() != Operation.NOOP) {
-                            tableId = YugabyteDBSchema.parse(message.getTable());
-                            Objects.requireNonNull(tableId);
-                        }
-
-                        schema.refresh(message.getSchema());
+                    catch (InterruptedException ie) {
+                        ie.printStackTrace();
                     }
-                    // DML event
-                    else {
-                        TableId tableId = null;
-                        if (message.getOperation() != Operation.NOOP) {
-                            tableId = YugabyteDBSchema.parse(message.getTable());
-                            Objects.requireNonNull(tableId);
-                        }
-                        LOGGER.info("Received DML record {}", record);
-
-                        offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()), tableId,
-                                null/* taskContext.getSlotXmin(connection) */);
-
-                        boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher
-                                .dispatchDataChangeEvent(tableId, new PostgresChangeRecordEmitter(
-                                        partition,
-                                        offsetContext,
-                                        clock,
-                                        connectorConfig,
-                                        schema,
-                                        connection,
-                                        tableId,
-                                        message));
-
-                        maybeWarnAboutGrowingWalBacklog(dispatched);
+                    catch (SQLException se) {
+                        se.printStackTrace();
                     }
                 }
-                catch (InterruptedException ie) {
-                    ie.printStackTrace();
-                }
-                catch (SQLException se) {
-                    se.printStackTrace();
-                }
-            });
 
-            probeConnectionIfNeeded();
+                probeConnectionIfNeeded();
 
-            if (receivedMessage) {
-                noMessageIterations = 0;
-            }
-            else {
-                if (offsetContext.hasCompletelyProcessedPosition()) {
-                    dispatcher.dispatchHeartbeatEvent(partition, offsetContext);
-                }
-                noMessageIterations++;
-                if (noMessageIterations >= THROTTLE_NO_MESSAGE_BEFORE_PAUSE) {
+                if (receivedMessage) {
                     noMessageIterations = 0;
-                    pauseNoMessage.sleepWhen(true);
                 }
-            }
-            if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
-                // During catch up streaming, the streaming phase needs to hold a transaction open so that
-                // the phase can stream event up to a specific lsn and the snapshot that occurs after the catch up
-                // streaming will not lose the current view of data. Since we need to hold the transaction open
-                // for the snapshot, this block must not commit during catch up streaming.
-                // CDCSDK Find out why this fails : connection.commit();
-            }
-        }
-    }
-
-    private void getChanges(ChangeEventSourceContext context, YugabyteDBPartition partition, YugabyteDBOffsetContext offsetContext, final ReplicationStream stream)
-            throws SQLException, InterruptedException {
-        LOGGER.info("Processing messages");
-        int noMessageIterations = 0;
-        while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
-                (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
-
-            boolean receivedMessage = stream.readPending(message -> {
-                final OpId lsn = stream.lastReceivedLsn();
-
-                if (message.isLastEventForLsn()) {
-                    lastCompletelyProcessedLsn = lsn;
-                }
-
-                // Tx BEGIN/END event
-                if (message.isTransactionalMessage()) {
-                    if (!connectorConfig.shouldProvideTransactionMetadata()) {
-                        LOGGER.trace("Received transactional message {}", message);
-                        // Don't skip on BEGIN message as it would flush LSN for the whole transaction
-                        // too early
-                        if (message.getOperation() == Operation.COMMIT) {
-                            commitMessage(partition, offsetContext, lsn);
-                        }
-                        return;
-                    }
-
-                    offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()), null,
-                            null/* taskContext.getSlotXmin(connection) */);
-                    if (message.getOperation() == Operation.BEGIN) {
-                        dispatcher.dispatchTransactionStartedEvent(partition, message.getTransactionId(), offsetContext);
-                    }
-                    else if (message.getOperation() == Operation.COMMIT) {
-                        commitMessage(partition, offsetContext, lsn);
-                        dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext);
-                    }
-                    maybeWarnAboutGrowingWalBacklog(true);
-                }
-                // DML event
                 else {
-                    TableId tableId = null;
-                    if (message.getOperation() != Operation.NOOP) {
-                        tableId = YugabyteDBSchema.parse(message.getTable());
-                        Objects.requireNonNull(tableId);
+                    if (offsetContext.hasCompletelyProcessedPosition()) {
+                        dispatcher.dispatchHeartbeatEvent(partition, offsetContext);
                     }
-
-                    offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), String.valueOf(message.getTransactionId()), tableId,
-                            null/* taskContext.getSlotXmin(connection) */);
-
-                    boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
-                            tableId,
-                            new PostgresChangeRecordEmitter(
-                                    partition,
-                                    offsetContext,
-                                    clock,
-                                    connectorConfig,
-                                    schema,
-                                    connection,
-                                    tableId,
-                                    message));
-
-                    maybeWarnAboutGrowingWalBacklog(dispatched);
+                    noMessageIterations++;
+                    if (noMessageIterations >= THROTTLE_NO_MESSAGE_BEFORE_PAUSE) {
+                        noMessageIterations = 0;
+                        pauseNoMessage.sleepWhen(true);
+                    }
                 }
-            });
-
-            probeConnectionIfNeeded();
-
-            if (receivedMessage) {
-                noMessageIterations = 0;
-            }
-            else {
-                if (offsetContext.hasCompletelyProcessedPosition()) {
-                    dispatcher.dispatchHeartbeatEvent(partition, offsetContext);
+                if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
+                    // During catch up streaming, the streaming phase needs to hold a transaction open so that
+                    // the phase can stream event up to a specific lsn and the snapshot that occurs after the catch up
+                    // streaming will not lose the current view of data. Since we need to hold the transaction open
+                    // for the snapshot, this block must not commit during catch up streaming.
+                    // CDCSDK Find out why this fails : connection.commit();
                 }
-                noMessageIterations++;
-                if (noMessageIterations >= THROTTLE_NO_MESSAGE_BEFORE_PAUSE) {
-                    noMessageIterations = 0;
-                    pauseNoMessage.sleepWhen(true);
-                }
-            }
-            if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
-                // During catch up streaming, the streaming phase needs to hold a transaction open so that
-                // the phase can stream event up to a specific lsn and the snapshot that occurs after the catch up
-                // streaming will not lose the current view of data. Since we need to hold the transaction open
-                // for the snapshot, this block must not commit during catch up streaming.
-                connection.commit();
             }
         }
     }
@@ -550,7 +502,9 @@ public class YugabyteDBStreamingChangeEventSource implements StreamingChangeEven
         // }
     }
 
-    private void commitMessage(YugabyteDBPartition partition, YugabyteDBOffsetContext offsetContext, final OpId lsn) throws SQLException, InterruptedException {
+    private void commitMessage(YugabyteDBPartition partition, YugabyteDBOffsetContext offsetContext,
+                               final OpId lsn)
+            throws SQLException, InterruptedException {
         lastCompletelyProcessedLsn = lsn;
         offsetContext.updateCommitPosition(lsn, lastCompletelyProcessedLsn);
         maybeWarnAboutGrowingWalBacklog(false);

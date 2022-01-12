@@ -132,9 +132,11 @@ public interface ReplicationMessage {
 
         boolean isArray(YugabyteDBType type);
 
-        Object asArray(String columnName, YugabyteDBType type, String fullType, PgConnectionSupplier connection);
+        Object asArray(String columnName, YugabyteDBType type, String fullType,
+                       PgConnectionSupplier connection);
 
-        Object asDefault(YugabyteDBTypeRegistry yugabyteDBTypeRegistry, int columnType, String columnName, String fullType, boolean includeUnknownDatatypes,
+        Object asDefault(YugabyteDBTypeRegistry yugabyteDBTypeRegistry, int columnType,
+                         String columnName, String fullType, boolean includeUnknownDatatypes,
                          PgConnectionSupplier connection);
     }
 

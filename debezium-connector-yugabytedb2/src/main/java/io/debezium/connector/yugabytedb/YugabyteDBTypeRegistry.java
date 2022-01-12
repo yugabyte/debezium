@@ -121,6 +121,12 @@ public class YugabyteDBTypeRegistry {
     private int hstoreOid = Integer.MIN_VALUE;
     private int ltreeOid = Integer.MIN_VALUE;
 
+    private int boxOid = Integer.MIN_VALUE;
+    private int circle = Integer.MIN_VALUE;
+    private int line = Integer.MIN_VALUE;
+    private int path = Integer.MIN_VALUE;
+    private int polygon = Integer.MIN_VALUE;
+
     private int hstoreArrayOid = Integer.MIN_VALUE;
     private int geometryArrayOid = Integer.MIN_VALUE;
     private int geographyArrayOid = Integer.MIN_VALUE;
@@ -148,12 +154,54 @@ public class YugabyteDBTypeRegistry {
         typeInfo = ((BaseConnection) this.connection).getTypeInfo();
         this.oidToType = oidToType;
         this.nameToType = nameToType;
+        for (YugabyteDBType t : oidToType.values()) {
+            updateType(t);
+        }
     }
 
     private void addType(YugabyteDBType type) {
         oidToType.put(type.getOid(), type);
         nameToType.put(type.getName(), type);
 
+        updateType(type);
+        // updateType(type.getOid());
+    }
+
+    private void updateType(YugabyteDBType type) {
+
+        if (TYPE_NAME_GEOMETRY.equals(type.getName())) {
+            geometryOid = type.getOid();
+        }
+        else if (TYPE_NAME_GEOGRAPHY.equals(type.getName())) {
+            geographyOid = type.getOid();
+        }
+        else if (TYPE_NAME_CITEXT.equals(type.getName())) {
+            citextOid = type.getOid();
+        }
+        else if (TYPE_NAME_HSTORE.equals(type.getName())) {
+            hstoreOid = type.getOid();
+        }
+        else if (TYPE_NAME_LTREE.equals(type.getName())) {
+            ltreeOid = type.getOid();
+        }
+        else if (TYPE_NAME_HSTORE_ARRAY.equals(type.getName())) {
+            hstoreArrayOid = type.getOid();
+        }
+        else if (TYPE_NAME_GEOMETRY_ARRAY.equals(type.getName())) {
+            geometryArrayOid = type.getOid();
+        }
+        else if (TYPE_NAME_GEOGRAPHY_ARRAY.equals(type.getName())) {
+            geographyArrayOid = type.getOid();
+        }
+        else if (TYPE_NAME_CITEXT_ARRAY.equals(type.getName())) {
+            citextArrayOid = type.getOid();
+        }
+        else if (TYPE_NAME_LTREE_ARRAY.equals(type.getName())) {
+            ltreeArrayOid = type.getOid();
+        }
+    }
+
+    private void updateTypeByOid(YugabyteDBType type) {
         if (TYPE_NAME_GEOMETRY.equals(type.getName())) {
             geometryOid = type.getOid();
         }

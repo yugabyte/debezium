@@ -34,11 +34,15 @@ public class YugabyteDBType implements Serializable {
     private final int modifiers;
     private final List<String> enumValues;
 
-    private YugabyteDBType(String name, int oid, int jdbcId, TypeInfo typeInfo, List<String> enumValues, YugabyteDBType parentType, YugabyteDBType elementType) {
-        this(name, oid, jdbcId, YugabyteDBTypeRegistry.NO_TYPE_MODIFIER, typeInfo, enumValues, parentType, elementType);
+    private YugabyteDBType(String name, int oid, int jdbcId, TypeInfo typeInfo,
+                           List<String> enumValues, YugabyteDBType parentType,
+                           YugabyteDBType elementType) {
+        this(name, oid, jdbcId, YugabyteDBTypeRegistry.NO_TYPE_MODIFIER, typeInfo,
+                enumValues, parentType, elementType);
     }
 
-    private YugabyteDBType(String name, int oid, int jdbcId, int modifiers, TypeInfo typeInfo, List<String> enumValues, YugabyteDBType parentType,
+    private YugabyteDBType(String name, int oid, int jdbcId, int modifiers, TypeInfo typeInfo,
+                           List<String> enumValues, YugabyteDBType parentType,
                            YugabyteDBType elementType) {
         Objects.requireNonNull(name);
         this.name = name;
@@ -254,8 +258,10 @@ public class YugabyteDBType implements Serializable {
 
     @Override
     public String toString() {
-        return "PostgresType [name=" + name + ", oid=" + oid + ", jdbcId=" + jdbcId + ", modifiers=" + modifiers + ", defaultLength=" + getDefaultLength()
-                + ", defaultScale=" + getDefaultScale() + ", parentType=" + parentType + ", elementType=" + elementType + "]";
+        return "PostgresType [name=" + name + ", oid=" + oid + ", jdbcId=" + jdbcId + "," +
+                " modifiers=" + modifiers + ", defaultLength=" + getDefaultLength() +
+                ", defaultScale=" + getDefaultScale() + ", parentType=" + parentType +
+                ", elementType=" + elementType + "]";
     }
 
     public static class Builder {
@@ -269,7 +275,8 @@ public class YugabyteDBType implements Serializable {
         private int elementTypeOid;
         private List<String> enumValues;
 
-        public Builder(YugabyteDBTypeRegistry yugabyteDBTypeRegistry, String name, int oid, int jdbcId, int modifiers, TypeInfo typeInfo) {
+        public Builder(YugabyteDBTypeRegistry yugabyteDBTypeRegistry, String name, int oid,
+                       int jdbcId, int modifiers, TypeInfo typeInfo) {
             this.yugabyteDBTypeRegistry = yugabyteDBTypeRegistry;
             this.name = name;
             this.oid = oid;
@@ -308,7 +315,8 @@ public class YugabyteDBType implements Serializable {
                 elementType = yugabyteDBTypeRegistry.get(elementTypeOid);
             }
 
-            return new YugabyteDBType(name, oid, jdbcId, modifiers, typeInfo, enumValues, parentType, elementType);
+            return new YugabyteDBType(name, oid, jdbcId, modifiers, typeInfo, enumValues,
+                    parentType, elementType);
         }
     }
 }

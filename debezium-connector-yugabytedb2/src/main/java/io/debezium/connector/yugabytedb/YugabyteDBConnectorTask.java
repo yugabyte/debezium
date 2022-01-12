@@ -116,9 +116,9 @@ public class YugabyteDBConnectorTask
 
         // Global JDBC connection used both for snapshotting and streaming.
         // Must be able to resolve datatypes.
-        //connection = new YugabyteDBConnection(connectorConfig.getJdbcConfig());
+        // connection = new YugabyteDBConnection(connectorConfig.getJdbcConfig());
         jdbcConnection = new YugabyteDBConnection(connectorConfig.getJdbcConfig(),
-        valueConverterBuilder);
+                valueConverterBuilder);
         // try {
         // jdbcConnection.setAutoCommit(false);
         // }

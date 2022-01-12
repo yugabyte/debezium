@@ -269,10 +269,12 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 .filter(io.debezium.relational.Column::hasDefaultValue)
                 .collect(toMap(io.debezium.relational.Column::name, column -> Optional.ofNullable(column.defaultValue())));
 
-        columnOptionality = readColumns.stream().collect(toMap(io.debezium.relational.Column::name, io.debezium.relational.Column::isOptional));
+        columnOptionality = readColumns.stream().collect(toMap(io.debezium.relational.Column::name,
+                io.debezium.relational.Column::isOptional));
         primaryKeyColumns = connection.readPrimaryKeyNames(databaseMetadata, tableId);
         if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
-            LOGGER.warn("Primary keys are not defined for table '{}', defaulting to unique indices", tableName);
+            LOGGER.warn("Primary keys are not defined for table '{}', defaulting to unique indices",
+                    tableName);
             primaryKeyColumns = connection.readTableUniqueIndices(databaseMetadata, tableId);
         }
 
@@ -289,14 +291,17 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
 
             Boolean optional = columnOptionality.get(columnName);
             if (optional == null) {
-                LOGGER.warn("Column '{}' optionality could not be determined, defaulting to true", columnName);
+                LOGGER.warn("Column '{}' optionality could not be determined, defaulting to true",
+                        columnName);
                 optional = true;
             }
 
             final boolean hasDefault = columnDefaults.containsKey(columnName);
-            final Object defaultValue = columnDefaults.getOrDefault(columnName, Optional.empty()).orElse(null);
+            final Object defaultValue = columnDefaults.getOrDefault(columnName,
+                    Optional.empty()).orElse(null);
 
-            columns.add(new ColumnMetaData(columnName, yugabyteDBType, key, optional, hasDefault, defaultValue, attypmod));
+            columns.add(new ColumnMetaData(columnName, yugabyteDBType, key, optional, hasDefault,
+                    defaultValue, attypmod));
             columnNames.add(columnName);
         }
 
@@ -317,7 +322,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         // to reflect the actual primary key state at time `t0`.
         primaryKeyColumns.retainAll(columnNames);
 
-        Table table = resolveRelationFromMetadata(new PgOutputRelationMetaData(relationId, schemaName, tableName, columns, primaryKeyColumns));
+        Table table = resolveRelationFromMetadata(new PgOutputRelationMetaData(relationId,
+                schemaName, tableName, columns, primaryKeyColumns));
         decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
     }
 
@@ -325,22 +331,26 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             throws SQLException {
         List<io.debezium.relational.Column> readColumns = new ArrayList<>();
         try {
-            try (ResultSet columnMetadata = databaseMetadata.getColumns(null, tableId.schema(), tableId.table(), null)) {
+            try (ResultSet columnMetadata = databaseMetadata.getColumns(null,
+                    tableId.schema(), tableId.table(), null)) {
                 while (columnMetadata.next()) {
-                    connection.readColumnForDecoder(columnMetadata, tableId, decoderContext.getConfig().getColumnFilter())
+                    connection.readColumnForDecoder(columnMetadata, tableId,
+                            decoderContext.getConfig().getColumnFilter())
                             .ifPresent(readColumns::add);
                 }
             }
         }
         catch (SQLException e) {
-            LOGGER.error("Failed to read column metadata for '{}.{}'", tableId.schema(), tableId.table());
+            LOGGER.error("Failed to read column metadata for '{}.{}'", tableId.schema(),
+                    tableId.table());
             throw e;
         }
 
         return readColumns;
     }
 
-    private boolean isColumnInPrimaryKey(String schemaName, String tableName, String columnName, List<String> primaryKeyColumns) {
+    private boolean isColumnInPrimaryKey(String schemaName, String tableName, String columnName,
+                                         List<String> primaryKeyColumns) {
         // todo (DBZ-766) - Discuss this logic with team as there may be a better way to handle this
         // Personally I think its sufficient enough to resolve the PK based on the out-of-bands call
         // and should any test fail due to this it should be rewritten or excluded from the pgoutput
@@ -357,7 +367,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         else if (primaryKeyColumns.isEmpty()) {
             // The table's metadata was either not fetched or table no longer has a primary key
             // Lets attempt to use the known schema primary key configuration as a fallback
-            Table existingTable = decoderContext.getSchema().tableFor(new TableId(null, schemaName, tableName));
+            Table existingTable = decoderContext.getSchema().tableFor(new TableId(null,
+                    schemaName, tableName));
             if (existingTable != null && existingTable.primaryKeyColumnNames().contains(columnName)) {
                 return true;
             }
@@ -372,12 +383,14 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
      * @param yugabyteDBTypeRegistry The postgres type registry
      * @param processor The replication message processor
      */
-    private void decodeInsert(ByteBuffer buffer, YugabyteDBTypeRegistry yugabyteDBTypeRegistry, ReplicationMessageProcessor processor)
+    private void decodeInsert(ByteBuffer buffer, YugabyteDBTypeRegistry yugabyteDBTypeRegistry,
+                              ReplicationMessageProcessor processor)
             throws SQLException, InterruptedException {
         int relationId = buffer.getInt();
         char tupleType = (char) buffer.get(); // Always 'N" for inserts
 
-        LOGGER.trace("Event: {}, Relation Id: {}, Tuple Type: {}", MessageType.INSERT, relationId, tupleType);
+        LOGGER.trace("Event: {}, Relation Id: {}, Tuple Type: {}", MessageType.INSERT, relationId,
+                tupleType);
 
         Optional<Table> resolvedTable = resolveRelation(relationId);
 
@@ -387,7 +400,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         }
         else {
             Table table = resolvedTable.get();
-            List<Column> columns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry, table);
+            List<Column> columns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry,
+                    table);
             processor.process(new PgOutputReplicationMessage(
                     Operation.INSERT,
                     table.id().toDoubleQuotedString(),
@@ -405,7 +419,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
      * @param yugabyteDBTypeRegistry The postgres type registry
      * @param processor The replication message processor
      */
-    private void decodeUpdate(ByteBuffer buffer, YugabyteDBTypeRegistry yugabyteDBTypeRegistry, ReplicationMessageProcessor processor)
+    private void decodeUpdate(ByteBuffer buffer, YugabyteDBTypeRegistry yugabyteDBTypeRegistry,
+                              ReplicationMessageProcessor processor)
             throws SQLException, InterruptedException {
         int relationId = buffer.getInt();
 
@@ -429,13 +444,15 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             List<Column> oldColumns = null;
             char tupleType = (char) buffer.get();
             if ('O' == tupleType || 'K' == tupleType) {
-                oldColumns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry, table);
+                oldColumns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry,
+                        table);
                 // Read the 'N' tuple type
                 // This is necessary so the stream position is accurate for resolving the column tuple data
                 tupleType = (char) buffer.get();
             }
 
-            List<Column> columns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry, table);
+            List<Column> columns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry,
+                    table);
             processor.process(new PgOutputReplicationMessage(
                     Operation.UPDATE,
                     table.id().toDoubleQuotedString(),
@@ -453,13 +470,15 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
      * @param yugabyteDBTypeRegistry The postgres type registry
      * @param processor The replication message processor
      */
-    private void decodeDelete(ByteBuffer buffer, YugabyteDBTypeRegistry yugabyteDBTypeRegistry, ReplicationMessageProcessor processor)
+    private void decodeDelete(ByteBuffer buffer, YugabyteDBTypeRegistry yugabyteDBTypeRegistry,
+                              ReplicationMessageProcessor processor)
             throws SQLException, InterruptedException {
         int relationId = buffer.getInt();
 
         char tupleType = (char) buffer.get();
 
-        LOGGER.trace("Event: {}, RelationId: {}, Tuple Type: {}", MessageType.DELETE, relationId, tupleType);
+        LOGGER.trace("Event: {}, RelationId: {}, Tuple Type: {}", MessageType.DELETE, relationId,
+                tupleType);
 
         Optional<Table> resolvedTable = resolveRelation(relationId);
 
@@ -469,7 +488,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         }
         else {
             Table table = resolvedTable.get();
-            List<Column> columns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry, table);
+            List<Column> columns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry,
+                    table);
             processor.process(new PgOutputReplicationMessage(
                     Operation.DELETE,
                     table.id().toDoubleQuotedString(),
@@ -487,7 +507,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
      * @param yugabyteDBTypeRegistry The postgres type registry
      * @param processor    The replication message processor
      */
-    private void decodeTruncate(ByteBuffer buffer, YugabyteDBTypeRegistry yugabyteDBTypeRegistry, ReplicationMessageProcessor processor)
+    private void decodeTruncate(ByteBuffer buffer, YugabyteDBTypeRegistry yugabyteDBTypeRegistry,
+                                ReplicationMessageProcessor processor)
             throws SQLException, InterruptedException {
         // As of PG11, the Truncate message format is as described:
         // Byte Message Type (Always 'T')
@@ -517,7 +538,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         }
 
         if (LOGGER.isTraceEnabled()) {
-            LOGGER.trace("Event: {}, RelationIds: {}, OptionBits: {}", MessageType.TRUNCATE, Arrays.toString(relationIds), optionBits);
+            LOGGER.trace("Event: {}, RelationIds: {}, OptionBits: {}", MessageType.TRUNCATE,
+                    Arrays.toString(relationIds), optionBits);
         }
 
         int noOfResolvedTables = tables.size();
@@ -635,7 +657,9 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
      * @param table The database table
      * @return list of replication message columns
      */
-    private static List<Column> resolveColumnsFromStreamTupleData(ByteBuffer buffer, YugabyteDBTypeRegistry yugabyteDBTypeRegistry, Table table) {
+    private static List<Column> resolveColumnsFromStreamTupleData(ByteBuffer buffer,
+                                                                  YugabyteDBTypeRegistry yugabyteDBTypeRegistry,
+                                                                  Table table) {
         // Read number of the columns
         short numberOfColumns = buffer.getShort();
 
@@ -657,10 +681,14 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             if (type == 't') {
                 final String valueStr = readColumnValueAsString(buffer);
                 columns.add(
-                        new AbstractReplicationMessageColumn(columnName, columnType, typeExpression, optional, true) {
+                        new AbstractReplicationMessageColumn(columnName, columnType, typeExpression,
+                                optional, true) {
                             @Override
-                            public Object getValue(PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
-                                return PgOutputReplicationMessage.getValue(columnName, columnType, typeExpression, valueStr, connection, includeUnknownDatatypes,
+                            public Object getValue(PgConnectionSupplier connection,
+                                                   boolean includeUnknownDatatypes) {
+                                return PgOutputReplicationMessage.getValue(columnName, columnType,
+                                        typeExpression, valueStr, connection,
+                                        includeUnknownDatatypes,
                                         yugabyteDBTypeRegistry);
                             }
 
@@ -672,9 +700,11 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             }
             else if (type == 'n') {
                 columns.add(
-                        new AbstractReplicationMessageColumn(columnName, columnType, typeExpression, true, true) {
+                        new AbstractReplicationMessageColumn(columnName, columnType, typeExpression,
+                                true, true) {
                             @Override
-                            public Object getValue(PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
+                            public Object getValue(PgConnectionSupplier connection,
+                                                   boolean includeUnknownDatatypes) {
                                 return null;
                             }
                         });

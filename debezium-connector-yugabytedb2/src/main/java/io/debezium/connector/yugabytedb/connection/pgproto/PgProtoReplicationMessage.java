@@ -37,7 +37,8 @@ public class PgProtoReplicationMessage implements ReplicationMessage {
     private final CdcService.RowMessage rawMessage;
     private final YugabyteDBTypeRegistry yugabyteDBTypeRegistry;
 
-    public PgProtoReplicationMessage(CdcService.RowMessage rawMessage, YugabyteDBTypeRegistry yugabyteDBTypeRegistry) {
+    public PgProtoReplicationMessage(CdcService.RowMessage rawMessage,
+                                     YugabyteDBTypeRegistry yugabyteDBTypeRegistry) {
         this.rawMessage = rawMessage;
         this.yugabyteDBTypeRegistry = yugabyteDBTypeRegistry;
     }

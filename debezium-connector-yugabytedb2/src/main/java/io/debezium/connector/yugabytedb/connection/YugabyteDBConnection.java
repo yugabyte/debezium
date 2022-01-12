@@ -513,7 +513,7 @@ public class YugabyteDBConnection extends JdbcConnection {
             switch (type.getOid()) {
                 case PgOid.MONEY:
                     // TODO author=Horia Chiorean date=14/11/2016
-                    //  description=workaround for https://github.com/pgjdbc/pgjdbc/issues/100
+                    // description=workaround for https://github.com/pgjdbc/pgjdbc/issues/100
                     final String sMoney = rs.getString(columnIndex);
                     if (sMoney == null) {
                         return sMoney;

@@ -63,9 +63,8 @@ public class YugabyteDBChangeEventSourceFactory implements ChangeEventSourceFact
     }
 
     @Override
-    public SnapshotChangeEventSource<YugabyteDBPartition,
-            YugabyteDBOffsetContext> getSnapshotChangeEventSource(
-                    SnapshotProgressListener snapshotProgressListener) {
+    public SnapshotChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> getSnapshotChangeEventSource(
+                                                                                                                SnapshotProgressListener snapshotProgressListener) {
         return new PostgresSnapshotChangeEventSource(
                 configuration,
                 taskContext,
@@ -77,8 +76,7 @@ public class YugabyteDBChangeEventSourceFactory implements ChangeEventSourceFact
     }
 
     @Override
-    public StreamingChangeEventSource<YugabyteDBPartition,
-            YugabyteDBOffsetContext> getStreamingChangeEventSource() {
+    public StreamingChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> getStreamingChangeEventSource() {
         return new YugabyteDBStreamingChangeEventSource(
                 configuration,
                 snapshotter,
@@ -92,13 +90,10 @@ public class YugabyteDBChangeEventSourceFactory implements ChangeEventSourceFact
     }
 
     @Override
-    public Optional<IncrementalSnapshotChangeEventSource<? extends DataCollectionId>>
-    getIncrementalSnapshotChangeEventSource(YugabyteDBOffsetContext offsetContext,
-                                            SnapshotProgressListener snapshotProgressListener,
-                                            DataChangeEventListener dataChangeEventListener) {
-        final SignalBasedIncrementalSnapshotChangeEventSource<TableId>
-                incrementalSnapshotChangeEventSource =
-                new SignalBasedIncrementalSnapshotChangeEventSource<TableId>(
+    public Optional<IncrementalSnapshotChangeEventSource<? extends DataCollectionId>> getIncrementalSnapshotChangeEventSource(YugabyteDBOffsetContext offsetContext,
+                                                                                                                              SnapshotProgressListener snapshotProgressListener,
+                                                                                                                              DataChangeEventListener dataChangeEventListener) {
+        final SignalBasedIncrementalSnapshotChangeEventSource<TableId> incrementalSnapshotChangeEventSource = new SignalBasedIncrementalSnapshotChangeEventSource<TableId>(
                 configuration,
                 jdbcConnection,
                 dispatcher,

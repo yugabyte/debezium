@@ -6,6 +6,21 @@ import java.util.Base64;
 import com.google.common.base.Objects;
 
 public class OpId implements Comparable<OpId> {
+
+    private long term;
+    private long index;
+    private byte[] key;
+    private int write_id;
+    private long time;
+
+    public OpId(long term, long index, byte[] key, int write_id, long time) {
+        this.term = term;
+        this.index = index;
+        this.key = key;
+        this.write_id = write_id;
+        this.time = time;
+    }
+
     public long getTerm() {
         return term;
     }
@@ -22,16 +37,8 @@ public class OpId implements Comparable<OpId> {
         return write_id;
     }
 
-    private long term;
-    private long index;
-    private byte[] key;
-    private int write_id;
-
-    public OpId(long term, long index, byte[] key, int write_id) {
-        this.term = term;
-        this.index = index;
-        this.key = key;
-        this.write_id = write_id;
+    public long getTime() {
+        return time;
     }
 
     public static OpId valueOf(String stringId) {
@@ -40,7 +47,8 @@ public class OpId implements Comparable<OpId> {
             return new OpId(Long.valueOf(arr[0]),
                     Long.valueOf(arr[1]),
                     Base64.getDecoder().decode(arr[2]),
-                    Integer.valueOf(arr[3]));
+                    Integer.valueOf(arr[3]),
+                    Long.valueOf(arr[4]));
         }
         return null;
     }
@@ -48,7 +56,7 @@ public class OpId implements Comparable<OpId> {
     public String toSerString() {
         String keyStr = Base64.getEncoder().encodeToString(key);
 
-        return term + ":" + index + ":" + keyStr + ":" + write_id;
+        return term + ":" + index + ":" + keyStr + ":" + write_id + ":" + time;
     }
 
     @Override
@@ -58,6 +66,7 @@ public class OpId implements Comparable<OpId> {
                 ", index=" + index +
                 ", key=" + Arrays.toString(key) +
                 ", write_id=" + write_id +
+                ", time=" + time +
                 '}';
     }
 
@@ -68,12 +77,13 @@ public class OpId implements Comparable<OpId> {
         if (o == null || getClass() != o.getClass())
             return false;
         OpId that = (OpId) o;
-        return term == that.term && index == that.index && write_id == that.write_id && Objects.equal(key, that.key);
+        return term == that.term && index == that.index && time == that.time
+                && write_id == that.write_id && Objects.equal(key, that.key);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(term, index, key, write_id);
+        return Objects.hashCode(term, index, key, write_id, time);
     }
 
     @Override

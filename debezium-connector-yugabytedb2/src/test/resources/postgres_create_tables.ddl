@@ -44,7 +44,11 @@
 -- CREATE TABLE t1 (a int primary key , b int[], c int);
 -- CREATE TABLE t1 (id SERIAL,first_name VARCHAR(255) NOT NULL, last_name VARCHAR(255) NOT NULL,
 -- email VARCHAR(255) NOT NULL, PRIMARY KEY(id));
-CREATE TABLE t1 (id SERIAL , arr INT[], PRIMARY KEY(id));
+CREATE TABLE t1 (id int , arr INT[], PRIMARY KEY(id)) SPLIT INTO 1 tablets;
+CREATE TABLE t2 (id int , col int, PRIMARY KEY(id)) SPLIT INTO 1 tablets;
+
+-- CREATE TABLE t1 (id SERIAL , bitval bit(4) default '1111', PRIMARY KEY(id));
+-- CREATE TABLE t1 (id SERIAL , boxval box, PRIMARY KEY(id));
 
 -- CREATE TABLE t1 (pk SERIAL, j JSON, jb JSONB, x XML, u Uuid, PRIMARY KEY(pk));
 -- CREATE TABLE geom_table (pk SERIAL, p POINT, PRIMARY KEY(pk));
