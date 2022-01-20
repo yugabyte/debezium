@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yb.cdc.CdcService;
 import org.yb.client.*;
-import org.yb.master.Master;
 
 import io.debezium.connector.yugabytedb.connection.OpId;
 import io.debezium.connector.yugabytedb.connection.ReplicationConnection;
@@ -37,6 +36,7 @@ import io.debezium.relational.TableId;
 import io.debezium.util.Clock;
 import io.debezium.util.DelayStrategy;
 import io.debezium.util.ElapsedTimeStrategy;
+import org.yb.master.MasterDdlOuterClass;
 
 /**
  *
@@ -252,7 +252,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         ListTablesResponse tablesResp = syncClient.getTablesList();
         Set<String> tIds = new HashSet<>();
 
-        for (Master.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
+        for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
             LOGGER.info("SKSK The table name is " + tableInfo.getName());
             String fqlTableName = tableInfo.getNamespace().getName() + "." + "" + PUBLIC_SCHEMA_NAME
                     + "." + tableInfo.getName();
