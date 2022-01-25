@@ -21,7 +21,6 @@ import org.postgresql.jdbc.PgArray;
 import org.postgresql.util.PGmoney;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.yb.Common;
 
 import io.debezium.connector.yugabytedb.PgOid;
 import io.debezium.connector.yugabytedb.YugabyteDBStreamingChangeEventSource.PgConnectionSupplier;
@@ -32,13 +31,14 @@ import io.debezium.connector.yugabytedb.connection.AbstractColumnValue;
 import io.debezium.connector.yugabytedb.connection.wal2json.DateTimeFormat;
 import io.debezium.data.SpecialValueDecimal;
 import io.debezium.time.Conversions;
+import org.yb.Value;
 
 /**
  * Replication message column sent by <a href="https://github.com/debezium/postgres-decoderbufs">Postgres Decoderbufs</>
  *
  * @author Chris Cranford
  */
-public class PgProtoColumnValue extends AbstractColumnValue<Common.DatumMessagePB> {
+public class PgProtoColumnValue extends AbstractColumnValue<Value.DatumMessagePB> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PgProtoColumnValue.class);
 
@@ -54,14 +54,14 @@ public class PgProtoColumnValue extends AbstractColumnValue<Common.DatumMessageP
      */
     private static final long TIMESTAMP_MAX = 9223371331200000000L;
 
-    private Common.DatumMessagePB value;
+    private Value.DatumMessagePB value;
 
-    public PgProtoColumnValue(Common.DatumMessagePB value) {
+    public PgProtoColumnValue(Value.DatumMessagePB value) {
         this.value = value;
     }
 
     @Override
-    public Common.DatumMessagePB getRawValue() {
+    public Value.DatumMessagePB getRawValue() {
         return value;
     }
 
