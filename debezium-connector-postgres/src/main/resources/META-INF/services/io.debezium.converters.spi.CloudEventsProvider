@@ -1,1 +1,1 @@
-io.debezium.connector.yugabytedb.converters.PostgresCloudEventsProvider
+io.debezium.connector.postgresql.converters.PostgresCloudEventsProvider
