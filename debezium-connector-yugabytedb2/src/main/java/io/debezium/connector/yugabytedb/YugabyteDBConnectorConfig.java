@@ -538,6 +538,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withWidth(ConfigDef.Width.MEDIUM)
             .withDescription("Internal task config: List of TabletIds to be fetched by this task");
 
+    public static final Field MAX_NUM_TABLETS = Field.create(DATABASE_CONFIG_PREFIX + "max.num.tablets")
+        .withDisplayName("Maximum number of tablets that can be polled for in a table")
+        .withType(Type.INT)
+        .withImportance(Importance.LOW)
+        .withDefault(10)
+        .withDescription("Specify the maximum number of tablets that the client can poll for");
+
     public static final Field CHAR_SET = Field.create(TASK_CONFIG_PREFIX + "charset")
             .withDisplayName("YugabyteDB charset")
             .withType(ConfigDef.Type.STRING)
@@ -638,6 +645,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         }
     }
 
+    // todo vaibhav: check if this can be removed or reused
     public static final Field PUBLICATION_AUTOCREATE_MODE = Field.create("stream.autocreate.mode")
             .withDisplayName("YB Stream Auto Create Mode")
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 9))
@@ -891,13 +899,6 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDescription("Specify the constant that will be provided by Debezium to indicate that " +
                     "the original value is a toasted value not provided by the database. " +
                     "If starts with 'hex:' prefix it is expected that the rest of the string repesents hexadecimally encoded octets.");
-
-    public static final Field MAX_NUM_TABLETS = Field.create("max.num.tablets")
-            .withDisplayName("Maximum number of tablets in table")
-            .withType(Type.INT)
-            .withImportance(Importance.LOW)
-            .withDefault(10)
-            .withDescription("Specify the maximum number of tablets that the client can poll for");
 
     private final TruncateHandlingMode truncateHandlingMode;
     private final HStoreHandlingMode hStoreHandlingMode;
