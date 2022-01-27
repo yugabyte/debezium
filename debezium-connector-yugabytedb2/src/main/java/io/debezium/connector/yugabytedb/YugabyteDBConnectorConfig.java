@@ -892,6 +892,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
                     "the original value is a toasted value not provided by the database. " +
                     "If starts with 'hex:' prefix it is expected that the rest of the string repesents hexadecimally encoded octets.");
 
+    public static final Field MAX_NUM_TABLETS = Field.create("max.num.tablets")
+            .withDisplayName("Maximum number of tablets in table")
+            .withType(Type.INT)
+            .withImportance(Importance.LOW)
+            .withDefault(10)
+            .withDescription("Specify the maximum number of tablets that the client can poll for");
+
     private final TruncateHandlingMode truncateHandlingMode;
     private final HStoreHandlingMode hStoreHandlingMode;
     private final IntervalHandlingMode intervalHandlingMode;
@@ -938,6 +945,10 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     public String streamId() {
         return getConfig().getString(STREAM_ID);
     };
+
+    public int maxNumTablets() {
+        return getConfig().getInteger(MAX_NUM_TABLETS);
+    }
 
     protected LogicalDecoder plugin() {
         return LogicalDecoder.parse(getConfig().getString(PLUGIN_NAME));
@@ -1034,7 +1045,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
                     RETRY_DELAY_MS,
                     SSL_SOCKET_FACTORY,
                     STATUS_UPDATE_INTERVAL_MS,
-                    TCP_KEEPALIVE)
+                    TCP_KEEPALIVE,
+                    MAX_NUM_TABLETS)
             .events(
                     INCLUDE_UNKNOWN_DATATYPES,
                     DatabaseHeartbeatImpl.HEARTBEAT_ACTION_QUERY)

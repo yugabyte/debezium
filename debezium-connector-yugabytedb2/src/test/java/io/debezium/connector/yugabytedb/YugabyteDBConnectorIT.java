@@ -18,6 +18,7 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.net.InetAddress;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -2118,11 +2119,45 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
         final long recordsCount = 1000;
         // final int batchSize = 10;
 
-        // batchInsertRecords(recordsCount, batchSize);
+//         batchInsertRecords(recordsCount, batchSize);
         CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
                 .exceptionally(throwable -> {
                     throw new RuntimeException(throwable);
                 }).get();
+    }
+
+    // Vaibhav
+    @Test
+    public void testSimpleOps() throws Exception {
+        try {
+            TestHelper.dropAllSchemas();
+            TestHelper.executeDDL("postgres_create_tables.ddl");
+            Thread.sleep(1000);
+            Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(YugabyteDBConnectorConfig.HOSTNAME, InetAddress.getLocalHost().getHostAddress())
+                .with(YugabyteDBConnectorConfig.PORT, 5433)
+                .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
+                .with(YugabyteDBConnectorConfig.MASTER_HOSTNAME, InetAddress.getLocalHost().getHostAddress())
+                .with(YugabyteDBConnectorConfig.MASTER_PORT, "7100")
+                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" + ",public.t2");
+//            .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
+            start(YugabyteDBConnector.class, configBuilder.build());
+            assertConnectorIsRunning();
+            final long recordsCount = 2;
+
+            TestHelper.insertData();
+            // final int batchSize = 10;
+
+            // batchInsertRecords(recordsCount, batchSize);
+            CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
+                .exceptionally(throwable -> {
+                    throw new RuntimeException(throwable);
+                }).get();
+        } catch (Exception e) {
+            System.out.println("Exception caught in test" + e);
+            fail();
+        }
     }
 
     private void consumeRecords(long recordsCount) {
@@ -2130,6 +2165,7 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
         long start = System.currentTimeMillis();
         while (totalConsumedRecords < recordsCount) {
             int consumed = super.consumeAvailableRecords(record -> {
+                record.value();
                 System.out.println("SKSK The record being consumed is " + record);
             });
             if (consumed > 0) {

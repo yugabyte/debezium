@@ -181,6 +181,19 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         return syncClient;
     }
 
+    // over loaded function
+    private YBClient getYBClient(String hostAddress, long adminTimeout, long opTimeout,
+                                 long socketTimeout, int numTablets) {
+        AsyncYBClient client = new AsyncYBClient.AsyncYBClientBuilder(hostAddress)
+            .defaultAdminOperationTimeoutMs(adminTimeout)
+            .defaultOperationTimeoutMs(opTimeout)
+            .defaultSocketReadTimeoutMs(socketTimeout)
+            .numTablets(numTablets)
+            .build();
+
+        return new YBClient(client);
+    }
+
     @Override
     public void stop() {
         this.props = null;

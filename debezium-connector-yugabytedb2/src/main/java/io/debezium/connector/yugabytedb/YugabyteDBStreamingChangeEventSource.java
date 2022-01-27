@@ -107,6 +107,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                 .defaultAdminOperationTimeoutMs(60000)
                 .defaultOperationTimeoutMs(60000)
                 .defaultSocketReadTimeoutMs(60000)
+                .numTablets(this.connectorConfig.maxNumTablets())
                 .build();
 
         syncClient = new YBClient(asyncYBClient);
@@ -269,6 +270,12 @@ public class YugabyteDBStreamingChangeEventSource implements
         List<Map<String, List<String>>> tableIdsToTabletIdsMapList = new ArrayList<>(1);
         int concurrency = 1;
         boolean createStream = true;
+        // if the user has specified a stream ID in the configuration, do not create a stream and use
+        // the specified one
+        if(streamId != null && streamId.isEmpty() == false) {
+            LOGGER.info("VKVK: Using a user specified stream ID: " + streamId);
+            createStream = false;
+        }
         for (String tId : tIds) {
             LOGGER.info("SKSK the table uuid is " + tIds);
             YBTable table = this.syncClient.openTableByUUID(tId);
@@ -460,6 +467,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                     // streaming will not lose the current view of data. Since we need to hold the transaction open
                     // for the snapshot, this block must not commit during catch up streaming.
                     // CDCSDK Find out why this fails : connection.commit();
+                    // todo vaibhav: the above fails because the connection's auto-commit has been set to false while
+                    // initializing (check with Suranjan if this is what he was looking for)
                 }
             }
         }

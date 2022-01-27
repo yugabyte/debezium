@@ -9,6 +9,7 @@ package io.debezium.connector.yugabytedb;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
+import java.net.InetAddress;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -152,15 +153,15 @@ public final class TestHelper {
         }
 
         try (YugabyteDBConnection connection = create()) {
-            connection.setAutoCommit(false);
+            connection.setAutoCommit(true); // setting auto-commit to true
             connection.executeWithoutCommitting(statement);
             Connection jdbcConn = connection.connection();
-            if (!statement.endsWith("ROLLBACK;")) {
-                jdbcConn.commit();
-            }
-            else {
-                jdbcConn.rollback();
-            }
+//            if (!statement.endsWith("ROLLBACK;")) {
+//                jdbcConn.commit();
+//            }
+//            else {
+//                jdbcConn.rollback();
+//            }
         }
         catch (RuntimeException e) {
             throw e;
@@ -194,6 +195,22 @@ public final class TestHelper {
         }
     }
 
+    public static void insertData() throws SQLException {
+        String[] insertStmts = {
+            "INSERT INTO t1 VALUES (1, 'Vaibhav', 'Kushwaha', 30);",
+            "INSERT INTO t1 VALUES (2, 'V', 'K', 30.34);"
+        };
+
+        try {
+            for (int i = 0; i < insertStmts.length; ++i) {
+                System.out.println("VKVK executing the statement: " + insertStmts[i]);
+                TestHelper.execute(insertStmts[i]);
+            }
+        } catch (Exception e) {
+            throw new SQLException("Failed to write rows to database");
+        }
+    }
+
     public static YugabyteDBTypeRegistry getTypeRegistry() {
         final YugabyteDBConnectorConfig config = new YugabyteDBConnectorConfig(defaultConfig().build());
         try (final YugabyteDBConnection connection = new YugabyteDBConnection(config.getJdbcConfig(), getPostgresValueConverterBuilder(config))) {
@@ -220,15 +237,20 @@ public final class TestHelper {
     }
 
     public static JdbcConfiguration defaultJdbcConfig() {
-        return JdbcConfiguration.copy(Configuration.empty()/* fromSystemProperties("database.") */)
+        try {
+            return JdbcConfiguration.copy(Configuration.empty()/* fromSystemProperties("database.") */)
                 .withDefault(JdbcConfiguration.DATABASE, "yugabyte")
-                .withDefault(JdbcConfiguration.HOSTNAME, "192.168.1.32")
+                .withDefault(JdbcConfiguration.HOSTNAME, "127.0.0.1"/*InetAddress.getLocalHost().getHostAddress()*/)
                 .withDefault(JdbcConfiguration.PORT, 5433)
                 .withDefault(JdbcConfiguration.USER, "yugabyte")
                 .withDefault(JdbcConfiguration.PASSWORD, "yugabyte")
                 .with(YugabyteDBConnectorConfig.MAX_RETRIES, 2)
                 .with(YugabyteDBConnectorConfig.RETRY_DELAY_MS, 2000)
                 .build();
+        } catch (Exception e) {
+            LOGGER.error("Exception thrown while creating connection...", e);
+            return null;
+        }
     }
 
     protected static Configuration.Builder defaultConfig() {
