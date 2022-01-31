@@ -29,21 +29,21 @@ import io.debezium.schema.DatabaseSchema;
  * Coordinates one or more {@link ChangeEventSource}s and executes them in order. Extends the base
  * {@link ChangeEventSourceCoordinator} to support a pre-snapshot catch up streaming phase.
  */
-public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoordinator<YugabyteDBPartition, YugabyteDBOffsetContext> {
+public class YugabyteDBChangeEventSourceCoordinator extends ChangeEventSourceCoordinator<YugabyteDBPartition, YugabyteDBOffsetContext> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresChangeEventSourceCoordinator.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBChangeEventSourceCoordinator.class);
 
     private final Snapshotter snapshotter;
     private final SlotState slotInfo;
 
-    public PostgresChangeEventSourceCoordinator(Offsets<YugabyteDBPartition, YugabyteDBOffsetContext> previousOffsets,
-                                                ErrorHandler errorHandler,
-                                                Class<? extends SourceConnector> connectorType,
-                                                CommonConnectorConfig connectorConfig,
-                                                YugabyteDBChangeEventSourceFactory changeEventSourceFactory,
-                                                ChangeEventSourceMetricsFactory changeEventSourceMetricsFactory,
-                                                EventDispatcher<?> eventDispatcher, DatabaseSchema<?> schema,
-                                                Snapshotter snapshotter, SlotState slotInfo) {
+    public YugabyteDBChangeEventSourceCoordinator(Offsets<YugabyteDBPartition, YugabyteDBOffsetContext> previousOffsets,
+                                                  ErrorHandler errorHandler,
+                                                  Class<? extends SourceConnector> connectorType,
+                                                  CommonConnectorConfig connectorConfig,
+                                                  YugabyteDBChangeEventSourceFactory changeEventSourceFactory,
+                                                  ChangeEventSourceMetricsFactory changeEventSourceMetricsFactory,
+                                                  EventDispatcher<?> eventDispatcher, DatabaseSchema<?> schema,
+                                                  Snapshotter snapshotter, SlotState slotInfo) {
         super(previousOffsets, errorHandler, connectorType, connectorConfig, changeEventSourceFactory,
                 changeEventSourceMetricsFactory, eventDispatcher, schema);
         this.snapshotter = snapshotter;
@@ -58,7 +58,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
             throws InterruptedException {
         if (previousOffset != null && !snapshotter.shouldStreamEventsStartingFromSnapshot() && slotInfo != null) {
             try {
-                setSnapshotStartLsn((PostgresSnapshotChangeEventSource) snapshotSource,
+                setSnapshotStartLsn((YugabyteDBSnapshotChangeEventSource) snapshotSource,
                         previousOffset);
             }
             catch (SQLException e) {
@@ -73,7 +73,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
         return new CatchUpStreamingResult(false);
     }
 
-    private void setSnapshotStartLsn(PostgresSnapshotChangeEventSource snapshotSource,
+    private void setSnapshotStartLsn(YugabyteDBSnapshotChangeEventSource snapshotSource,
                                      YugabyteDBOffsetContext offsetContext)
             throws SQLException {
         // snapshotSource.createSnapshotConnection();

@@ -62,7 +62,7 @@ public class YugabyteDBConnection extends JdbcConnection {
             YugabyteDBConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(YugabyteDBConnectorConfig.PORT.defaultValueAsString()));
 
     private final YugabyteDBTypeRegistry yugabyteDBTypeRegistry;
-    private final PostgresDefaultValueConverter defaultValueConverter;
+    private final YugabyteDBDefaultValueConverter defaultValueConverter;
 
     /**
      * Creates a Postgres connection using the supplied configuration.
@@ -84,7 +84,7 @@ public class YugabyteDBConnection extends JdbcConnection {
             this.yugabyteDBTypeRegistry = new YugabyteDBTypeRegistry(this);
 
             final YugabyteDBValueConverter valueConverter = valueConverterBuilder.build(this.yugabyteDBTypeRegistry);
-            this.defaultValueConverter = new PostgresDefaultValueConverter(valueConverter, this.getTimestampUtils());
+            this.defaultValueConverter = new YugabyteDBDefaultValueConverter(valueConverter, this.getTimestampUtils());
         }
     }
 
@@ -105,7 +105,7 @@ public class YugabyteDBConnection extends JdbcConnection {
             this.yugabyteDBTypeRegistry = yugabyteDBTypeRegistry;
             final YugabyteDBValueConverter valueConverter = YugabyteDBValueConverter.of(new YugabyteDBConnectorConfig(config), this.getDatabaseCharset(),
                     yugabyteDBTypeRegistry);
-            this.defaultValueConverter = new PostgresDefaultValueConverter(valueConverter, this.getTimestampUtils());
+            this.defaultValueConverter = new YugabyteDBDefaultValueConverter(valueConverter, this.getTimestampUtils());
         }
     }
 

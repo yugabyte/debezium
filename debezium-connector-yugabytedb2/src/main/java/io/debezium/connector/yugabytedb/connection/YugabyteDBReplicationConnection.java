@@ -53,9 +53,9 @@ import io.debezium.util.Metronome;
  *
  * @author Horia Chiorean (hchiorea@redhat.com)
  */
-public class PostgresReplicationConnection extends JdbcConnection implements ReplicationConnection {
+public class YugabyteDBReplicationConnection extends JdbcConnection implements ReplicationConnection {
 
-    private static Logger LOGGER = LoggerFactory.getLogger(PostgresReplicationConnection.class);
+    private static Logger LOGGER = LoggerFactory.getLogger(YugabyteDBReplicationConnection.class);
 
     private final String slotName;
     private final String publicationName;
@@ -91,19 +91,19 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
      *                                  <p>
      *                                  updates to the server
      */
-    private PostgresReplicationConnection(YugabyteDBConnectorConfig config,
-                                          String slotName,
-                                          String publicationName,
-                                          RelationalTableFilters tableFilter,
-                                          YugabyteDBConnectorConfig.AutoCreateMode publicationAutocreateMode,
-                                          YugabyteDBConnectorConfig.LogicalDecoder plugin,
-                                          boolean dropSlotOnClose,
-                                          boolean doSnapshot,
-                                          Duration statusUpdateInterval,
-                                          YugabyteDBTypeRegistry yugabyteDBTypeRegistry,
-                                          Properties streamParams,
-                                          YugabyteDBSchema schema) {
-        super(config.getJdbcConfig(), YugabyteDBConnection.FACTORY, null, PostgresReplicationConnection::defaultSettings, "\"", "\"");
+    private YugabyteDBReplicationConnection(YugabyteDBConnectorConfig config,
+                                            String slotName,
+                                            String publicationName,
+                                            RelationalTableFilters tableFilter,
+                                            YugabyteDBConnectorConfig.AutoCreateMode publicationAutocreateMode,
+                                            YugabyteDBConnectorConfig.LogicalDecoder plugin,
+                                            boolean dropSlotOnClose,
+                                            boolean doSnapshot,
+                                            Duration statusUpdateInterval,
+                                            YugabyteDBTypeRegistry yugabyteDBTypeRegistry,
+                                            Properties streamParams,
+                                            YugabyteDBSchema schema) {
+        super(config.getJdbcConfig(), YugabyteDBConnection.FACTORY, null, YugabyteDBReplicationConnection::defaultSettings, "\"", "\"");
 
         this.originalConfig = config;
         this.slotName = slotName;
@@ -745,7 +745,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         @Override
         public ReplicationConnection build() {
             assert plugin != null : "Decoding plugin name is not set";
-            return new PostgresReplicationConnection(config, slotName, publicationName, tableFilter, publicationAutocreateMode, plugin,
+            return new YugabyteDBReplicationConnection(config, slotName, publicationName, tableFilter, publicationAutocreateMode, plugin,
                     dropSlotOnClose, doSnapshot, statusUpdateIntervalVal, yugabyteDBTypeRegistry, slotStreamParams, schema);
         }
 

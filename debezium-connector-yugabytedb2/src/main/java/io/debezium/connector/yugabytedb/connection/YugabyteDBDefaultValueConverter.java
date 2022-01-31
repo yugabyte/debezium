@@ -34,9 +34,9 @@ import io.debezium.relational.ValueConverter;
  * Parses and converts column default values.
  */
 @ThreadSafe
-class PostgresDefaultValueConverter {
+class YugabyteDBDefaultValueConverter {
 
-    private static Logger LOGGER = LoggerFactory.getLogger(PostgresDefaultValueConverter.class);
+    private static Logger LOGGER = LoggerFactory.getLogger(YugabyteDBDefaultValueConverter.class);
 
     private static final Pattern LITERAL_DEFAULT_PATTERN = Pattern.compile("'(.*?)'");
     private static final Pattern FUNCTION_DEFAULT_PATTERN = Pattern.compile("^[(]?[A-Za-z0-9_]+\\((?:.+(?:, ?.+)*)?\\)");
@@ -60,7 +60,7 @@ class PostgresDefaultValueConverter {
     private final YugabyteDBValueConverter valueConverters;
     private final Map<String, DefaultValueMapper> defaultValueMappers;
 
-    PostgresDefaultValueConverter(YugabyteDBValueConverter valueConverters, TimestampUtils timestampUtils) {
+    YugabyteDBDefaultValueConverter(YugabyteDBValueConverter valueConverters, TimestampUtils timestampUtils) {
         this.valueConverters = valueConverters;
         this.defaultValueMappers = Collections.unmodifiableMap(createDefaultValueMappers(timestampUtils));
     }

@@ -15,9 +15,9 @@ import io.debezium.pipeline.ErrorHandler;
  *
  * @author Gunnar Morling
  */
-public class PostgresErrorHandler extends ErrorHandler {
+public class YugabyteDBErrorHandler extends ErrorHandler {
 
-    public PostgresErrorHandler(String logicalName, ChangeEventQueue<?> queue) {
+    public YugabyteDBErrorHandler(String logicalName, ChangeEventQueue<?> queue) {
         super(YugabyteDBConnector.class, logicalName, queue);
     }
 

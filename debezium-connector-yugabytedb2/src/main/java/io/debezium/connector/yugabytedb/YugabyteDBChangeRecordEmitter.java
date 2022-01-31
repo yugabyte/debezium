@@ -45,8 +45,8 @@ import io.debezium.util.Strings;
  *
  * @author Horia Chiorean (hchiorea@redhat.com), Jiri Pechanec
  */
-public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
-    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresChangeRecordEmitter.class);
+public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter {
+    private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBChangeRecordEmitter.class);
 
     private final ReplicationMessage message;
     private final YugabyteDBSchema schema;
@@ -54,9 +54,9 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
     private final YugabyteDBConnection connection;
     private final TableId tableId;
 
-    public PostgresChangeRecordEmitter(Partition partition, OffsetContext offset, Clock clock, YugabyteDBConnectorConfig connectorConfig, YugabyteDBSchema schema,
-                                       YugabyteDBConnection connection, TableId tableId,
-                                       ReplicationMessage message) {
+    public YugabyteDBChangeRecordEmitter(Partition partition, OffsetContext offset, Clock clock, YugabyteDBConnectorConfig connectorConfig, YugabyteDBSchema schema,
+                                         YugabyteDBConnection connection, TableId tableId,
+                                         ReplicationMessage message) {
         super(partition, offset, clock);
 
         this.schema = schema;
@@ -243,7 +243,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
 
     static Optional<DataCollectionSchema> updateSchema(TableId tableId,
                                                        ChangeRecordEmitter changeRecordEmitter) {
-        return ((PostgresChangeRecordEmitter) changeRecordEmitter).newTable(tableId);
+        return ((YugabyteDBChangeRecordEmitter) changeRecordEmitter).newTable(tableId);
     }
 
     private boolean schemaChanged(List<ReplicationMessage.Column> columns, Table table,

@@ -65,7 +65,7 @@ public class YugabyteDBChangeEventSourceFactory implements ChangeEventSourceFact
     @Override
     public SnapshotChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> getSnapshotChangeEventSource(
                                                                                                                 SnapshotProgressListener snapshotProgressListener) {
-        return new PostgresSnapshotChangeEventSource(
+        return new YugabyteDBSnapshotChangeEventSource(
                 configuration,
                 taskContext,
                 snapshotter,

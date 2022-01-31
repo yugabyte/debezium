@@ -66,7 +66,7 @@ public class YugabyteDBConnectorTask
     @Override
     public ChangeEventSourceCoordinator<YugabyteDBPartition, YugabyteDBOffsetContext> start(Configuration config) {
         final YugabyteDBConnectorConfig connectorConfig = new YugabyteDBConnectorConfig(config);
-        final TopicSelector<TableId> topicSelector = PostgresTopicSelector.create(connectorConfig);
+        final TopicSelector<TableId> topicSelector = YugabyteDBTopicSelector.create(connectorConfig);
         final Snapshotter snapshotter = connectorConfig.getSnapshotter();
         final SchemaNameAdjuster schemaNameAdjuster = SchemaNameAdjuster.create();
 
@@ -215,10 +215,10 @@ public class YugabyteDBConnectorTask
                     .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
                     .build();
 
-            ErrorHandler errorHandler = new PostgresErrorHandler(connectorConfig.getLogicalName(),
+            ErrorHandler errorHandler = new YugabyteDBErrorHandler(connectorConfig.getLogicalName(),
                     queue);
 
-            final PostgresEventMetadataProvider metadataProvider = new PostgresEventMetadataProvider();
+            final YugabyteDBEventMetadataProvider metadataProvider = new YugabyteDBEventMetadataProvider();
 
             Configuration configuration = connectorConfig.getConfig();
             Heartbeat heartbeat = Heartbeat.create(
@@ -250,13 +250,13 @@ public class YugabyteDBConnectorTask
                     queue,
                     connectorConfig.getTableFilters().dataCollectionFilter(),
                     DataChangeEvent::new,
-                    PostgresChangeRecordEmitter::updateSchema,
+                    YugabyteDBChangeRecordEmitter::updateSchema,
                     metadataProvider,
                     heartbeat,
                     schemaNameAdjuster,
                     jdbcConnection);
 
-            ChangeEventSourceCoordinator<YugabyteDBPartition, YugabyteDBOffsetContext> coordinator = new PostgresChangeEventSourceCoordinator(
+            ChangeEventSourceCoordinator<YugabyteDBPartition, YugabyteDBOffsetContext> coordinator = new YugabyteDBChangeEventSourceCoordinator(
                     previousOffsets,
                     errorHandler,
                     YugabyteDBConnector.class,

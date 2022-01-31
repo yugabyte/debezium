@@ -31,9 +31,9 @@ import io.debezium.util.Testing;
 /**
  * @author Chris Cranford
  */
-public class PostgresMetricsIT extends AbstractRecordsProducerTest {
+public class YugabyteDBMetricsIT extends AbstractRecordsProducerTest {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresMetricsIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBMetricsIT.class);
 
     private static final String INIT_STATEMENTS = "CREATE TABLE simple (pk SERIAL NOT NULL, val INT NOT NULL, PRIMARY KEY(pk)); "
             + "ALTER TABLE simple REPLICA IDENTITY FULL;";

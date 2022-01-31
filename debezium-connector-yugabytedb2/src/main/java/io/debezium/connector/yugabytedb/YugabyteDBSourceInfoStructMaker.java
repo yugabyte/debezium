@@ -11,11 +11,11 @@ import org.apache.kafka.connect.data.Struct;
 import io.debezium.config.CommonConnectorConfig;
 import io.debezium.connector.AbstractSourceInfoStructMaker;
 
-public class PostgresSourceInfoStructMaker extends AbstractSourceInfoStructMaker<SourceInfo> {
+public class YugabyteDBSourceInfoStructMaker extends AbstractSourceInfoStructMaker<SourceInfo> {
 
     private final Schema schema;
 
-    public PostgresSourceInfoStructMaker(String connector, String version, CommonConnectorConfig connectorConfig) {
+    public YugabyteDBSourceInfoStructMaker(String connector, String version, CommonConnectorConfig connectorConfig) {
         super(connector, version, connectorConfig);
         schema = commonSchemaBuilder()
                 .name("io.debezium.connector.postgresql.Source")

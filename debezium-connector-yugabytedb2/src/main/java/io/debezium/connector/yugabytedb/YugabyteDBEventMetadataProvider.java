@@ -17,7 +17,7 @@ import io.debezium.schema.DataCollectionId;
 import io.debezium.time.Conversions;
 import io.debezium.util.Collect;
 
-class PostgresEventMetadataProvider implements EventMetadataProvider {
+class YugabyteDBEventMetadataProvider implements EventMetadataProvider {
 
     @Override
     public Instant getEventTimestamp(DataCollectionId source, OffsetContext offset, Object key, Struct value) {

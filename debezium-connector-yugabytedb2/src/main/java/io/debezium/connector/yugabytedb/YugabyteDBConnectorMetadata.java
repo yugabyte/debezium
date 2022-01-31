@@ -11,7 +11,7 @@ import io.debezium.config.Field;
 import io.debezium.metadata.AbstractConnectorMetadata;
 import io.debezium.metadata.ConnectorDescriptor;
 
-public class PostgresConnectorMetadata extends AbstractConnectorMetadata {
+public class YugabyteDBConnectorMetadata extends AbstractConnectorMetadata {
 
     @Override
     public ConnectorDescriptor getConnectorDescriptor() {

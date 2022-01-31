@@ -48,7 +48,7 @@ public class YugabyteDBConnectorTaskIT {
         yugabyteDBConnectorTask.createReplicationConnection(new FakeContext(config, new YugabyteDBSchema(
                 config,
                 null,
-                PostgresTopicSelector.create(config), null)), true, 3, Duration.ofSeconds(2));
+                YugabyteDBTopicSelector.create(config), null)), true, 3, Duration.ofSeconds(2));
 
         // Verify retry happened for 10 seconds
         long endTime = System.currentTimeMillis();

@@ -14,7 +14,7 @@ import io.debezium.schema.TopicSelector;
  *
  * @author Horia Chiorean (hchiorea@redhat.com)
  */
-public class PostgresTopicSelector {
+public class YugabyteDBTopicSelector {
 
     public static TopicSelector<TableId> create(YugabyteDBConnectorConfig connectorConfig) {
         return TopicSelector.defaultSelector(connectorConfig,

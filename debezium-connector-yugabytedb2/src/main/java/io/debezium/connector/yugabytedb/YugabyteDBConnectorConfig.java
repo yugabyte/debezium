@@ -1019,7 +1019,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         // case V1:
         // return new LegacyV1PostgresSourceInfoStructMaker(Module.name(), Module.version(), this);
         // default:
-        return new PostgresSourceInfoStructMaker(Module.name(), Module.version(), this);
+        return new YugabyteDBSourceInfoStructMaker(Module.name(), Module.version(), this);
         // }
     }
 

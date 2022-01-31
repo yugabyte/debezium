@@ -88,7 +88,7 @@ public interface ReplicationConnection extends AutoCloseable {
      * @return a builder, never null
      */
     static Builder builder(YugabyteDBConnectorConfig config) {
-        return new PostgresReplicationConnection.ReplicationConnectionBuilder(config);
+        return new YugabyteDBReplicationConnection.ReplicationConnectionBuilder(config);
     }
 
     public void reconnect() throws SQLException;

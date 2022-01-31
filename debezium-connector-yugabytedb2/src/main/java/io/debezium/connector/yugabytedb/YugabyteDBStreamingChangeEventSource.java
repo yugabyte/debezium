@@ -425,7 +425,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                             boolean dispatched = message.getOperation() != Operation.NOOP
                                     && dispatcher
                                             .dispatchDataChangeEvent(tableId,
-                                                    new PostgresChangeRecordEmitter(
+                                                    new YugabyteDBChangeRecordEmitter(
                                                             partition,
                                                             offsetContext,
                                                             clock,

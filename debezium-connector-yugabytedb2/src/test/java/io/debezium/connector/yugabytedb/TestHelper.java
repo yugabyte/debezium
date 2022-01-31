@@ -9,7 +9,6 @@ package io.debezium.connector.yugabytedb;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
-import java.net.InetAddress;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -226,7 +225,7 @@ public final class TestHelper {
         return new YugabyteDBSchema(
                 config,
                 yugabyteDBTypeRegistry,
-                PostgresTopicSelector.create(config),
+                YugabyteDBTopicSelector.create(config),
                 getPostgresValueConverter(yugabyteDBTypeRegistry, config));
     }
 

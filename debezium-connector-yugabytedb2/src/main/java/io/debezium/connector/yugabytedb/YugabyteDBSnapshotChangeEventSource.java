@@ -28,9 +28,9 @@ import io.debezium.schema.SchemaChangeEvent.SchemaChangeEventType;
 import io.debezium.util.Clock;
 import io.debezium.util.Strings;
 
-public class PostgresSnapshotChangeEventSource extends AbstractSnapshotChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> {
+public class YugabyteDBSnapshotChangeEventSource extends AbstractSnapshotChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresSnapshotChangeEventSource.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBSnapshotChangeEventSource.class);
     private final YugabyteDBConnectorConfig connectorConfig;
     private final YugabyteDBSchema schema;
     private final SnapshotProgressListener snapshotProgressListener;
@@ -39,11 +39,11 @@ public class PostgresSnapshotChangeEventSource extends AbstractSnapshotChangeEve
     protected final Clock clock;
     private final Snapshotter snapshotter;
 
-    public PostgresSnapshotChangeEventSource(YugabyteDBConnectorConfig connectorConfig,
-                                             YugabyteDBTaskContext taskContext,
-                                             Snapshotter snapshotter,
-                                             YugabyteDBSchema schema, EventDispatcher<TableId> dispatcher, Clock clock,
-                                             SnapshotProgressListener snapshotProgressListener) {
+    public YugabyteDBSnapshotChangeEventSource(YugabyteDBConnectorConfig connectorConfig,
+                                               YugabyteDBTaskContext taskContext,
+                                               Snapshotter snapshotter,
+                                               YugabyteDBSchema schema, EventDispatcher<TableId> dispatcher, Clock clock,
+                                               SnapshotProgressListener snapshotProgressListener) {
         super(connectorConfig, snapshotProgressListener);
         this.connectorConfig = connectorConfig;
         this.schema = schema;

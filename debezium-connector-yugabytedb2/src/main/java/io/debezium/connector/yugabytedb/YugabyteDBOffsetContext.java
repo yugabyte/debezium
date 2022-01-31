@@ -30,7 +30,7 @@ import io.debezium.util.Clock;
 
 public class YugabyteDBOffsetContext implements OffsetContext {
     private static final Logger LOGGER = LoggerFactory
-            .getLogger(PostgresSnapshotChangeEventSource.class);
+            .getLogger(YugabyteDBSnapshotChangeEventSource.class);
 
     public static final String LAST_COMPLETELY_PROCESSED_LSN_KEY = "lsn_proc";
     public static final String LAST_COMMIT_LSN_KEY = "lsn_commit";

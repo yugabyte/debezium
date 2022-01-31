@@ -36,14 +36,14 @@ import io.debezium.util.Testing;
 /**
  * Integration test for {@link YugabyteDBConnector} using an {@link EmbeddedEngine} and Testcontainers infrastructure for when Postgres is shutdown during streaming
  */
-public class PostgresShutdownIT extends AbstractConnectorTest {
+public class YugabyteDBShutdownIT extends AbstractConnectorTest {
 
     /*
      * Specific tests that need to extend the initial DDL set should do it in a form of
      * TestHelper.execute(SETUP_TABLES_STMT + ADDITIONAL_STATEMENTS)
      */
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresShutdownIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBShutdownIT.class);
 
     private static final String POSTGRES_IMAGE = ContainerImageVersions.getStableImage("debezium/example-postgres");
 
