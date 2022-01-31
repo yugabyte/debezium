@@ -167,11 +167,12 @@ public final class SourceInfo extends BaseSourceInfo {
         // String lsn = (this.lsn != null)
         // ? Long.toString(this.lsn.asLong())
         // : null;
+        // todo vaibhav: changed toString() to toSerString()
         String lastCommitLsn = (this.lastCommitLsn != null)
-                ? this.lastCommitLsn.toString()
+                ? this.lastCommitLsn.toSerString()
                 : null;
         String lsn = (this.lsn != null)
-                ? this.lsn.toString()
+                ? this.lsn.toSerString()
                 : null;
         sequence.add(lastCommitLsn);
         sequence.add(lsn);

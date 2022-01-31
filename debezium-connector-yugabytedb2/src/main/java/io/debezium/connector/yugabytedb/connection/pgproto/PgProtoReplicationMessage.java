@@ -122,6 +122,7 @@ public class PgProtoReplicationMessage implements ReplicationMessage {
                 .collect(Collectors.toList());
     }
 
+    // todo vaibhav: why does this return true and why not some value based on some condition
     @Override
     public boolean isLastEventForLsn() {
         return true;

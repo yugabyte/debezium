@@ -108,7 +108,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
                     return null;
                 // return columnValues(message.getOldTupleList(), tableId, true,
                 // message.hasTypeMetadata(), true, true);
-                default:
+                default: // vaibhav: I guess the default case is triggered in case of DELETE ops
                     return columnValues(message.getOldTupleList(), tableId, true,
                             message.hasTypeMetadata(), false, true);
             }
@@ -125,6 +125,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter {
                 case CREATE:
                     return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
                 case UPDATE:
+                    // todo vaibhav: add scenario for the case of multiple columns being updated
                     return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
                 default:
                     return null;
