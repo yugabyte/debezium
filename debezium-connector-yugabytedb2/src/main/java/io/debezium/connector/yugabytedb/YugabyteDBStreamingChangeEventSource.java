@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import io.debezium.connector.yugabytedb.connection.pgproto.YbProtoReplicationMessage;
 import org.postgresql.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +26,6 @@ import io.debezium.connector.yugabytedb.connection.ReplicationMessage.Operation;
 import io.debezium.connector.yugabytedb.connection.ReplicationStream;
 import io.debezium.connector.yugabytedb.connection.WalPositionLocator;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
-import io.debezium.connector.yugabytedb.connection.pgproto.PgProtoReplicationMessage;
 import io.debezium.connector.yugabytedb.spi.Snapshotter;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.pipeline.ErrorHandler;
@@ -339,7 +339,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                         .getResp()
                         .getCdcSdkProtoRecordsList()) {
                     CdcService.RowMessage m = record.getRowMessage();
-                    PgProtoReplicationMessage message = new PgProtoReplicationMessage(
+                    YbProtoReplicationMessage message = new YbProtoReplicationMessage(
                             m, this.yugabyteDBTypeRegistry);
 
                     final OpId lsn = new OpId(record.getCdcSdkOpId().getTerm(),

@@ -38,9 +38,9 @@ import org.yb.Value;
  *
  * @author Chris Cranford
  */
-public class PgProtoColumnValue extends AbstractColumnValue<Value.DatumMessagePB> {
+public class YbProtoColumnValue extends AbstractColumnValue<Value.DatumMessagePB> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PgProtoColumnValue.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YbProtoColumnValue.class);
 
     /**
      * A number used by PostgreSQL to define minimum timestamp (inclusive).
@@ -56,7 +56,7 @@ public class PgProtoColumnValue extends AbstractColumnValue<Value.DatumMessagePB
 
     private Value.DatumMessagePB value;
 
-    public PgProtoColumnValue(Value.DatumMessagePB value) {
+    public YbProtoColumnValue(Value.DatumMessagePB value) {
         this.value = value;
     }
 

@@ -52,9 +52,9 @@ import io.debezium.util.Strings;
  * @author Chris Cranford
  *
  */
-public class PgOutputMessageDecoder extends AbstractMessageDecoder {
+public class YbOutputMessageDecoder extends AbstractMessageDecoder {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PgOutputMessageDecoder.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YbOutputMessageDecoder.class);
     private static final Instant PG_EPOCH = LocalDate.of(2000, 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC);
     private static final byte SPACE = 32;
 
@@ -101,7 +101,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         }
     }
 
-    public PgOutputMessageDecoder(MessageDecoderContext decoderContext) {
+    public YbOutputMessageDecoder(MessageDecoderContext decoderContext) {
         this.decoderContext = decoderContext;
         this.connection = new YugabyteDBConnection(decoderContext.getConfig().getJdbcConfig(), decoderContext.getSchema().getTypeRegistry());
     }
@@ -322,7 +322,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         // to reflect the actual primary key state at time `t0`.
         primaryKeyColumns.retainAll(columnNames);
 
-        Table table = resolveRelationFromMetadata(new PgOutputRelationMetaData(relationId,
+        Table table = resolveRelationFromMetadata(new YbOutputRelationMetaData(relationId,
                 schemaName, tableName, columns, primaryKeyColumns));
         decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
     }
@@ -402,7 +402,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             Table table = resolvedTable.get();
             List<Column> columns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry,
                     table);
-            processor.process(new PgOutputReplicationMessage(
+            processor.process(new YbOutputReplicationMessage(
                     Operation.INSERT,
                     table.id().toDoubleQuotedString(),
                     commitTimestamp,
@@ -453,7 +453,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
 
             List<Column> columns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry,
                     table);
-            processor.process(new PgOutputReplicationMessage(
+            processor.process(new YbOutputReplicationMessage(
                     Operation.UPDATE,
                     table.id().toDoubleQuotedString(),
                     commitTimestamp,
@@ -490,7 +490,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             Table table = resolvedTable.get();
             List<Column> columns = resolveColumnsFromStreamTupleData(buffer, yugabyteDBTypeRegistry,
                     table);
-            processor.process(new PgOutputReplicationMessage(
+            processor.process(new YbOutputReplicationMessage(
                     Operation.DELETE,
                     table.id().toDoubleQuotedString(),
                     commitTimestamp,
@@ -546,7 +546,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         for (int i = 0; i < noOfResolvedTables; i++) {
             Table table = tables.get(i);
             boolean lastTableInTruncate = (i + 1) == noOfResolvedTables;
-            processor.process(new PgOutputTruncateReplicationMessage(
+            processor.process(new YbOutputTruncateReplicationMessage(
                     Operation.TRUNCATE,
                     table.id().toDoubleQuotedString(),
                     commitTimestamp,
@@ -586,12 +586,12 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
     }
 
     /**
-     * Constructs a {@link Table} based on the supplied {@link PgOutputRelationMetaData}.
+     * Constructs a {@link Table} based on the supplied {@link YbOutputRelationMetaData}.
      *
      * @param metadata The relation metadata collected from previous 'R' replication stream messages
      * @return table based on a prior replication relation message
      */
-    private Table resolveRelationFromMetadata(PgOutputRelationMetaData metadata) {
+    private Table resolveRelationFromMetadata(YbOutputRelationMetaData metadata) {
         List<io.debezium.relational.Column> columns = new ArrayList<>();
         for (ColumnMetaData columnMetadata : metadata.getColumns()) {
             ColumnEditor editor = io.debezium.relational.Column.editor()
@@ -686,7 +686,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                             @Override
                             public Object getValue(PgConnectionSupplier connection,
                                                    boolean includeUnknownDatatypes) {
-                                return PgOutputReplicationMessage.getValue(columnName, columnType,
+                                return YbOutputReplicationMessage.getValue(columnName, columnType,
                                         typeExpression, valueStr, connection,
                                         includeUnknownDatatypes,
                                         yugabyteDBTypeRegistry);

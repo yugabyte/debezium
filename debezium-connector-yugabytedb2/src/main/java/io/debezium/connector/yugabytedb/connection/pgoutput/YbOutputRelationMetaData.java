@@ -16,7 +16,7 @@ import io.debezium.relational.TableId;
  * @author Chris Cranford
  */
 @Immutable
-public class PgOutputRelationMetaData {
+public class YbOutputRelationMetaData {
     private final int relationId;
     private final String schema;
     private final String name;
@@ -32,7 +32,7 @@ public class PgOutputRelationMetaData {
      * @param columns list of column metadata instances describing the state of each column
      * @param primaryKeyNames ordered list of primary key column names
      */
-    PgOutputRelationMetaData(int relationId, String schema, String name, List<ColumnMetaData> columns, List<String> primaryKeyNames) {
+    YbOutputRelationMetaData(int relationId, String schema, String name, List<ColumnMetaData> columns, List<String> primaryKeyNames) {
         this.relationId = relationId;
         this.schema = schema;
         this.name = name;

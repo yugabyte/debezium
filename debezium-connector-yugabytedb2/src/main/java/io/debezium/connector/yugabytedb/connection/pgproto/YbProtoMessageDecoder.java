@@ -32,9 +32,9 @@ import io.debezium.util.Collect;
  * @author Jiri Pechanec
  *
  */
-public class PgProtoMessageDecoder extends AbstractMessageDecoder {
+public class YbProtoMessageDecoder extends AbstractMessageDecoder {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PgProtoMessageDecoder.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YbProtoMessageDecoder.class);
     private static final Set<Op> SUPPORTED_OPS = Collect.unmodifiableSet(Op.INSERT, Op.UPDATE, Op.DELETE, Op.BEGIN, Op.COMMIT);
 
     private boolean warnedOnUnkownOp = false;
@@ -64,7 +64,7 @@ public class PgProtoMessageDecoder extends AbstractMessageDecoder {
                 }
                 return;
             }
-            // processor.process(new PgProtoReplicationMessage(message, typeRegistry));
+            // processor.process(new YbProtoReplicationMessage(message, typeRegistry));
         }
         catch (InvalidProtocolBufferException e) {
             throw new ConnectException(e);

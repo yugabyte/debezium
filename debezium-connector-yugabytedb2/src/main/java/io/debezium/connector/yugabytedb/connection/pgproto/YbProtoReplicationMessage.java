@@ -30,14 +30,14 @@ import io.debezium.util.Strings;
  *
  * @author Jiri Pechanec
  */
-public class PgProtoReplicationMessage implements ReplicationMessage {
+public class YbProtoReplicationMessage implements ReplicationMessage {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PgProtoReplicationMessage.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YbProtoReplicationMessage.class);
 
     private final CdcService.RowMessage rawMessage;
     private final YugabyteDBTypeRegistry yugabyteDBTypeRegistry;
 
-    public PgProtoReplicationMessage(CdcService.RowMessage rawMessage,
+    public YbProtoReplicationMessage(CdcService.RowMessage rawMessage,
                                      YugabyteDBTypeRegistry yugabyteDBTypeRegistry) {
         this.rawMessage = rawMessage;
         this.yugabyteDBTypeRegistry = yugabyteDBTypeRegistry;
@@ -109,7 +109,7 @@ public class PgProtoReplicationMessage implements ReplicationMessage {
 
                         @Override
                         public Object getValue(PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
-                            return PgProtoReplicationMessage.this.getValue(columnName, type,
+                            return YbProtoReplicationMessage.this.getValue(columnName, type,
                                     fullType, datum, connection, includeUnknownDatatypes);
                         }
 
@@ -132,7 +132,7 @@ public class PgProtoReplicationMessage implements ReplicationMessage {
                            Value.DatumMessagePB datumMessage,
                            final PgConnectionSupplier connection,
                            boolean includeUnknownDatatypes) {
-        final PgProtoColumnValue columnValue = new PgProtoColumnValue(datumMessage);
+        final YbProtoColumnValue columnValue = new YbProtoColumnValue(datumMessage);
         return ReplicationMessageColumnValueResolver.resolveValue(columnName, type, fullType,
                 columnValue, connection, includeUnknownDatatypes, yugabyteDBTypeRegistry);
     }

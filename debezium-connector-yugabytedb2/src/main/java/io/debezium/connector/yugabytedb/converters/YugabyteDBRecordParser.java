@@ -20,7 +20,7 @@ import io.debezium.util.Collect;
  *
  * @author Chris Cranford
  */
-public class PostgresRecordParser extends RecordParser {
+public class YugabyteDBRecordParser extends RecordParser {
 
     static final String TXID_KEY = "txId";
     static final String XMIN_KEY = "xmin";
@@ -31,7 +31,7 @@ public class PostgresRecordParser extends RecordParser {
             XMIN_KEY,
             LSN_KEY);
 
-    public PostgresRecordParser(Schema schema, Struct record) {
+    public YugabyteDBRecordParser(Schema schema, Struct record) {
         super(schema, record, Envelope.FieldName.BEFORE, Envelope.FieldName.AFTER);
     }
 

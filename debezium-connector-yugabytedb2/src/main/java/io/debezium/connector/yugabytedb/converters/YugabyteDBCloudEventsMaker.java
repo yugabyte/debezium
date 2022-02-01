@@ -15,16 +15,16 @@ import io.debezium.converters.spi.SerializerType;
  *
  * @author Chris Cranford
  */
-public class PostgresCloudEventsMaker extends CloudEventsMaker {
+public class YugabyteDBCloudEventsMaker extends CloudEventsMaker {
 
-    public PostgresCloudEventsMaker(RecordParser parser, SerializerType contentType, String dataSchemaUriBase) {
+    public YugabyteDBCloudEventsMaker(RecordParser parser, SerializerType contentType, String dataSchemaUriBase) {
         super(parser, contentType, dataSchemaUriBase);
     }
 
     @Override
     public String ceId() {
         return "name:" + recordParser.getMetadata(AbstractSourceInfo.SERVER_NAME_KEY)
-                + ";lsn:" + recordParser.getMetadata(PostgresRecordParser.LSN_KEY).toString()
-                + ";txId:" + recordParser.getMetadata(PostgresRecordParser.TXID_KEY).toString();
+                + ";lsn:" + recordParser.getMetadata(YugabyteDBRecordParser.LSN_KEY).toString()
+                + ";txId:" + recordParser.getMetadata(YugabyteDBRecordParser.TXID_KEY).toString();
     }
 }

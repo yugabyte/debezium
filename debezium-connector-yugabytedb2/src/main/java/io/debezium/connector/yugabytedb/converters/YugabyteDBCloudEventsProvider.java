@@ -19,7 +19,7 @@ import io.debezium.converters.spi.SerializerType;
  *
  * @author Chris Cranford
  */
-public class PostgresCloudEventsProvider implements CloudEventsProvider {
+public class YugabyteDBCloudEventsProvider implements CloudEventsProvider {
     @Override
     public String getName() {
         return Module.name();
@@ -27,11 +27,11 @@ public class PostgresCloudEventsProvider implements CloudEventsProvider {
 
     @Override
     public RecordParser createParser(Schema schema, Struct record) {
-        return new PostgresRecordParser(schema, record);
+        return new YugabyteDBRecordParser(schema, record);
     }
 
     @Override
     public CloudEventsMaker createMaker(RecordParser parser, SerializerType contentType, String dataSchemaUriBase) {
-        return new PostgresCloudEventsMaker(parser, contentType, dataSchemaUriBase);
+        return new YugabyteDBCloudEventsMaker(parser, contentType, dataSchemaUriBase);
     }
 }

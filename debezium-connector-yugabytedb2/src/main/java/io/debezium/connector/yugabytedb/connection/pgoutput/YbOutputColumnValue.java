@@ -14,11 +14,11 @@ import io.debezium.util.Strings;
 /**
  * @author Chris Cranford
  */
-class PgOutputColumnValue extends AbstractColumnValue<String> {
+class YbOutputColumnValue extends AbstractColumnValue<String> {
 
     private String value;
 
-    PgOutputColumnValue(String value) {
+    YbOutputColumnValue(String value) {
         this.value = value;
     }
 

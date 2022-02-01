@@ -28,7 +28,7 @@ import io.debezium.connector.AbstractSourceInfo;
 import io.debezium.connector.SourceInfoStructMaker;
 import io.debezium.connector.yugabytedb.connection.MessageDecoder;
 import io.debezium.connector.yugabytedb.connection.MessageDecoderContext;
-import io.debezium.connector.yugabytedb.connection.pgproto.PgProtoMessageDecoder;
+import io.debezium.connector.yugabytedb.connection.pgproto.YbProtoMessageDecoder;
 import io.debezium.connector.yugabytedb.snapshot.AlwaysSnapshotter;
 import io.debezium.connector.yugabytedb.snapshot.InitialOnlySnapshotter;
 import io.debezium.connector.yugabytedb.snapshot.InitialSnapshotter;
@@ -354,7 +354,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         DECODERBUFS("decoderbufs") {
             @Override
             public MessageDecoder messageDecoder(MessageDecoderContext config) {
-                return new PgProtoMessageDecoder();
+                return new YbProtoMessageDecoder();
             }
 
             @Override

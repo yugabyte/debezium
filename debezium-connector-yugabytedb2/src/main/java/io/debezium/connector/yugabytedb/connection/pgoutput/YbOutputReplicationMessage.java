@@ -18,7 +18,7 @@ import io.debezium.connector.yugabytedb.connection.ReplicationMessageColumnValue
  * @author Gunnar Morling
  * @author Chris Cranford
  */
-public class PgOutputReplicationMessage implements ReplicationMessage {
+public class YbOutputReplicationMessage implements ReplicationMessage {
 
     private Operation op;
     private Instant commitTimestamp;
@@ -27,7 +27,7 @@ public class PgOutputReplicationMessage implements ReplicationMessage {
     private List<Column> oldColumns;
     private List<Column> newColumns;
 
-    public PgOutputReplicationMessage(Operation op, String table, Instant commitTimestamp, long transactionId, List<Column> oldColumns, List<Column> newColumns) {
+    public YbOutputReplicationMessage(Operation op, String table, Instant commitTimestamp, long transactionId, List<Column> oldColumns, List<Column> newColumns) {
         this.op = op;
         this.commitTimestamp = commitTimestamp;
         this.transactionId = transactionId;
@@ -92,7 +92,7 @@ public class PgOutputReplicationMessage implements ReplicationMessage {
      */
     public static Object getValue(String columnName, YugabyteDBType type, String fullType, String rawValue, final PgConnectionSupplier connection,
                                   boolean includeUnknownDataTypes, YugabyteDBTypeRegistry yugabyteDBTypeRegistry) {
-        final PgOutputColumnValue columnValue = new PgOutputColumnValue(rawValue);
+        final YbOutputColumnValue columnValue = new YbOutputColumnValue(rawValue);
         return ReplicationMessageColumnValueResolver.resolveValue(columnName, type, fullType, columnValue, connection, includeUnknownDataTypes, yugabyteDBTypeRegistry);
     }
 }

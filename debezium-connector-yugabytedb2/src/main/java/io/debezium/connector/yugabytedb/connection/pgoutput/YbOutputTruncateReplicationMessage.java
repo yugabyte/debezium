@@ -8,11 +8,11 @@ package io.debezium.connector.yugabytedb.connection.pgoutput;
 
 import java.time.Instant;
 
-public class PgOutputTruncateReplicationMessage extends PgOutputReplicationMessage {
+public class YbOutputTruncateReplicationMessage extends YbOutputReplicationMessage {
 
     private final boolean lastTableInTruncate;
 
-    public PgOutputTruncateReplicationMessage(Operation op, String table, Instant commitTimestamp, long transactionId,
+    public YbOutputTruncateReplicationMessage(Operation op, String table, Instant commitTimestamp, long transactionId,
                                               boolean lastTableInTruncate) {
         super(op, table, commitTimestamp, transactionId, null, null);
         this.lastTableInTruncate = lastTableInTruncate;
