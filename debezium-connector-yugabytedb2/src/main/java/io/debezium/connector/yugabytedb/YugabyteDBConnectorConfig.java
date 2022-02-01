@@ -505,6 +505,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     protected static final long DEFAULT_ADMIN_OPERATION_TIMEOUT_MS = 60000;
     protected static final long DEFAULT_OPERATION_TIMEOUT_MS = 60000;
     protected static final long DEFAULT_SOCKET_READ_TIMEOUT_MS = 60000;
+    protected static final long DEFAULT_CDC_POLL_INTERVAL_MS = 200;
 
     @Override
     public Configuration getJdbcConfig() {
@@ -580,6 +581,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         .withType(Type.LONG)
         .withImportance(Importance.LOW)
         .withDefault(DEFAULT_SOCKET_READ_TIMEOUT_MS);
+
+    public static final Field CDC_POLL_INTERVAL_MS = Field.create(DATABASE_CONFIG_PREFIX + "cdc.poll.interval.ms")
+        .withDisplayName("Poll interval in milliseconds to get changes from database")
+        .withType(Type.LONG)
+        .withImportance(Importance.LOW)
+        .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
+        .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
 
     public static final Field CHAR_SET = Field.create(TASK_CONFIG_PREFIX + "charset")
             .withDisplayName("YugabyteDB charset")
@@ -1001,6 +1009,10 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
     public long socketReadTimeoutMs() {
         return getConfig().getLong(SOCKET_READ_TIMEOUT_MS);
+    }
+
+    public long cdcPollIntervalms() {
+        return getConfig().getLong(CDC_POLL_INTERVAL_MS);
     }
 
     public String sslRootCert() {

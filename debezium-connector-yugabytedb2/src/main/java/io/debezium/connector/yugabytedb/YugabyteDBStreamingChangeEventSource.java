@@ -322,9 +322,14 @@ public class YugabyteDBStreamingChangeEventSource implements
 
             for (AbstractMap.SimpleImmutableEntry<String, String> entry : listTabletIdTableIdPair) {
                 final String tabletId = entry.getKey();
-                // Thread.sleep(200);
+
+                // the following will specify the connector polling interval at which yb-client will ask the database
+                // for changes
+                Thread.sleep(connectorConfig.cdcPollIntervalms());
+
                 YBTable table = tableIdToTable.get(entry.getValue());
                 OpId cp = offsetContext.lsn(tabletId);
+
                 // GetChangesResponse response = getChangeResponse(offsetContext);
                 LOGGER.debug("Going to fetch for tablet " + tabletId + " from OpId " + cp + " " +
                         "table " + table.getName());
