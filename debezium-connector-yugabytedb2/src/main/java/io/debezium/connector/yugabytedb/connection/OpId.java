@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Base64;
 
 import com.google.common.base.Objects;
+import org.json.simple.JSONObject;
 
 public class OpId implements Comparable<OpId> {
 
@@ -53,10 +54,22 @@ public class OpId implements Comparable<OpId> {
         return null;
     }
 
+    /**
+     * toSerString() returns the sequence in the string format "term:index:keyStr:write_id:time"
+     * This can be further split on ":" to get the actual values, one can use the following:
+     * <pre>
+     * {@code
+     * String sequenceString = "<term>:<index>:<keyStr>:<write_id>:<time>";
+     * String[] splitValues = sequenceString.split(":");
+     * int term = splitValues[0];
+     * // and so on for other values
+     * }
+     * </pre>
+     */
     public String toSerString() {
         String keyStr = Base64.getEncoder().encodeToString(key);
 
-        return term + ":" + index + ":" + keyStr + ":" + write_id + ":" + time;
+        return "" + term + ":" + index + ":" + keyStr + ":" + write_id + ":" + time;
     }
 
     // todo vaibhav: check for the extra brace

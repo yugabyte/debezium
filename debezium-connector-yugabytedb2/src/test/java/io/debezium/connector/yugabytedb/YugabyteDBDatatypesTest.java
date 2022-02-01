@@ -1,15 +1,14 @@
 package io.debezium.connector.yugabytedb;
 
-import com.google.gson.Gson;
 import io.debezium.config.Configuration;
 import io.debezium.data.SchemaUtil;
-import io.debezium.data.VerifyRecord;
 import io.debezium.embedded.AbstractConnectorTest;
 import io.debezium.util.Strings;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -17,12 +16,9 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-import java.net.InetAddress;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -56,22 +52,27 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 
 	// this is not working as the json String is not coming as expected
 	// some extra character is coming up while parsing
-	protected void /*Map<String, String>*/ getAfterValue(String jsonString) throws Exception {
-		System.out.println("VKVK string: " + jsonString);
-		JSONObject jsonObj = (JSONObject) new JSONParser().parse(jsonString);
+	protected void /*Map<String, String>*/ printAfterValue(String jsonString) {
+		try {
+			System.out.println("VKVK string: " + jsonString);
+			JSONObject jsonObj = (JSONObject) new JSONParser().parse(jsonString);
 
-		System.out.println("VKVK value: " + jsonObj.get("value"));
-//		return mp;
+			System.out.println("VKVK value: " + jsonObj.get("value"));
+		} catch (ParseException pe) {
+			System.out.println("Exception while parsing json string: " + pe);
+			fail();
+		}
 	}
 
 	protected Configuration.Builder getConfigBuilder() throws Exception {
 		return TestHelper.defaultConfig()
-				.with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1")
+				.with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1") // this field is required as of now
 				.with(YugabyteDBConnectorConfig.PORT, 5433)
 				.with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
 				.with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
-				.with(YugabyteDBConnectorConfig.MASTER_HOSTNAME, "127.0.0.1"/*InetAddress.getLocalHost().getHostAddress()*/)
+//				.with(YugabyteDBConnectorConfig.MASTER_HOSTNAME, "127.0.0.1"/*InetAddress.getLocalHost().getHostAddress()*/)
 				.with(YugabyteDBConnectorConfig.MASTER_PORT, "7100")
+				.with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
 				.with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1"); // including t1 for now only
 	}
 
@@ -86,47 +87,30 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 			});
 			if (consumed > 0) {
 				totalConsumedRecords += consumed;
-//				System.out.println("VKVK consumed " + totalConsumedRecords + " records");
+				System.out.println("Consumed " + totalConsumedRecords + " records");
 			}
 		}
-		System.out.println("total duration to ingest '" + recordsCount + "' records: " +
+		System.out.println("Total duration to ingest '" + recordsCount + "' records: " +
 				Strings.duration(System.currentTimeMillis() - start));
 
-//		System.out.println("VKVK printing the inserted records now: ");
 		for (int i = 0; i < records.size(); ++i) {
 			// verify the records
-			System.out.println(String.format("VKVK verifying record with pk: <id = %d>", i));
 			assertInsert(records.get(i), "id", i);
-//			VerifyRecord.isValidInsert(records.get(i), "id", i);
 		}
 	}
 
-	private void printRecordsJson(long recordsCount) {
+	private void getRecordsInJson(long recordsCount, List<String> recordsInJson) {
 		int totalConsumedRecords = 0;
 		long start = System.currentTimeMillis();
 		List<SourceRecord> records = new ArrayList<>();
 		while (totalConsumedRecords < recordsCount) {
 			int consumed = super.consumeAvailableRecords(record -> {
-				System.out.println("VKVK the record being consumed is " + record);
-				records.add(record);
+				recordsInJson.add(SchemaUtil.asString(record));
+				// printAfterValue(SchemaUtil.asString(record)); // function not working --> throwing exception
 			});
 			if (consumed > 0) {
 				totalConsumedRecords += consumed;
 			}
-		}
-		System.out.println("total duration to ingest '" + recordsCount + "' records: " +
-				Strings.duration(System.currentTimeMillis() - start));
-
-		try {
-			for (int i = 0; i < records.size(); ++i) {
-				System.out.println(String.format("VKVK printing record with pk: <id = %d>", i));
-				System.out.println(records.get(i)); // definitely not what is being looked for xD
-//				getAfterValue(SchemaUtil.asString(records.get(i)));
-//			VerifyRecord.print(records.get(i)); // todo vaibhav: this could be a workaround
-			}
-		} catch (Exception e) {
-			System.out.println("Exception caught while parsing records: " + e);
-			fail();
 		}
 	}
 
@@ -136,19 +120,19 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 		List<SourceRecord> records = new ArrayList<>();
 		while (totalConsumedRecords < recordsCount) {
 			int consumed = super.consumeAvailableRecords(record -> {
-				System.out.println("VKVK the record being consumed is " + record);
+				System.out.println("The record being consumed is " + record);
 				records.add(record);
 			});
 			if (consumed > 0) {
 				totalConsumedRecords += consumed;
 			}
 		}
-		System.out.println("total duration to ingest '" + recordsCount + "' records: " +
+		System.out.println("Total duration to ingest '" + recordsCount + "' records: " +
 				Strings.duration(System.currentTimeMillis() - start));
 
 		try {
 			for (int i = 0; i < records.size(); ++i) {
-				System.out.println(String.format("VKVK verifying record values with pk: <id = %d>", i));
+				System.out.println(String.format("Verifying record values with pk: <id = %d>", i));
 				assertValueField(records.get(i), "after/id", i);
 				assertValueField(records.get(i), "after/first_name", "Vaibhav");
 				assertValueField(records.get(i), "after/last_name", "Kushwaha");
@@ -193,7 +177,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 
 		// insert rows in the table t1 with values <some-pk, 'Vaibhav', 'Kushwaha', 30>
 		insertRecords(recordsCount);
-//		 batchInsertRecords(recordsCount, batchSize);
+
 		CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
 				.exceptionally(throwable -> {
 					throw new RuntimeException(throwable);
@@ -218,7 +202,8 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 				}).get();
 	}
 
-	// todo vaibhav: remove this test
+	// todo vaibhav: this test fails with an exception while parsing json string as of now
+	// the error is due to the error while parsing the sequence list which is "sequence":"[null,"1:2::0:0"]"
 	@Test
 	public void testSample() throws Exception {
 		TestHelper.dropAllSchemas();
@@ -228,12 +213,12 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 		start(YugabyteDBConnector.class, configBuilder.build());
 		assertConnectorIsRunning();
 		final long recordsCount = 1;
-		// final int batchSize = 10;
 
 		// insert rows in the table t1 with values <some-pk, 'Vaibhav', 'Kushwaha', 30>
 		insertRecords(recordsCount);
-//		 batchInsertRecords(recordsCount, batchSize);
-		CompletableFuture.runAsync(() -> printRecordsJson(recordsCount))
+
+		List<String> recordsInJson = new ArrayList<>();
+		CompletableFuture.runAsync(() -> getRecordsInJson(recordsCount, recordsInJson))
 				.exceptionally(throwable -> {
 					throw new RuntimeException(throwable);
 				}).get();
@@ -248,11 +233,10 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 		start(YugabyteDBConnector.class, configBuilder.build());
 		assertConnectorIsRunning();
 		final long recordsCount = 1;
-		// final int batchSize = 10;
 
 		// insert rows in the table t1 with values <some-pk, 'Vaibhav', 'Kushwaha', 30>
 		insertRecords(recordsCount);
-//		 batchInsertRecords(recordsCount, batchSize);
+
 		CompletableFuture.runAsync(() -> verifyValue(recordsCount))
 				.exceptionally(throwable -> {
 					throw new RuntimeException(throwable);

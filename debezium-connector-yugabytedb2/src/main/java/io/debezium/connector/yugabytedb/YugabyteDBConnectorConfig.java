@@ -500,10 +500,27 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     protected static final int DEFAULT_SNAPSHOT_FETCH_SIZE = 10_240;
     protected static final int DEFAULT_MAX_RETRIES = 6;
     protected static final int DEFAULT_MASTER_PORT = 7100;
-    protected static final String DEFAULT_MASTER_ADDRESS = "127.0.0.1";
+    protected static final String DEFAULT_MASTER_ADDRESS = "127.0.0.1:7100";
+    protected static final int DEFAULT_MAX_NUM_TABLETS = 10;
+    protected static final long DEFAULT_ADMIN_OPERATION_TIMEOUT_MS = 60000;
+    protected static final long DEFAULT_OPERATION_TIMEOUT_MS = 60000;
+    protected static final long DEFAULT_SOCKET_READ_TIMEOUT_MS = 60000;
+
+    @Override
+    public Configuration getJdbcConfig() {
+        return super.getJdbcConfig();
+    }
 
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
+
+    public static final Field MASTER_ADDRESSES = Field.create(DATABASE_CONFIG_PREFIX + "master.addresses")
+        .withDisplayName("Master Addresses")
+        .withType(Type.STRING)
+        .withImportance(Importance.LOW) // todo: change this to HIGH
+        .withDefault(DEFAULT_MASTER_ADDRESS)
+        .withDescription("Comma separated values of master addresses in the form host:port");
+        //.required();
 
     public static final Field MASTER_HOSTNAME = Field.create(DATABASE_CONFIG_PREFIX + "masterhost")
             .withDisplayName("Master Hostname")
@@ -511,7 +528,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 7))
             .withWidth(Width.MEDIUM)
             .withImportance(Importance.HIGH)
-            .required()
+//            .required()
             .withDescription("Resolvable hostname or IP address of the yugabytedb master server.");
 
     public static final Field MASTER_PORT = Field.create(DATABASE_CONFIG_PREFIX + "masterport")
@@ -542,8 +559,27 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         .withDisplayName("Maximum number of tablets that can be polled for in a table")
         .withType(Type.INT)
         .withImportance(Importance.LOW)
-        .withDefault(10)
+        .withDefault(DEFAULT_MAX_NUM_TABLETS)
         .withDescription("Specify the maximum number of tablets that the client can poll for");
+
+    public static final Field ADMIN_OPERATION_TIMEOUT_MS = Field.create(DATABASE_CONFIG_PREFIX + "admin.operation.timeout.ms")
+        .withDisplayName("Admin operation timeout in milliseconds")
+        .withType(Type.LONG)
+        .withImportance(Importance.LOW)
+        .withDefault(DEFAULT_ADMIN_OPERATION_TIMEOUT_MS)
+        .withDescription("Timeout after which the admin operations for the yb-client would fail");
+
+    public static final Field OPERATION_TIMEOUT_MS = Field.create(DATABASE_CONFIG_PREFIX + "operation.timeout.ms")
+        .withDisplayName("Operation timeout in milliseconds")
+        .withType(Type.LONG)
+        .withImportance(Importance.LOW)
+        .withDefault(DEFAULT_OPERATION_TIMEOUT_MS);
+
+    public static final Field SOCKET_READ_TIMEOUT_MS = Field.create(DATABASE_CONFIG_PREFIX + "socket.read.timeout.ms")
+        .withDisplayName("Socket read timeout in milliseconds")
+        .withType(Type.LONG)
+        .withImportance(Importance.LOW)
+        .withDefault(DEFAULT_SOCKET_READ_TIMEOUT_MS);
 
     public static final Field CHAR_SET = Field.create(TASK_CONFIG_PREFIX + "charset")
             .withDisplayName("YugabyteDB charset")
@@ -935,6 +971,10 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         return getConfig().getString(DATABASE_NAME);
     }
 
+    public String masterAddresses() {
+        return getConfig().getString(MASTER_ADDRESSES);
+    }
+
     public int masterPort() {
         return getConfig().getInteger(MASTER_PORT);
     };
@@ -949,6 +989,30 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
     public int maxNumTablets() {
         return getConfig().getInteger(MAX_NUM_TABLETS);
+    }
+
+    public long adminOperationTimeoutMs() {
+        return getConfig().getLong(ADMIN_OPERATION_TIMEOUT_MS);
+    }
+
+    public long operationTimeoutMs() {
+        return getConfig().getLong(OPERATION_TIMEOUT_MS);
+    }
+
+    public long socketReadTimeoutMs() {
+        return getConfig().getLong(SOCKET_READ_TIMEOUT_MS);
+    }
+
+    public String sslRootCert() {
+        return getConfig().getString(SSL_ROOT_CERT);
+    }
+
+    public String sslClientCert() {
+        return getConfig().getString(SSL_CLIENT_CERT);
+    }
+
+    public String sslClientKey() {
+        return getConfig().getString(SSL_CLIENT_KEY);
     }
 
     protected LogicalDecoder plugin() {

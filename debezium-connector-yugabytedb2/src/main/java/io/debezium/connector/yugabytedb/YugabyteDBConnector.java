@@ -168,30 +168,45 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             LOGGER.warn("Received exception while shutting down the client", e);
         }
     }
+    private YBClient getYBClientBase(String hostAddress, long adminTimeout, long operationTimeout, long socketReadTimeout,
+                                     int maxNumTablets, String certFile, String clientCert, String clientKey) {
+        if (maxNumTablets == -1) {
+            maxNumTablets = yugabyteDBConnectorConfig.maxNumTablets();
+        }
+
+        if (adminTimeout == -1) {
+            adminTimeout = yugabyteDBConnectorConfig.adminOperationTimeoutMs();
+        }
+
+        if (operationTimeout == -1) {
+            operationTimeout = yugabyteDBConnectorConfig.operationTimeoutMs();
+        }
+
+        if (socketReadTimeout == -1) {
+            socketReadTimeout = yugabyteDBConnectorConfig.socketReadTimeoutMs();
+        }
+
+        AsyncYBClient asyncClient = new AsyncYBClient.AsyncYBClientBuilder(hostAddress)
+            .defaultAdminOperationTimeoutMs(adminTimeout)
+            .defaultOperationTimeoutMs(operationTimeout)
+            .defaultSocketReadTimeoutMs(socketReadTimeout)
+            .numTablets(maxNumTablets)
+            .sslCertFile(certFile)
+            .sslClientCertFiles(clientCert, clientKey)
+            .build();
+
+        return new YBClient(asyncClient);
+    }
 
     private YBClient getYBClient(String hostAddress, long adminTimeout, long opTimeout,
                                  long socketTimeout) {
-        AsyncYBClient client = new AsyncYBClient.AsyncYBClientBuilder(hostAddress)
-                .defaultAdminOperationTimeoutMs(adminTimeout)
-                .defaultOperationTimeoutMs(opTimeout)
-                .defaultSocketReadTimeoutMs(socketTimeout)
-                .build();
-
-        YBClient syncClient = new YBClient(client);
-        return syncClient;
+        return getYBClient(hostAddress, adminTimeout, opTimeout, socketTimeout, -1);
     }
 
     // over loaded function
     private YBClient getYBClient(String hostAddress, long adminTimeout, long opTimeout,
                                  long socketTimeout, int numTablets) {
-        AsyncYBClient client = new AsyncYBClient.AsyncYBClientBuilder(hostAddress)
-            .defaultAdminOperationTimeoutMs(adminTimeout)
-            .defaultOperationTimeoutMs(opTimeout)
-            .defaultSocketReadTimeoutMs(socketTimeout)
-            .numTablets(numTablets)
-            .build();
-
-        return new YBClient(client);
+        return getYBClientBase(hostAddress, adminTimeout, opTimeout, socketTimeout, numTablets, null, null, null);
     }
 
     @Override
@@ -255,12 +270,24 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
         String hostname = config.getString(YugabyteDBConnectorConfig.MASTER_HOSTNAME.toString());
         int port = config.getInteger(YugabyteDBConnectorConfig.MASTER_PORT.toString());
-        // TODO: Suranjan Check for timeout, socket timeout property
+        // TODO: Suranjan Check for timeout, socket timeout property (vaibhav: implemented below)
         // TODO: Suranjan check for SSL property too and validate if set
         // TODO: CDCSDK We will check in future for user login and roles.
-        String hostAddress = "" + hostname + ":" + port;
-        this.ybClient = getYBClient(hostAddress, 60000,
-                60000, 60000);
+//        String hostAddress = "" + hostname + ":" + port;
+        String hostAddress = config.getString(YugabyteDBConnectorConfig.MASTER_ADDRESSES.toString());
+        // todo vaibhav: check if the static variables can be replaced with their respective functions
+        this.ybClient = getYBClientBase(hostAddress,
+            yugabyteDBConnectorConfig.adminOperationTimeoutMs(),
+            yugabyteDBConnectorConfig.operationTimeoutMs(),
+            yugabyteDBConnectorConfig.socketReadTimeoutMs(),
+            yugabyteDBConnectorConfig.maxNumTablets(),
+            yugabyteDBConnectorConfig.sslRootCert(),
+            yugabyteDBConnectorConfig.sslClientCert(),
+            yugabyteDBConnectorConfig.sslClientKey()); // always passing the ssl root certs,
+        // so whenever they are null, they will just be ignored
+        // todo vaibhav: remove this comment
+//        this.ybClient = getYBClient(hostAddress, 60000,
+//                60000, 60000);
         LOGGER.debug("The master host address is " + hostAddress);
         HostAndPort masterHostPort = ybClient.getLeaderMasterHostAndPort();
         if (masterHostPort == null) {

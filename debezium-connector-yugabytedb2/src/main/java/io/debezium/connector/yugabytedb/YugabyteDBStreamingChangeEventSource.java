@@ -102,11 +102,12 @@ public class YugabyteDBStreamingChangeEventSource implements
         // this.replicationConnection = replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
 
-        String masterAddress = connectorConfig.masterHost() + ":" + connectorConfig.masterPort();
+//        String masterAddress = connectorConfig.masterHost() + ":" + connectorConfig.masterPort();
+        String masterAddress = connectorConfig.masterAddresses();
         asyncYBClient = new AsyncYBClient.AsyncYBClientBuilder(masterAddress)
-                .defaultAdminOperationTimeoutMs(60000)
-                .defaultOperationTimeoutMs(60000)
-                .defaultSocketReadTimeoutMs(60000)
+                .defaultAdminOperationTimeoutMs(connectorConfig.adminOperationTimeoutMs())
+                .defaultOperationTimeoutMs(connectorConfig.operationTimeoutMs())
+                .defaultSocketReadTimeoutMs(connectorConfig.socketReadTimeoutMs())
                 .numTablets(this.connectorConfig.maxNumTablets())
                 .build();
 
