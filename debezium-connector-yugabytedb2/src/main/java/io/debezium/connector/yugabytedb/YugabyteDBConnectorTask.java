@@ -327,7 +327,7 @@ public class YugabyteDBConnectorTask
     public List<SourceRecord> doPoll() throws InterruptedException {
 
         final List<DataChangeEvent> records = queue.poll();
-        LOGGER.info("SKSK doPoll Got the records from queue " + records);
+        LOGGER.debug("SKSK doPoll Got the records from queue " + records);
         final List<SourceRecord> sourceRecords = records.stream()
                 .map(DataChangeEvent::getRecord)
                 .collect(Collectors.toList());

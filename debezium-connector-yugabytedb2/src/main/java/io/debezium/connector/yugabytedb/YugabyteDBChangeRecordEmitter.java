@@ -87,7 +87,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
     @Override
     public void emitChangeRecords(DataCollectionSchema schema, Receiver receiver) throws InterruptedException {
         schema = synchronizeTableSchema(schema);
-        LOGGER.info("SKSK the schema of the table is " + schema);
+        LOGGER.debug("SKSK the schema of the table is " + schema);
         super.emitChangeRecords(schema, receiver);
     }
 

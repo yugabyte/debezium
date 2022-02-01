@@ -234,7 +234,7 @@ public class YugabyteDBOffsetContext implements OffsetContext {
         @SuppressWarnings("unchecked")
         @Override
         public YugabyteDBOffsetContext load(Map<String, ?> offset) {
-            LOGGER.info("SKSK the offset being loaded.. ");
+            LOGGER.debug("SKSK the offset being loaded.. ");
             final OpId lsn = OpId.valueOf(readOptionalString(offset, SourceInfo.LSN_KEY));
             final OpId lastCompletelyProcessedLsn = OpId.valueOf(readOptionalString(offset,
                     LAST_COMPLETELY_PROCESSED_LSN_KEY));

@@ -62,7 +62,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
-        LOGGER.info("Props " + props);
+        LOGGER.debug("Props " + props);
         Configuration config = Configuration.from(this.props);
         this.yugabyteDBConnectorConfig = new YugabyteDBConnectorConfig(config);
     }
@@ -86,9 +86,9 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         String serializedNameToType = "";
         try {
             serializedNameToType = ObjectUtil.serializeObjectToString(nameToType);
-            LOGGER.info("The serializedNameToType " + serializedNameToType);
+            LOGGER.debug("The serializedNameToType " + serializedNameToType);
             Object test = ObjectUtil.deserializeObjectFromString(serializedNameToType);
-            LOGGER.info("The deserializedNameToType " + test);
+            LOGGER.debug("The deserializedNameToType " + test);
         }
         catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
@@ -97,7 +97,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         String serializedOidToType = "";
         try {
             serializedOidToType = ObjectUtil.serializeObjectToString(oidToType);
-            LOGGER.info("The serializedOidToType " + serializedOidToType);
+            LOGGER.debug("The serializedOidToType " + serializedOidToType);
         }
         catch (IOException e) {
             e.printStackTrace();

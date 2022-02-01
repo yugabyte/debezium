@@ -179,7 +179,7 @@ public abstract class BaseSourceTask<P extends Partition, O extends OffsetContex
         if (batchSize > 0) {
             SourceRecord lastRecord = records.get(batchSize - 1);
             lastOffset = lastRecord.sourceOffset();
-            LOGGER.info("SKSK THe last record source offset is " + lastOffset);
+//            LOGGER.info("SKSK THe last record source offset is " + lastOffset);
             if (pollOutputDelay.hasElapsed()) {
                 // We want to record the status ...
                 final Instant currentTime = clock.currentTime();
@@ -303,7 +303,7 @@ public abstract class BaseSourceTask<P extends Partition, O extends OffsetContex
      * Loads the connector's persistent offsets (if present) via the given loader.
      */
     protected Offsets<P, O> getPreviousOffsets(Partition.Provider<P> provider, OffsetContext.Loader<O> loader) {
-        LOGGER.info("SKSK The offset is being loaded.");
+//        LOGGER.info("SKSK The offset is being loaded.");
         Set<P> partitions = provider.getPartitions();
         OffsetReader<P, O, OffsetContext.Loader<O>> reader = new OffsetReader<>(
                 context.offsetStorageReader(), loader);

@@ -248,7 +248,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                              YugabyteDBPartition partition,
                              YugabyteDBOffsetContext offsetContext)
             throws Exception {
-        LOGGER.info("SKSK The offset is " + offsetContext.getOffset());
+        LOGGER.debug("SKSK The offset is " + offsetContext.getOffset());
 
         LOGGER.info("Processing messages");
         ListTablesResponse tablesResp = syncClient.getTablesList();
@@ -300,7 +300,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                 tableIdsToTabletIdsMapList.get(i % concurrency).putIfAbsent(tId, new ArrayList<>());
                 tableIdsToTabletIdsMapList.get(i % concurrency).get(tId).add(tabletId);
             }
-            LOGGER.info("SKSK The final map is " + tableIdsToTabletIdsMapList);
+            LOGGER.debug("SKSK The final map is " + tableIdsToTabletIdsMapList);
         }
         Map<String, List<String>> tableIdsToTabletIds = tableIdsToTabletIdsMapList.get(0);
         List<AbstractMap.SimpleImmutableEntry<String, String>> listTabletIdTableIdPair;
@@ -315,7 +315,7 @@ public class YugabyteDBStreamingChangeEventSource implements
             final String tabletId = entry.getKey();
             offsetContext.initSourceInfo(tabletId, this.connectorConfig);
         }
-        LOGGER.info("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
+        LOGGER.debug("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
 
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                 (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
@@ -326,7 +326,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                 YBTable table = tableIdToTable.get(entry.getValue());
                 OpId cp = offsetContext.lsn(tabletId);
                 // GetChangesResponse response = getChangeResponse(offsetContext);
-                LOGGER.info("Going to fetch for tablet " + tabletId + " from OpId " + cp + " " +
+                LOGGER.debug("Going to fetch for tablet " + tabletId + " from OpId " + cp + " " +
                         "table " + table.getName());
 
                 GetChangesResponse response = this.syncClient.getChangesCDCSDK(
@@ -394,7 +394,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                             maybeWarnAboutGrowingWalBacklog(true);
                         }
                         else if (message.isDDLMessage()) {
-                            LOGGER.info("Received DDL message {}", message.getSchema().toString()
+                            LOGGER.debug("Received DDL message {}", message.getSchema().toString()
                                     + " the table is " + message.getTable());
                             // TODO: Update the schema
                             // final String catalogName = "yugabyte";
@@ -404,7 +404,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                                 Objects.requireNonNull(tableId);
                             }
                             Table t = schema.tableFor(tableId);
-                            LOGGER.info("The schema is already registered {}", t);
+                            LOGGER.debug("The schema is already registered {}", t);
                             if (t == null) {
                                 schema.refresh(tableId, message.getSchema());
                             }
@@ -416,7 +416,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                                 tableId = YugabyteDBSchema.parse(message.getTable());
                                 Objects.requireNonNull(tableId);
                             }
-                            LOGGER.info("Received DML record {}", record);
+                            LOGGER.debug("Received DML record {}", record);
 
                             offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn,
                                     message.getCommitTime(),
@@ -560,7 +560,7 @@ public class YugabyteDBStreamingChangeEventSource implements
     @Override
     public void commitOffset(Map<String, ?> offset) {
         // try {
-        LOGGER.info("SKSK the commitoffset is " + offset);
+        LOGGER.debug("SKSK the commitoffset is " + offset);
         ReplicationStream replicationStream = null;// this.replicationStream.get();
         final OpId commitLsn = null;// OpId.valueOf((String) offset.get(PostgresOffsetContext.LAST_COMMIT_LSN_KEY));
         final OpId changeLsn = OpId.valueOf((String) offset.get(YugabyteDBOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
