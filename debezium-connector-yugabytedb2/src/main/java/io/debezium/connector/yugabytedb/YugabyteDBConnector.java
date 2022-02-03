@@ -265,15 +265,14 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     protected void validateTServerConnection(Map<String, ConfigValue> configValues,
                                              Configuration config) {
-        ConfigValue hostnameValue = configValues.get(YugabyteDBConnectorConfig.MASTER_HOSTNAME.name());
-        ConfigValue portValue = configValues.get(YugabyteDBConnectorConfig.MASTER_PORT.name());
+//        ConfigValue hostnameValue = configValues.get(YugabyteDBConnectorConfig.MASTER_ADDRESSES.name());
+//        ConfigValue portValue = configValues.get(YugabyteDBConnectorConfig.MASTER_PORT.name());
 
-        String hostname = config.getString(YugabyteDBConnectorConfig.MASTER_HOSTNAME.toString());
-        int port = config.getInteger(YugabyteDBConnectorConfig.MASTER_PORT.toString());
+//        String hostname = config.getString(YugabyteDBConnectorConfig.MASTER_HOSTNAME.toString());
+//        int port = config.getInteger(YugabyteDBConnectorConfig.MASTER_PORT.toString());
         // TODO: Suranjan Check for timeout, socket timeout property (vaibhav: implemented below)
         // TODO: Suranjan check for SSL property too and validate if set
         // TODO: CDCSDK We will check in future for user login and roles.
-//        String hostAddress = "" + hostname + ":" + port;
         String hostAddress = config.getString(YugabyteDBConnectorConfig.MASTER_ADDRESSES.toString());
         // todo vaibhav: check if the static variables can be replaced with their respective functions
         this.ybClient = getYBClientBase(hostAddress,
@@ -291,9 +290,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         LOGGER.debug("The master host address is " + hostAddress);
         HostAndPort masterHostPort = ybClient.getLeaderMasterHostAndPort();
         if (masterHostPort == null) {
-            LOGGER.error("Failed testing connection for {} with address '{}'",
-                    hostnameValue.value(),
-                    portValue.value());
+            LOGGER.error("Failed testing connection at {}", yugabyteDBConnectorConfig.hostname());
         }
 
         // do a get and check if the streamid exists.

@@ -70,8 +70,6 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 				.with(YugabyteDBConnectorConfig.PORT, 5433)
 				.with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
 				.with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
-//				.with(YugabyteDBConnectorConfig.MASTER_HOSTNAME, "127.0.0.1"/*InetAddress.getLocalHost().getHostAddress()*/)
-				.with(YugabyteDBConnectorConfig.MASTER_PORT, "7100")
 				.with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
 				.with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1"); // including t1 for now only
 	}

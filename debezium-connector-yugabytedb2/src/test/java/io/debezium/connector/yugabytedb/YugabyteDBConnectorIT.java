@@ -421,8 +421,7 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
                     .with(YugabyteDBConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, Boolean.FALSE)
                     .with(YugabyteDBConnectorConfig.SCHEMA_INCLUDE_LIST, "changepk")
                     .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.FALSE)
-                    .with(YugabyteDBConnectorConfig.MASTER_HOSTNAME, "localhost")
-                    .with(YugabyteDBConnectorConfig.MASTER_PORT, "7100")
+                    .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
                     .with(YugabyteDBConnectorConfig.STREAM_ID, "ad6cdaa9-812c-426e-a2f9-c04e387f55a0")
 
                     // .with(YugabyteDBConnectorConfig.SLOT_NAME, slotName)
@@ -2110,8 +2109,6 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
                 .with(YugabyteDBConnectorConfig.PORT, 5433)
                 .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
-                .with(YugabyteDBConnectorConfig.MASTER_HOSTNAME, "192.168.1.32")
-                .with(YugabyteDBConnectorConfig.MASTER_PORT, "7100")
                 .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" + ",public.t2")
                 .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
         start(YugabyteDBConnector.class, configBuilder.build());
@@ -2134,12 +2131,11 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
             TestHelper.executeDDL("postgres_create_tables.ddl");
             Thread.sleep(1000);
             Configuration.Builder configBuilder = TestHelper.defaultConfig()
-                .with(YugabyteDBConnectorConfig.HOSTNAME, InetAddress.getLocalHost().getHostAddress())
+                .with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1")
                 .with(YugabyteDBConnectorConfig.PORT, 5433)
                 .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
-                .with(YugabyteDBConnectorConfig.MASTER_HOSTNAME, InetAddress.getLocalHost().getHostAddress())
-                .with(YugabyteDBConnectorConfig.MASTER_PORT, "7100")
+                .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
                 .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" + ",public.t2");
 //            .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
             start(YugabyteDBConnector.class, configBuilder.build());

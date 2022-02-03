@@ -102,13 +102,14 @@ public class YugabyteDBStreamingChangeEventSource implements
         // this.replicationConnection = replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
 
-//        String masterAddress = connectorConfig.masterHost() + ":" + connectorConfig.masterPort();
         String masterAddress = connectorConfig.masterAddresses();
         asyncYBClient = new AsyncYBClient.AsyncYBClientBuilder(masterAddress)
                 .defaultAdminOperationTimeoutMs(connectorConfig.adminOperationTimeoutMs())
                 .defaultOperationTimeoutMs(connectorConfig.operationTimeoutMs())
                 .defaultSocketReadTimeoutMs(connectorConfig.socketReadTimeoutMs())
-                .numTablets(this.connectorConfig.maxNumTablets())
+                .numTablets(connectorConfig.maxNumTablets())
+                .sslCertFile(connectorConfig.sslRootCert())
+                .sslClientCertFiles(connectorConfig.sslClientCert(), connectorConfig.sslClientKey())
                 .build();
 
         syncClient = new YBClient(asyncYBClient);
@@ -252,21 +253,31 @@ public class YugabyteDBStreamingChangeEventSource implements
 
         LOGGER.info("Processing messages");
         ListTablesResponse tablesResp = syncClient.getTablesList();
+
         Set<String> tIds = new HashSet<>();
+//        String[] includeTablesWithSchema = connectorConfig.tableIncludeList().split(",");
+//        List<String> includeTables = new ArrayList<>();
+//        for (String tableName : includeTablesWithSchema) {
+//            LOGGER.info(String.format("VKVK got %s from the configs", tableName));
+//            String[] schemaAndName = tableName.split(".");
+//            // The second element after splitting would be the table name.
+//            includeTables.add(schemaAndName[1]);
+//        }
 
         for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-            LOGGER.info("SKSK The table name is " + tableInfo.getName());
+            LOGGER.info("SKSK The table name is " + tableInfo.getName()); // todo vaibhav: it prints all the table names currently
             String fqlTableName = tableInfo.getNamespace().getName() + "." + "" + PUBLIC_SCHEMA_NAME
                     + "." + tableInfo.getName();
             TableId tableId = YugabyteDBSchema.parse(fqlTableName);
             if (this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
+                LOGGER.info("VKVK adding table ID: " + tableInfo.getId() + " of table: " + tableInfo.getName() + " in namespace: " + tableInfo.getNamespace().getName());
                 tIds.add(tableInfo.getId().toStringUtf8());
             }
         }
 
         Map<String, YBTable> tableIdToTable = new HashMap<>();
         String streamId = this.connectorConfig.streamId();
-        LOGGER.info(String.format("Using stream with id %s", streamId));
+//        LOGGER.info(String.format("Using stream with id %s", streamId));
 
         List<Map<String, List<String>>> tableIdsToTabletIdsMapList = new ArrayList<>(1);
         int concurrency = 1;
@@ -282,9 +293,10 @@ public class YugabyteDBStreamingChangeEventSource implements
             YBTable table = this.syncClient.openTableByUUID(tId);
             tableIdToTable.put(tId, table);
             if (createStream) {
-                streamId = this.syncClient.createCDCStream(table, "yugabyte",
+                streamId = this.syncClient.createCDCStream(table, connectorConfig.databaseName(),
                         "PROTO",
                         "IMPLICIT").getStreamId();
+                LOGGER.info(String.format("Created a new stream ID: %s", streamId));
                 createStream = false;
             }
             List<LocatedTablet> tabletLocations = table.getTabletsLocations(30000);
