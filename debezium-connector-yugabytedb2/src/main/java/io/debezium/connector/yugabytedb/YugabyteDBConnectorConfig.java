@@ -520,26 +520,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         .withType(Type.STRING)
         .withImportance(Importance.LOW) // todo: change this to HIGH
         .withDefault(DEFAULT_MASTER_ADDRESS)
-        .withDescription("Comma separated values of master addresses in the form host:port");
-        //.required();
-
-//    public static final Field MASTER_HOSTNAME = Field.create(DATABASE_CONFIG_PREFIX + "masterhost")
-//            .withDisplayName("Master Hostname")
-//            .withType(Type.STRING)
-//            .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 7))
-//            .withWidth(Width.MEDIUM)
-//            .withImportance(Importance.HIGH)
-////            .required()
-//            .withDescription("Resolvable hostname or IP address of the yugabytedb master server.");
-//
-//    public static final Field MASTER_PORT = Field.create(DATABASE_CONFIG_PREFIX + "masterport")
-//            .withDisplayName("Master Port")
-//            .withType(Type.INT)
-//            .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 8))
-//            .withWidth(Width.SHORT)
-//            .withImportance(Importance.HIGH)
-//            .withValidation(Field::isInteger)
-//            .withDescription("Port of the yugabytedb master server.");
+        .withDescription("Comma separated values of master addresses in the form host:port")
+        .required();
 
     public static final Field STREAM_ID = Field.create(DATABASE_CONFIG_PREFIX + "streamid")
             .withDisplayName("YugabyteDB Stream ID")
