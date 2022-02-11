@@ -518,7 +518,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     public static final Field MASTER_ADDRESSES = Field.create(DATABASE_CONFIG_PREFIX + "master.addresses")
         .withDisplayName("Master Addresses")
         .withType(Type.STRING)
-        .withImportance(Importance.LOW) // todo: change this to HIGH
+        .withImportance(Importance.HIGH)
         .withDefault(DEFAULT_MASTER_ADDRESS)
         .withDescription("Comma separated values of master addresses in the form host:port")
         .required();
@@ -538,33 +538,33 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withWidth(ConfigDef.Width.MEDIUM)
             .withDescription("Internal task config: List of TabletIds to be fetched by this task");
 
-    public static final Field MAX_NUM_TABLETS = Field.create(DATABASE_CONFIG_PREFIX + "max.num.tablets")
+    public static final Field MAX_NUM_TABLETS = Field.create("table.max.num.tablets")
         .withDisplayName("Maximum number of tablets that can be polled for in a table")
         .withType(Type.INT)
         .withImportance(Importance.LOW)
         .withDefault(DEFAULT_MAX_NUM_TABLETS)
         .withDescription("Specify the maximum number of tablets that the client can poll for");
 
-    public static final Field ADMIN_OPERATION_TIMEOUT_MS = Field.create(DATABASE_CONFIG_PREFIX + "admin.operation.timeout.ms")
+    public static final Field ADMIN_OPERATION_TIMEOUT_MS = Field.create("admin.operation.timeout.ms")
         .withDisplayName("Admin operation timeout in milliseconds")
         .withType(Type.LONG)
         .withImportance(Importance.LOW)
         .withDefault(DEFAULT_ADMIN_OPERATION_TIMEOUT_MS)
         .withDescription("Timeout after which the admin operations for the yb-client would fail");
 
-    public static final Field OPERATION_TIMEOUT_MS = Field.create(DATABASE_CONFIG_PREFIX + "operation.timeout.ms")
+    public static final Field OPERATION_TIMEOUT_MS = Field.create("operation.timeout.ms")
         .withDisplayName("Operation timeout in milliseconds")
         .withType(Type.LONG)
         .withImportance(Importance.LOW)
         .withDefault(DEFAULT_OPERATION_TIMEOUT_MS);
 
-    public static final Field SOCKET_READ_TIMEOUT_MS = Field.create(DATABASE_CONFIG_PREFIX + "socket.read.timeout.ms")
+    public static final Field SOCKET_READ_TIMEOUT_MS = Field.create("socket.read.timeout.ms")
         .withDisplayName("Socket read timeout in milliseconds")
         .withType(Type.LONG)
         .withImportance(Importance.LOW)
         .withDefault(DEFAULT_SOCKET_READ_TIMEOUT_MS);
 
-    public static final Field CDC_POLL_INTERVAL_MS = Field.create(DATABASE_CONFIG_PREFIX + "cdc.poll.interval.ms")
+    public static final Field CDC_POLL_INTERVAL_MS = Field.create("cdc.poll.interval.ms")
         .withDisplayName("Poll interval in milliseconds to get changes from database")
         .withType(Type.LONG)
         .withImportance(Importance.LOW)
