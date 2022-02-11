@@ -18,7 +18,6 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
-import java.net.InetAddress;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -2105,18 +2104,20 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
         TestHelper.executeDDL("postgres_create_tables.ddl");
         Thread.sleep(1000);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
-                .with(YugabyteDBConnectorConfig.HOSTNAME, "192.168.1.32")
+                // .with
+                .with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1")
                 .with(YugabyteDBConnectorConfig.PORT, 5433)
+                .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
                 .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
-                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" + ",public.t2")
-                .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
+                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" /* + ",public.t2" */);
+        // .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
-        final long recordsCount = 1000;
+        final long recordsCount = 100000;
         // final int batchSize = 10;
 
-//         batchInsertRecords(recordsCount, batchSize);
+        // batchInsertRecords(recordsCount, batchSize);
         CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
                 .exceptionally(throwable -> {
                     throw new RuntimeException(throwable);
@@ -2131,13 +2132,13 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
             TestHelper.executeDDL("postgres_create_tables.ddl");
             Thread.sleep(1000);
             Configuration.Builder configBuilder = TestHelper.defaultConfig()
-                .with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1")
-                .with(YugabyteDBConnectorConfig.PORT, 5433)
-                .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
-                .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
-                .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
-                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" + ",public.t2");
-//            .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
+                    .with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1")
+                    .with(YugabyteDBConnectorConfig.PORT, 5433)
+                    .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                    .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
+                    .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
+                    .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" + ",public.t2");
+            // .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
             start(YugabyteDBConnector.class, configBuilder.build());
             assertConnectorIsRunning();
             final long recordsCount = 2;
@@ -2147,10 +2148,11 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
 
             // batchInsertRecords(recordsCount, batchSize);
             CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
-                .exceptionally(throwable -> {
-                    throw new RuntimeException(throwable);
-                }).get();
-        } catch (Exception e) {
+                    .exceptionally(throwable -> {
+                        throw new RuntimeException(throwable);
+                    }).get();
+        }
+        catch (Exception e) {
             System.out.println("Exception caught in test" + e);
             fail();
         }

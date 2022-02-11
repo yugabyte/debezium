@@ -155,12 +155,12 @@ public final class TestHelper {
             connection.setAutoCommit(true); // setting auto-commit to true
             connection.executeWithoutCommitting(statement);
             Connection jdbcConn = connection.connection();
-//            if (!statement.endsWith("ROLLBACK;")) {
-//                jdbcConn.commit();
-//            }
-//            else {
-//                jdbcConn.rollback();
-//            }
+            // if (!statement.endsWith("ROLLBACK;")) {
+            // jdbcConn.commit();
+            // }
+            // else {
+            // jdbcConn.rollback();
+            // }
         }
         catch (RuntimeException e) {
             throw e;
@@ -196,8 +196,8 @@ public final class TestHelper {
 
     public static void insertData() throws SQLException {
         String[] insertStmts = {
-            "INSERT INTO t1 VALUES (1, 'Vaibhav', 'Kushwaha', 30);",
-            "INSERT INTO t1 VALUES (2, 'V', 'K', 30.34);"
+                "INSERT INTO t1 VALUES (1, 'Vaibhav', 'Kushwaha', 30);",
+                "INSERT INTO t1 VALUES (2, 'V', 'K', 30.34);"
         };
 
         try {
@@ -205,7 +205,8 @@ public final class TestHelper {
                 System.out.println("VKVK executing the statement: " + insertStmts[i]);
                 TestHelper.execute(insertStmts[i]);
             }
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             throw new SQLException("Failed to write rows to database");
         }
     }
@@ -238,15 +239,16 @@ public final class TestHelper {
     public static JdbcConfiguration defaultJdbcConfig() {
         try {
             return JdbcConfiguration.copy(Configuration.empty()/* fromSystemProperties("database.") */)
-                .withDefault(JdbcConfiguration.DATABASE, "yugabyte")
-                .withDefault(JdbcConfiguration.HOSTNAME, "127.0.0.1"/*InetAddress.getLocalHost().getHostAddress()*/)
-                .withDefault(JdbcConfiguration.PORT, 5433)
-                .withDefault(JdbcConfiguration.USER, "yugabyte")
-                .withDefault(JdbcConfiguration.PASSWORD, "yugabyte")
-                .with(YugabyteDBConnectorConfig.MAX_RETRIES, 2)
-                .with(YugabyteDBConnectorConfig.RETRY_DELAY_MS, 2000)
-                .build();
-        } catch (Exception e) {
+                    .withDefault(JdbcConfiguration.DATABASE, "yugabyte")
+                    .withDefault(JdbcConfiguration.HOSTNAME, "127.0.0.1"/* InetAddress.getLocalHost().getHostAddress() */)
+                    .withDefault(JdbcConfiguration.PORT, 5433)
+                    .withDefault(JdbcConfiguration.USER, "yugabyte")
+                    .withDefault(JdbcConfiguration.PASSWORD, "yugabyte")
+                    .with(YugabyteDBConnectorConfig.MAX_RETRIES, 2)
+                    .with(YugabyteDBConnectorConfig.RETRY_DELAY_MS, 2000)
+                    .build();
+        }
+        catch (Exception e) {
             LOGGER.error("Exception thrown while creating connection...", e);
             return null;
         }

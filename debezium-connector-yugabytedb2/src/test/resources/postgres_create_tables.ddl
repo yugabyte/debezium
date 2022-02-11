@@ -47,8 +47,9 @@
 
 -- Vaibhav:
 -- CREATE TABLE t1 (id int , arr INT[], PRIMARY KEY(id)) SPLIT INTO 1 tablets;
-CREATE TABLE t2 (id int , col int, PRIMARY KEY(id)) SPLIT INTO 1 tablets;
-CREATE TABLE t1 (id INT PRIMARY KEY, first_name TEXT NOT NULL, last_name VARCHAR(40), hours DOUBLE PRECISION);
+CREATE TABLE t1 (id TEXT , col TEXT, PRIMARY KEY(id)) SPLIT INTO 4 tablets;
+-- CREATE TABLE t1 (id INT PRIMARY KEY, first_name TEXT NOT NULL, last_name VARCHAR(40), hours
+--    DOUBLE PRECISION);
 
 -- CREATE TABLE t1 (id SERIAL , bitval bit(4) default '1111', PRIMARY KEY(id));
 -- CREATE TABLE t1 (id SERIAL , boxval box, PRIMARY KEY(id));

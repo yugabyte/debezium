@@ -516,30 +516,30 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDefault(DEFAULT_PORT);
 
     public static final Field MASTER_ADDRESSES = Field.create(DATABASE_CONFIG_PREFIX + "master.addresses")
-        .withDisplayName("Master Addresses")
-        .withType(Type.STRING)
-        .withImportance(Importance.LOW) // todo: change this to HIGH
-        .withDefault(DEFAULT_MASTER_ADDRESS)
-        .withDescription("Comma separated values of master addresses in the form host:port");
-        //.required();
+            .withDisplayName("Master Addresses")
+            .withType(Type.STRING)
+            .withImportance(Importance.LOW) // todo: change this to HIGH
+            .withDefault(DEFAULT_MASTER_ADDRESS)
+            .withDescription("Comma separated values of master addresses in the form host:port");
+    // .required();
 
-//    public static final Field MASTER_HOSTNAME = Field.create(DATABASE_CONFIG_PREFIX + "masterhost")
-//            .withDisplayName("Master Hostname")
-//            .withType(Type.STRING)
-//            .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 7))
-//            .withWidth(Width.MEDIUM)
-//            .withImportance(Importance.HIGH)
-////            .required()
-//            .withDescription("Resolvable hostname or IP address of the yugabytedb master server.");
-//
-//    public static final Field MASTER_PORT = Field.create(DATABASE_CONFIG_PREFIX + "masterport")
-//            .withDisplayName("Master Port")
-//            .withType(Type.INT)
-//            .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 8))
-//            .withWidth(Width.SHORT)
-//            .withImportance(Importance.HIGH)
-//            .withValidation(Field::isInteger)
-//            .withDescription("Port of the yugabytedb master server.");
+    // public static final Field MASTER_HOSTNAME = Field.create(DATABASE_CONFIG_PREFIX + "masterhost")
+    // .withDisplayName("Master Hostname")
+    // .withType(Type.STRING)
+    // .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 7))
+    // .withWidth(Width.MEDIUM)
+    // .withImportance(Importance.HIGH)
+    //// .required()
+    // .withDescription("Resolvable hostname or IP address of the yugabytedb master server.");
+    //
+    // public static final Field MASTER_PORT = Field.create(DATABASE_CONFIG_PREFIX + "masterport")
+    // .withDisplayName("Master Port")
+    // .withType(Type.INT)
+    // .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 8))
+    // .withWidth(Width.SHORT)
+    // .withImportance(Importance.HIGH)
+    // .withValidation(Field::isInteger)
+    // .withDescription("Port of the yugabytedb master server.");
 
     public static final Field STREAM_ID = Field.create(DATABASE_CONFIG_PREFIX + "streamid")
             .withDisplayName("YugabyteDB Stream ID")
@@ -557,37 +557,37 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDescription("Internal task config: List of TabletIds to be fetched by this task");
 
     public static final Field MAX_NUM_TABLETS = Field.create(DATABASE_CONFIG_PREFIX + "max.num.tablets")
-        .withDisplayName("Maximum number of tablets that can be polled for in a table")
-        .withType(Type.INT)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_MAX_NUM_TABLETS)
-        .withDescription("Specify the maximum number of tablets that the client can poll for");
+            .withDisplayName("Maximum number of tablets that can be polled for in a table")
+            .withType(Type.INT)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_MAX_NUM_TABLETS)
+            .withDescription("Specify the maximum number of tablets that the client can poll for");
 
     public static final Field ADMIN_OPERATION_TIMEOUT_MS = Field.create(DATABASE_CONFIG_PREFIX + "admin.operation.timeout.ms")
-        .withDisplayName("Admin operation timeout in milliseconds")
-        .withType(Type.LONG)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_ADMIN_OPERATION_TIMEOUT_MS)
-        .withDescription("Timeout after which the admin operations for the yb-client would fail");
+            .withDisplayName("Admin operation timeout in milliseconds")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_ADMIN_OPERATION_TIMEOUT_MS)
+            .withDescription("Timeout after which the admin operations for the yb-client would fail");
 
     public static final Field OPERATION_TIMEOUT_MS = Field.create(DATABASE_CONFIG_PREFIX + "operation.timeout.ms")
-        .withDisplayName("Operation timeout in milliseconds")
-        .withType(Type.LONG)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_OPERATION_TIMEOUT_MS);
+            .withDisplayName("Operation timeout in milliseconds")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_OPERATION_TIMEOUT_MS);
 
     public static final Field SOCKET_READ_TIMEOUT_MS = Field.create(DATABASE_CONFIG_PREFIX + "socket.read.timeout.ms")
-        .withDisplayName("Socket read timeout in milliseconds")
-        .withType(Type.LONG)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_SOCKET_READ_TIMEOUT_MS);
+            .withDisplayName("Socket read timeout in milliseconds")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_SOCKET_READ_TIMEOUT_MS);
 
     public static final Field CDC_POLL_INTERVAL_MS = Field.create(DATABASE_CONFIG_PREFIX + "cdc.poll.interval.ms")
-        .withDisplayName("Poll interval in milliseconds to get changes from database")
-        .withType(Type.LONG)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
-        .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
+            .withDisplayName("Poll interval in milliseconds to get changes from database")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
+            .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
 
     public static final Field CHAR_SET = Field.create(TASK_CONFIG_PREFIX + "charset")
             .withDisplayName("YugabyteDB charset")
@@ -983,13 +983,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         return getConfig().getString(MASTER_ADDRESSES);
     }
 
-//    public int masterPort() {
-//        return getConfig().getInteger(MASTER_PORT);
-//    };
-//
-//    public String masterHost() {
-//        return getConfig().getString(MASTER_HOSTNAME);
-//    };
+    // public int masterPort() {
+    // return getConfig().getInteger(MASTER_PORT);
+    // };
+    //
+    // public String masterHost() {
+    // return getConfig().getString(MASTER_HOSTNAME);
+    // };
 
     public String streamId() {
         return getConfig().getString(STREAM_ID);

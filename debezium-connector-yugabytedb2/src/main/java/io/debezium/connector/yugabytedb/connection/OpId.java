@@ -4,7 +4,6 @@ import java.util.Arrays;
 import java.util.Base64;
 
 import com.google.common.base.Objects;
-import org.json.simple.JSONObject;
 
 public class OpId implements Comparable<OpId> {
 

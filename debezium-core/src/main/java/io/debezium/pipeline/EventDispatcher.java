@@ -205,7 +205,7 @@ public class EventDispatcher<T extends DataCollectionId> {
             }
             else {
                 DataCollectionSchema dataCollectionSchema = schema.schemaFor(dataCollectionId);
-//                LOGGER.info("SKSK the dataCollectionSchema is " + dataCollectionSchema);
+                // LOGGER.info("SKSK the dataCollectionSchema is " + dataCollectionSchema);
 
                 // TODO handle as per inconsistent schema info option
                 if (dataCollectionSchema == null) {

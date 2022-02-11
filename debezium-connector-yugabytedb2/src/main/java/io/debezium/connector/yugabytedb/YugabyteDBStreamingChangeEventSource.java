@@ -13,12 +13,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import io.debezium.connector.yugabytedb.connection.pgproto.YbProtoReplicationMessage;
 import org.postgresql.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yb.cdc.CdcService;
 import org.yb.client.*;
+import org.yb.master.MasterDdlOuterClass;
 
 import io.debezium.connector.yugabytedb.connection.OpId;
 import io.debezium.connector.yugabytedb.connection.ReplicationConnection;
@@ -26,6 +26,7 @@ import io.debezium.connector.yugabytedb.connection.ReplicationMessage.Operation;
 import io.debezium.connector.yugabytedb.connection.ReplicationStream;
 import io.debezium.connector.yugabytedb.connection.WalPositionLocator;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
+import io.debezium.connector.yugabytedb.connection.pgproto.YbProtoReplicationMessage;
 import io.debezium.connector.yugabytedb.spi.Snapshotter;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.pipeline.ErrorHandler;
@@ -36,7 +37,6 @@ import io.debezium.relational.TableId;
 import io.debezium.util.Clock;
 import io.debezium.util.DelayStrategy;
 import io.debezium.util.ElapsedTimeStrategy;
-import org.yb.master.MasterDdlOuterClass;
 
 /**
  *
@@ -246,7 +246,7 @@ public class YugabyteDBStreamingChangeEventSource implements
     }
 
     private void getChanges2(ChangeEventSourceContext context,
-                             YugabyteDBPartition partition,
+                             YugabyteDBPartition partitionn,
                              YugabyteDBOffsetContext offsetContext)
             throws Exception {
         LOGGER.debug("SKSK The offset is " + offsetContext.getOffset());
@@ -255,14 +255,14 @@ public class YugabyteDBStreamingChangeEventSource implements
         ListTablesResponse tablesResp = syncClient.getTablesList();
 
         Set<String> tIds = new HashSet<>();
-//        String[] includeTablesWithSchema = connectorConfig.tableIncludeList().split(",");
-//        List<String> includeTables = new ArrayList<>();
-//        for (String tableName : includeTablesWithSchema) {
-//            LOGGER.info(String.format("VKVK got %s from the configs", tableName));
-//            String[] schemaAndName = tableName.split(".");
-//            // The second element after splitting would be the table name.
-//            includeTables.add(schemaAndName[1]);
-//        }
+        // String[] includeTablesWithSchema = connectorConfig.tableIncludeList().split(",");
+        // List<String> includeTables = new ArrayList<>();
+        // for (String tableName : includeTablesWithSchema) {
+        // LOGGER.info(String.format("VKVK got %s from the configs", tableName));
+        // String[] schemaAndName = tableName.split(".");
+        // // The second element after splitting would be the table name.
+        // includeTables.add(schemaAndName[1]);
+        // }
 
         for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
             LOGGER.info("SKSK The table name is " + tableInfo.getName()); // todo vaibhav: it prints all the table names currently
@@ -277,14 +277,14 @@ public class YugabyteDBStreamingChangeEventSource implements
 
         Map<String, YBTable> tableIdToTable = new HashMap<>();
         String streamId = this.connectorConfig.streamId();
-//        LOGGER.info(String.format("Using stream with id %s", streamId));
+        // LOGGER.info(String.format("Using stream with id %s", streamId));
 
         List<Map<String, List<String>>> tableIdsToTabletIdsMapList = new ArrayList<>(1);
         int concurrency = 1;
         boolean createStream = true;
         // if the user has specified a stream ID in the configuration, do not create a stream and use
         // the specified one
-        if(streamId != null && streamId.isEmpty() == false) {
+        if (streamId != null && streamId.isEmpty() == false) {
             LOGGER.info("VKVK: Using a user specified stream ID: " + streamId);
             createStream = false;
         }
@@ -334,7 +334,7 @@ public class YugabyteDBStreamingChangeEventSource implements
 
             for (AbstractMap.SimpleImmutableEntry<String, String> entry : listTabletIdTableIdPair) {
                 final String tabletId = entry.getKey();
-
+                YBPartition part = new YBPartition(tabletId);
                 // the following will specify the connector polling interval at which yb-client will ask the database
                 // for changes
                 Thread.sleep(connectorConfig.cdcPollIntervalms());
@@ -387,14 +387,14 @@ public class YugabyteDBStreamingChangeEventSource implements
                                                     .valueOf(message.getTransactionId()),
                                             null,
                                             null/* taskContext.getSlotXmin(connection) */);
-                                    commitMessage(partition, offsetContext, lsn);
+                                    commitMessage(part, offsetContext, lsn);
                                 }
                                 continue;
                             }
 
                             if (message.getOperation() == Operation.BEGIN) {
                                 LOGGER.info("LSN in case of BEGIN is " + lsn);
-                                dispatcher.dispatchTransactionStartedEvent(partition,
+                                dispatcher.dispatchTransactionStartedEvent(part,
                                         message.getTransactionId(), offsetContext);
                             }
                             else if (message.getOperation() == Operation.COMMIT) {
@@ -405,8 +405,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                                         String.valueOf(message.getTransactionId()),
                                         null,
                                         null/* taskContext.getSlotXmin(connection) */);
-                                commitMessage(partition, offsetContext, lsn);
-                                dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext);
+                                commitMessage(part, offsetContext, lsn);
+                                dispatcher.dispatchTransactionCommittedEvent(part, offsetContext);
                             }
                             maybeWarnAboutGrowingWalBacklog(true);
                         }
@@ -444,7 +444,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                                     && dispatcher
                                             .dispatchDataChangeEvent(tableId,
                                                     new YugabyteDBChangeRecordEmitter(
-                                                            partition,
+                                                            part,
                                                             offsetContext,
                                                             clock,
                                                             connectorConfig,
@@ -471,7 +471,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                 }
                 else {
                     if (offsetContext.hasCompletelyProcessedPosition()) {
-                        dispatcher.dispatchHeartbeatEvent(partition, offsetContext);
+                        dispatcher.dispatchHeartbeatEvent(part, offsetContext);
                     }
                     noMessageIterations++;
                     if (noMessageIterations >= THROTTLE_NO_MESSAGE_BEFORE_PAUSE) {
@@ -529,7 +529,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         // }
     }
 
-    private void commitMessage(YugabyteDBPartition partition, YugabyteDBOffsetContext offsetContext,
+    private void commitMessage(YBPartition partition, YugabyteDBOffsetContext offsetContext,
                                final OpId lsn)
             throws SQLException, InterruptedException {
         lastCompletelyProcessedLsn = lsn;
