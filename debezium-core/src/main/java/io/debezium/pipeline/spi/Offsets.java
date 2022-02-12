@@ -40,14 +40,6 @@ public final class Offsets<P extends Partition, O extends OffsetContext> {
         return offsets.entrySet().iterator().next().getKey();
     }
 
-    public Set<P> getPartitions() {
-        Set<P> s = new HashSet<P>();
-        for (Map.Entry<P, O> p : offsets.entrySet())
-            s.add(p.getKey());
-
-        return s;
-    }
-
     /**
      * Returns the offset of the only offset that the task is configured to use.
      *
@@ -63,11 +55,4 @@ public final class Offsets<P extends Partition, O extends OffsetContext> {
         return offsets.entrySet().iterator().next().getValue();
     }
 
-    public Set<O> getTheOffset() {
-        Set<O> s = new HashSet<O>();
-        for (Map.Entry<P, O> p : offsets.entrySet())
-            s.add(p.getValue());
-
-        return s;
-    }
 }

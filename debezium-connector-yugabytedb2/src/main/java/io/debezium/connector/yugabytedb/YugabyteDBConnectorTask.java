@@ -11,10 +11,7 @@ import java.nio.charset.Charset;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.errors.ConnectException;
@@ -145,10 +142,11 @@ public class YugabyteDBConnectorTask
         // getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
         // new YugabyteDBOffsetContext.Loader(connectorConfig));
 
-        final Offsets<YBPartition, YugabyteDBOffsetContext> previousOffsets = getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
+        final Map<YBPartition, YugabyteDBOffsetContext> previousOffsets =
+                getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
                 new YugabyteDBOffsetContext.Loader(connectorConfig));
         final Clock clock = Clock.system();
-        final Set<YugabyteDBOffsetContext> previousOffset = previousOffsets.getTheOffset();
+        final Set<YugabyteDBOffsetContext> previousOffset = new HashSet<>(previousOffsets.values());
         YugabyteDBOffsetContext context = new YugabyteDBOffsetContext(previousOffset, connectorConfig);
 
         LoggingContext.PreviousContext previousContext = taskContext
@@ -241,7 +239,7 @@ public class YugabyteDBConnectorTask
         }
     }
 
-    Offsets<YBPartition, YugabyteDBOffsetContext> getPreviousOffsetss(
+    Map<YBPartition, YugabyteDBOffsetContext> getPreviousOffsetss(
                                                                       Partition.Provider<YBPartition> provider,
                                                                       OffsetContext.Loader<YugabyteDBOffsetContext> loader) {
         // return super.getPreviousOffsets(provider, loader);
@@ -265,8 +263,8 @@ public class YugabyteDBConnectorTask
         if (!found) {
             LOGGER.info("No previous offsets found");
         }
-
-        return new Offsets<>(offsets);
+        return offsets;
+        //return new Offsets<>(offsets);
     }
 
     // protected Offsets<P, O> getPreviousOffsets(Partition.Provider<P> provider, OffsetContext.Loader<O> loader) {
@@ -331,6 +329,9 @@ public class YugabyteDBConnectorTask
     @Override
     public List<SourceRecord> doPoll() throws InterruptedException {
 
+        // if all the tablets have been polled in a loop
+        // the poll the queue
+        // and notify.
         final List<DataChangeEvent> records = queue.poll();
         LOGGER.debug("SKSK doPoll Got the records from queue " + records);
         final List<SourceRecord> sourceRecords = records.stream()
