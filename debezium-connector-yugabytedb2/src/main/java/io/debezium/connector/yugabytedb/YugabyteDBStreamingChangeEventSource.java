@@ -433,7 +433,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                                 tableId = YugabyteDBSchema.parse(message.getTable());
                                 Objects.requireNonNull(tableId);
                             }
-                            LOGGER.debug("Received DML record {}", record);
+                            LOGGER.info("Received DML record {}", record);
 
                             offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn,
                                     message.getCommitTime(),

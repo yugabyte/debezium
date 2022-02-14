@@ -35,6 +35,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import io.debezium.time.*;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -66,14 +67,6 @@ import io.debezium.jdbc.JdbcValueConverters;
 import io.debezium.jdbc.TemporalPrecisionMode;
 import io.debezium.relational.Column;
 import io.debezium.relational.ValueConverter;
-import io.debezium.time.Conversions;
-import io.debezium.time.Interval;
-import io.debezium.time.MicroDuration;
-import io.debezium.time.MicroTime;
-import io.debezium.time.MicroTimestamp;
-import io.debezium.time.NanoTime;
-import io.debezium.time.ZonedTime;
-import io.debezium.time.ZonedTimestamp;
 import io.debezium.util.NumberConversions;
 import io.debezium.util.Strings;
 
@@ -261,7 +254,8 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
             case PgOid.JSON_ARRAY:
                 return SchemaBuilder.array(Json.builder().optional().build());
             case PgOid.TIME_ARRAY:
-                return SchemaBuilder.array(MicroTime.builder().optional().build());
+                // This will lead to the number of milliseconds past midnight in the output array.
+                return SchemaBuilder.array(Time.builder().optional().build());
             case PgOid.TIMETZ_ARRAY:
                 return SchemaBuilder.array(ZonedTime.builder().optional().build());
             case PgOid.TIMESTAMP_ARRAY:

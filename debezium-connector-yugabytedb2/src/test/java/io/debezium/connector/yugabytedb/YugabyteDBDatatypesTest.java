@@ -50,6 +50,17 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 		});
 	}
 
+	private CompletableFuture<Void> insertRecordsOfType(long numOfRowsToBeInserted) {
+		String formatInsertString = "INSERT INTO t1 VALUES (%d, '{12.345, 45.654}');";
+		return CompletableFuture.runAsync(() -> {
+			for (int i = 0; i < numOfRowsToBeInserted; i++) {
+				TestHelper.execute(String.format(formatInsertString, i));
+			}
+		}).exceptionally(throwable -> {
+			throw new RuntimeException(throwable);
+		});
+	}
+
 	// this is not working as the json String is not coming as expected
 	// some extra character is coming up while parsing
 	protected void /*Map<String, String>*/ printAfterValue(String jsonString) {
@@ -175,6 +186,24 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 
 		// insert rows in the table t1 with values <some-pk, 'Vaibhav', 'Kushwaha', 30>
 		insertRecords(recordsCount);
+
+		CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
+				.exceptionally(throwable -> {
+					throw new RuntimeException(throwable);
+				}).get();
+	}
+
+	@Test
+	public void testChanges() throws Exception {
+		TestHelper.dropAllSchemas();
+		TestHelper.executeDDL("postgres_create_tables.ddl");
+		Thread.sleep(1000); // todo vaibhav: find why this (sleep) is called
+		Configuration.Builder configBuilder = getConfigBuilder();
+		start(YugabyteDBConnector.class, configBuilder.build());
+		assertConnectorIsRunning();
+		final long recordsCount = 1;
+
+		insertRecordsOfType(recordsCount);
 
 		CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
 				.exceptionally(throwable -> {
