@@ -255,20 +255,29 @@ public class YugabyteDBStreamingChangeEventSource implements
         ListTablesResponse tablesResp = syncClient.getTablesList();
 
         Set<String> tIds = new HashSet<>();
-//        String[] includeTablesWithSchema = connectorConfig.tableIncludeList().split(",");
-//        List<String> includeTables = new ArrayList<>();
-//        for (String tableName : includeTablesWithSchema) {
-//            LOGGER.info(String.format("VKVK got %s from the configs", tableName));
-//            String[] schemaAndName = tableName.split(".");
-//            // The second element after splitting would be the table name.
-//            includeTables.add(schemaAndName[1]);
+
+        // Create a map of tables and schema names
+//        Map<String, String> schemaOf = new HashMap<>();
+//        String[] includedTables = connectorConfig.tableIncludeList().split(",");
+//        for (String tableName : includedTables) {
+//            LOGGER.info("VKVK table name: " + tableName);
+//            String[] schemaAndName = tableName.split("\\.");
+//            schemaOf.put(schemaAndName[1], schemaAndName[0]); // <tableName, schemaName>
 //        }
 
         for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-            LOGGER.info("SKSK The table name is " + tableInfo.getName()); // todo vaibhav: it prints all the table names currently
-            String fqlTableName = tableInfo.getNamespace().getName() + "." + "" + PUBLIC_SCHEMA_NAME
+            LOGGER.info("SKSK The table name is " + tableInfo.getName() + " with schema: " + tableInfo.getPgschemaName()); // todo vaibhav: it prints all the table names currently
+            // todo vaibhav: this works in tests but while running the connector image, this is giving
+            // an empty schema name so mapping it to ta value taken from connector config to safeguard
+            // todo vaibhav: this will fail when there are tables of the same name under multiple schemas
+//            String schemaFromMap = schemaOf.get(tableInfo.getName());
+//            LOGGER.info("VKVK Schema from map is: " + schemaFromMap);
+//            String schemaName = (tableInfo.getPgschemaName().isEmpty()) ? schemaFromMap : tableInfo.getPgschemaName();
+            LOGGER.info("VKVK pgSchemaName is present in table response: " + tableInfo.getPgschemaName());
+            String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName()
                     + "." + tableInfo.getName();
-            TableId tableId = YugabyteDBSchema.parse(fqlTableName);
+            LOGGER.info("VKVK fqlTableName is " + fqlTableName);
+            TableId tableId = YugabyteDBSchema.parseWithSchema(fqlTableName, tableInfo.getPgschemaName());
             if (this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
                 LOGGER.info("VKVK adding table ID: " + tableInfo.getId() + " of table: " + tableInfo.getName() + " in namespace: " + tableInfo.getNamespace().getName());
                 tIds.add(tableInfo.getId().toStringUtf8());
@@ -329,6 +338,8 @@ public class YugabyteDBStreamingChangeEventSource implements
         }
         LOGGER.debug("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
 
+//        String pgSchemaNameInRecord = null;
+
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                 (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
 
@@ -358,6 +369,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                     CdcService.RowMessage m = record.getRowMessage();
                     YbProtoReplicationMessage message = new YbProtoReplicationMessage(
                             m, this.yugabyteDBTypeRegistry);
+
+                    String pgSchemaNameInRecord = m.getPgschemaName();
 
                     final OpId lsn = new OpId(record.getCdcSdkOpId().getTerm(),
                             record.getCdcSdkOpId().getIndex(),
@@ -417,23 +430,24 @@ public class YugabyteDBStreamingChangeEventSource implements
                             // final String catalogName = "yugabyte";
                             TableId tableId = null;
                             if (message.getOperation() != Operation.NOOP) {
-                                tableId = YugabyteDBSchema.parse(message.getTable());
+                                tableId = YugabyteDBSchema.parseWithSchema(message.getTable(), pgSchemaNameInRecord);
                                 Objects.requireNonNull(tableId);
                             }
                             Table t = schema.tableFor(tableId);
                             LOGGER.debug("The schema is already registered {}", t);
                             if (t == null) {
-                                schema.refresh(tableId, message.getSchema());
+                                schema.refreshWithSchema(tableId, message.getSchema(), pgSchemaNameInRecord);
                             }
                         }
                         // DML event
                         else {
                             TableId tableId = null;
                             if (message.getOperation() != Operation.NOOP) {
-                                tableId = YugabyteDBSchema.parse(message.getTable());
+                                tableId = YugabyteDBSchema.parseWithSchema(message.getTable(), pgSchemaNameInRecord);
                                 Objects.requireNonNull(tableId);
                             }
                             LOGGER.info("Received DML record {}", record);
+                            LOGGER.info("VKV tableId is: " + tableId + " with schema: " + tableId.schema());
 
                             offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn,
                                     message.getCommitTime(),
@@ -451,7 +465,9 @@ public class YugabyteDBStreamingChangeEventSource implements
                                                             schema,
                                                             connection,
                                                             tableId,
-                                                            message));
+                                                            message,
+                                                            pgSchemaNameInRecord));
+                            LOGGER.info("VKVK dispatch status: " + dispatched);
 
                             maybeWarnAboutGrowingWalBacklog(dispatched);
                         }

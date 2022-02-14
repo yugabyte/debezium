@@ -51,7 +51,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 	}
 
 	private CompletableFuture<Void> insertRecordsOfType(long numOfRowsToBeInserted) {
-		String formatInsertString = "INSERT INTO t1 VALUES (%d, '{12.345, 45.654}');";
+		String formatInsertString = "INSERT INTO test_schema.t1 VALUES (%d, 234);";
 		return CompletableFuture.runAsync(() -> {
 			for (int i = 0; i < numOfRowsToBeInserted; i++) {
 				TestHelper.execute(String.format(formatInsertString, i));
@@ -82,7 +82,8 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 				.with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
 				.with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
 				.with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
-				.with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1"); // including t1 for now only
+				.with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "test_schema.t1")
+				.with(YugabyteDBConnectorConfig.SCHEMA_INCLUDE_LIST, "test_schema"); // including t1 for now only
 	}
 
 	private void consumeRecords(long recordsCount) {
