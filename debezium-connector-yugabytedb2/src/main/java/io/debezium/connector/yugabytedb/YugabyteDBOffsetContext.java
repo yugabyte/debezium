@@ -198,7 +198,9 @@ public class YugabyteDBOffsetContext implements OffsetContext {
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
 
         sourceInfo.update(tabletId, lsn, commitTime, txId, tableId, xmin);
-        this.tabletSourceInfo.put(tabletId, sourceInfo);
+        SourceInfo info = this.tabletSourceInfo.get(tabletId);
+        info.update(tabletId, lsn, commitTime, txId, tableId, xmin);
+        this.tabletSourceInfo.put(tabletId, info);
     }
 
     public void initSourceInfo(String tabletId, YugabyteDBConnectorConfig connectorConfig) {
