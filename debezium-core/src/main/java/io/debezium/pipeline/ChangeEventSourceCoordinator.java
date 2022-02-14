@@ -199,7 +199,7 @@ public class ChangeEventSourceCoordinator<P extends Partition, O extends OffsetC
         }
     }
 
-    public class ChangeEventSourceContextImpl implements ChangeEventSourceContext {
+    private class ChangeEventSourceContextImpl implements ChangeEventSourceContext {
 
         @Override
         public boolean isRunning() {
@@ -207,7 +207,7 @@ public class ChangeEventSourceCoordinator<P extends Partition, O extends OffsetC
         }
     }
 
-    public void streamingConnected(boolean status) {
+    private void streamingConnected(boolean status) {
         if (changeEventSourceMetricsFactory.connectionMetricHandledByCoordinator()) {
             streamingMetrics.connected(status);
         }
