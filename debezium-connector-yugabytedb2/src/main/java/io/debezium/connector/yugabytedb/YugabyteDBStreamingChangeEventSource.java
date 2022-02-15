@@ -266,7 +266,8 @@ public class YugabyteDBStreamingChangeEventSource implements
 //        }
 
         for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-            LOGGER.info("SKSK The table name is " + tableInfo.getName() + " with schema: " + tableInfo.getPgschemaName()); // todo vaibhav: it prints all the table names currently
+            LOGGER.info("SKSK The table name is " + tableInfo.getName() + " with schema: " +
+                    tableInfo.getPgschemaName()); // todo vaibhav: it prints all the table names currently
             // todo vaibhav: this works in tests but while running the connector image, this is giving
             // an empty schema name so mapping it to ta value taken from connector config to safeguard
             // todo vaibhav: this will fail when there are tables of the same name under multiple schemas

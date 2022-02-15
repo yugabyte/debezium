@@ -239,7 +239,7 @@ public final class TestHelper {
         try {
             return JdbcConfiguration.copy(Configuration.empty()/* fromSystemProperties("database.") */)
                 .withDefault(JdbcConfiguration.DATABASE, "yugabyte")
-                .withDefault(JdbcConfiguration.HOSTNAME, "127.0.0.1"/*InetAddress.getLocalHost().getHostAddress()*/)
+                .withDefault(JdbcConfiguration.HOSTNAME, "192.168.1.5"/*InetAddress.getLocalHost().getHostAddress()*/)
                 .withDefault(JdbcConfiguration.PORT, 5433)
                 .withDefault(JdbcConfiguration.USER, "yugabyte")
                 .withDefault(JdbcConfiguration.PASSWORD, "yugabyte")

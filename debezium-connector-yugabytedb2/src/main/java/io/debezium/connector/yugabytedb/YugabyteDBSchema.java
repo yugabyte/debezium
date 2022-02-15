@@ -469,10 +469,7 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
         if (tableId == null) {
             return null;
         }
-        if (tableId.schema() == null) {
-            LOGGER.info("VKVK schema while parsing is null, new tableId--> catalog: " +
-                    tableId.catalog() + " schema: " + pgSchemaName + " table: " + tableId.table());
-        }
+
         return tableId.schema() == null ? new TableId(tableId.catalog(), pgSchemaName, tableId.table()) : tableId;
     }
 

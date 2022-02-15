@@ -77,13 +77,13 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 
 	protected Configuration.Builder getConfigBuilder() throws Exception {
 		return TestHelper.defaultConfig()
-				.with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1") // this field is required as of now
+				.with(YugabyteDBConnectorConfig.HOSTNAME, "192.168.1.5") // this field is required as of now
 				.with(YugabyteDBConnectorConfig.PORT, 5433)
 				.with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
 				.with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
-				.with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
-				.with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "test_schema.t1")
-				.with(YugabyteDBConnectorConfig.SCHEMA_INCLUDE_LIST, "test_schema"); // including t1 for now only
+				.with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "192.168.1.5:7100")
+				.with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "vaibhav.test");
+//				.with(YugabyteDBConnectorConfig.SCHEMA_INCLUDE_LIST, "test_schema"); // including t1 for now only
 	}
 
 	private void consumeRecords(long recordsCount) {
