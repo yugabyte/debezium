@@ -71,11 +71,6 @@
             <artifactId>debezium-connector-postgres</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>io.debezium</groupId>
-            <artifactId>debezium-connector-yugabytedb</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
     <build>
         <plugins>

@@ -56,9 +56,10 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
 
     private final String pgSchemaName;
 
-    public YugabyteDBChangeRecordEmitter(Partition partition, OffsetContext offset, Clock clock, YugabyteDBConnectorConfig connectorConfig, YugabyteDBSchema schema,
-                                         YugabyteDBConnection connection, TableId tableId,
-                                         ReplicationMessage message) {
+    public YugabyteDBChangeRecordEmitter(Partition partition, OffsetContext offset, Clock clock,
+                                         YugabyteDBConnectorConfig connectorConfig,
+                                         YugabyteDBSchema schema, YugabyteDBConnection connection,
+                                         TableId tableId, ReplicationMessage message) {
         super(partition, offset, clock);
 
         this.schema = schema;
@@ -72,9 +73,10 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         this.pgSchemaName = null;
     }
 
-    public YugabyteDBChangeRecordEmitter(Partition partition, OffsetContext offset, Clock clock, YugabyteDBConnectorConfig connectorConfig, YugabyteDBSchema schema,
-                                         YugabyteDBConnection connection, TableId tableId,
-                                         ReplicationMessage message, String pgSchemaName) {
+    public YugabyteDBChangeRecordEmitter(Partition partition, OffsetContext offset, Clock clock,
+                                         YugabyteDBConnectorConfig connectorConfig,
+                                         YugabyteDBSchema schema, YugabyteDBConnection connection,
+                                         TableId tableId, ReplicationMessage message, String pgSchemaName) {
         super(partition, offset, clock);
 
         this.schema = schema;
@@ -108,7 +110,6 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
     public void emitChangeRecords(DataCollectionSchema schema, Receiver receiver) throws InterruptedException {
         schema = synchronizeTableSchema(schema);
         LOGGER.debug("SKSK the schema of the table is " + schema);
-        LOGGER.info("VKVK the schema initialized is " + pgSchemaName);
         super.emitChangeRecords(schema, receiver);
     }
 
@@ -243,7 +244,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         logger.info("Schema for table '{}' is missing", tableId);
         refreshTableFromDatabase(tableId);
         final TableSchema tableSchema = schema.schemaFor(tableId);
-        logger.info("VKVK table schema now is: " + tableSchema.id());
+
         if (tableSchema == null) {
             logger.warn("cannot load schema for table '{}'", tableId);
             return Optional.empty();
@@ -256,6 +257,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
 
     private void refreshTableFromDatabase(TableId tableId) {
         try {
+            // Using another implementation of refresh() to take into picture the schema information too.
 //            schema.refresh(connection, tableId, connectorConfig.skipRefreshSchemaOnMissingToastableData());
             schema.refresh(connection, tableId, connectorConfig.skipRefreshSchemaOnMissingToastableData(), schema.getSchemaPB());
         }
