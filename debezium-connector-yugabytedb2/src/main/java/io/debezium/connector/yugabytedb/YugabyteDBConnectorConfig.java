@@ -965,13 +965,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         return getConfig().getString(MASTER_ADDRESSES);
     }
 
-//    public int masterPort() {
-//        return getConfig().getInteger(MASTER_PORT);
-//    };
-//
-//    public String masterHost() {
-//        return getConfig().getString(MASTER_HOSTNAME);
-//    };
+    // public int masterPort() {
+    // return getConfig().getInteger(MASTER_PORT);
+    // };
+    //
+    // public String masterHost() {
+    // return getConfig().getString(MASTER_HOSTNAME);
+    // };
 
     public String streamId() {
         return getConfig().getString(STREAM_ID);

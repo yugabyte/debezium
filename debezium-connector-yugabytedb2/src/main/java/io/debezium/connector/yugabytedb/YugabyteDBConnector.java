@@ -168,6 +168,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             LOGGER.warn("Received exception while shutting down the client", e);
         }
     }
+
     private YBClient getYBClientBase(String hostAddress, long adminTimeout, long operationTimeout, long socketReadTimeout,
                                      int maxNumTablets, String certFile, String clientCert, String clientKey) {
         if (maxNumTablets == -1) {
@@ -187,13 +188,13 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
 
         AsyncYBClient asyncClient = new AsyncYBClient.AsyncYBClientBuilder(hostAddress)
-            .defaultAdminOperationTimeoutMs(adminTimeout)
-            .defaultOperationTimeoutMs(operationTimeout)
-            .defaultSocketReadTimeoutMs(socketReadTimeout)
-            .numTablets(maxNumTablets)
-            .sslCertFile(certFile)
-            .sslClientCertFiles(clientCert, clientKey)
-            .build();
+                .defaultAdminOperationTimeoutMs(adminTimeout)
+                .defaultOperationTimeoutMs(operationTimeout)
+                .defaultSocketReadTimeoutMs(socketReadTimeout)
+                .numTablets(maxNumTablets)
+                .sslCertFile(certFile)
+                .sslClientCertFiles(clientCert, clientKey)
+                .build();
 
         return new YBClient(asyncClient);
     }
@@ -265,28 +266,28 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     protected void validateTServerConnection(Map<String, ConfigValue> configValues,
                                              Configuration config) {
-//        ConfigValue hostnameValue = configValues.get(YugabyteDBConnectorConfig.MASTER_ADDRESSES.name());
-//        ConfigValue portValue = configValues.get(YugabyteDBConnectorConfig.MASTER_PORT.name());
+        // ConfigValue hostnameValue = configValues.get(YugabyteDBConnectorConfig.MASTER_ADDRESSES.name());
+        // ConfigValue portValue = configValues.get(YugabyteDBConnectorConfig.MASTER_PORT.name());
 
-//        String hostname = config.getString(YugabyteDBConnectorConfig.MASTER_HOSTNAME.toString());
-//        int port = config.getInteger(YugabyteDBConnectorConfig.MASTER_PORT.toString());
+        // String hostname = config.getString(YugabyteDBConnectorConfig.MASTER_HOSTNAME.toString());
+        // int port = config.getInteger(YugabyteDBConnectorConfig.MASTER_PORT.toString());
         // TODO: Suranjan Check for timeout, socket timeout property (vaibhav: implemented below)
         // TODO: Suranjan check for SSL property too and validate if set
         // TODO: CDCSDK We will check in future for user login and roles.
         String hostAddress = config.getString(YugabyteDBConnectorConfig.MASTER_ADDRESSES.toString());
         // todo vaibhav: check if the static variables can be replaced with their respective functions
         this.ybClient = getYBClientBase(hostAddress,
-            yugabyteDBConnectorConfig.adminOperationTimeoutMs(),
-            yugabyteDBConnectorConfig.operationTimeoutMs(),
-            yugabyteDBConnectorConfig.socketReadTimeoutMs(),
-            yugabyteDBConnectorConfig.maxNumTablets(),
-            yugabyteDBConnectorConfig.sslRootCert(),
-            yugabyteDBConnectorConfig.sslClientCert(),
-            yugabyteDBConnectorConfig.sslClientKey()); // always passing the ssl root certs,
+                yugabyteDBConnectorConfig.adminOperationTimeoutMs(),
+                yugabyteDBConnectorConfig.operationTimeoutMs(),
+                yugabyteDBConnectorConfig.socketReadTimeoutMs(),
+                yugabyteDBConnectorConfig.maxNumTablets(),
+                yugabyteDBConnectorConfig.sslRootCert(),
+                yugabyteDBConnectorConfig.sslClientCert(),
+                yugabyteDBConnectorConfig.sslClientKey()); // always passing the ssl root certs,
         // so whenever they are null, they will just be ignored
         // todo vaibhav: remove this comment
-//        this.ybClient = getYBClient(hostAddress, 60000,
-//                60000, 60000);
+        // this.ybClient = getYBClient(hostAddress, 60000,
+        // 60000, 60000);
         LOGGER.debug("The master host address is " + hostAddress);
         HostAndPort masterHostPort = ybClient.getLeaderMasterHostAndPort();
         if (masterHostPort == null) {

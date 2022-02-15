@@ -7,15 +7,15 @@ package io.debezium.connector.yugabytedb;
 
 import io.debezium.connector.common.AbstractPartitionTest;
 
-public class YugabyteDBPartitionTest extends AbstractPartitionTest<YugabyteDBPartition> {
+public class YugabyteDBPartitionTest extends AbstractPartitionTest<YBPartition> {
 
     @Override
-    protected YugabyteDBPartition createPartition1() {
-        return new YugabyteDBPartition("server1");
+    protected YBPartition createPartition1() {
+        return new YBPartition("server1");
     }
 
     @Override
-    protected YugabyteDBPartition createPartition2() {
-        return new YugabyteDBPartition("server2");
+    protected YBPartition createPartition2() {
+        return new YBPartition("server2");
     }
 }

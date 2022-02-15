@@ -21,6 +21,7 @@ import org.postgresql.jdbc.PgArray;
 import org.postgresql.util.PGmoney;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.yb.Value;
 
 import io.debezium.connector.yugabytedb.PgOid;
 import io.debezium.connector.yugabytedb.YugabyteDBStreamingChangeEventSource.PgConnectionSupplier;
@@ -31,7 +32,6 @@ import io.debezium.connector.yugabytedb.connection.AbstractColumnValue;
 import io.debezium.connector.yugabytedb.connection.wal2json.DateTimeFormat;
 import io.debezium.data.SpecialValueDecimal;
 import io.debezium.time.Conversions;
-import org.yb.Value;
 
 /**
  * Replication message column sent by <a href="https://github.com/debezium/postgres-decoderbufs">Postgres Decoderbufs</>

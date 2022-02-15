@@ -1,9 +1,12 @@
 package io.debezium.connector.yugabytedb;
 
-import io.debezium.config.Configuration;
-import io.debezium.data.SchemaUtil;
-import io.debezium.embedded.AbstractConnectorTest;
-import io.debezium.util.Strings;
+import static org.junit.Assert.*;
+
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
@@ -11,12 +14,10 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
-
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import io.debezium.config.Configuration;
+import io.debezium.data.SchemaUtil;
+import io.debezium.embedded.AbstractConnectorTest;
+import io.debezium.util.Strings;
 
 /**
  * Basic unit tests to check the behaviour with YugabyteDB datatypes

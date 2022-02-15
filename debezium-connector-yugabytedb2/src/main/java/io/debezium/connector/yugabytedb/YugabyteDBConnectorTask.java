@@ -11,8 +11,7 @@ import java.nio.charset.Charset;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.errors.ConnectException;
@@ -27,6 +26,7 @@ import io.debezium.config.Configuration;
 import io.debezium.config.Field;
 import io.debezium.connector.base.ChangeEventQueue;
 import io.debezium.connector.common.BaseSourceTask;
+import io.debezium.connector.common.OffsetReader;
 import io.debezium.connector.yugabytedb.connection.ReplicationConnection;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection.YugabyteDBValueConverterBuilder;
@@ -38,7 +38,9 @@ import io.debezium.pipeline.DataChangeEvent;
 import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.metrics.DefaultChangeEventSourceMetricsFactory;
+import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.pipeline.spi.Offsets;
+import io.debezium.pipeline.spi.Partition;
 import io.debezium.relational.TableId;
 import io.debezium.schema.TopicSelector;
 import io.debezium.util.Clock;
@@ -135,77 +137,25 @@ public class YugabyteDBConnectorTask
         schema = new YugabyteDBSchema(connectorConfig, yugabyteDBTypeRegistry, topicSelector,
                 valueConverterBuilder.build(yugabyteDBTypeRegistry));
         this.taskContext = new YugabyteDBTaskContext(connectorConfig, schema, topicSelector);
-        final Offsets<YugabyteDBPartition, YugabyteDBOffsetContext> previousOffsets = getPreviousOffsets(new YugabyteDBPartition.Provider(connectorConfig),
+        // get the tablet ids and load the offsets
+        // final Offsets<YugabyteDBPartition, YugabyteDBOffsetContext> previousOffsets =
+        // getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
+        // new YugabyteDBOffsetContext.Loader(connectorConfig));
+
+        final Map<YBPartition, YugabyteDBOffsetContext> previousOffsets =
+                getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
                 new YugabyteDBOffsetContext.Loader(connectorConfig));
         final Clock clock = Clock.system();
-        final YugabyteDBOffsetContext previousOffset = previousOffsets.getTheOnlyOffset();
+        final Set<YugabyteDBOffsetContext> previousOffset = new HashSet<>(previousOffsets.values());
+        YugabyteDBOffsetContext context = new YugabyteDBOffsetContext(previousOffset, connectorConfig);
 
         LoggingContext.PreviousContext previousContext = taskContext
                 .configureLoggingContext(CONTEXT_NAME);
         try {
             // Print out the server information
             // CDCSDK Get the table,
-            /*
-             * SlotState slotInfo = null;
-             * try {
-             * if (LOGGER.isInfoEnabled()) {
-             * LOGGER.info(jdbcConnection.serverInfo().toString());
-             * }
-             * slotInfo = jdbcConnection.getReplicationSlotState(null
-             *//* connectorConfig.slotName() *//*
-                                                * , connectorConfig.plugin().getPostgresPluginName());
-                                                * }
-                                                * catch (SQLException e) {
-                                                * LOGGER.warn("unable to load info of replication slot, Debezium will try to create the slot");
-                                                * }
-                                                * 
-                                                * if (previousOffset == null) {
-                                                * LOGGER.info("No previous offset found");
-                                                * // if we have no initial offset, indicate that to Snapshotter by passing null
-                                                * snapshotter.init(connectorConfig, null, slotInfo);
-                                                * }
-                                                * else {
-                                                * LOGGER.info("Found previous offset {}", previousOffset);
-                                                * snapshotter.init(connectorConfig, previousOffset.asOffsetState(), slotInfo);
-                                                * }
-                                                */
 
             ReplicationConnection replicationConnection = null;
-            /*
-             * SlotCreationResult slotCreatedInfo = null;
-             * if (snapshotter.shouldStream()) {
-             * final boolean doSnapshot = snapshotter.shouldSnapshot();
-             * replicationConnection = createReplicationConnection(this.taskContext,
-             * doSnapshot, connectorConfig.maxRetries(), connectorConfig.retryDelay());
-             * 
-             * // we need to create the slot before we start streaming if it doesn't exist
-             * // otherwise we can't stream back changes happening while the snapshot is taking
-             * place
-             * if (slotInfo == null) {
-             * try {
-             * slotCreatedInfo = replicationConnection.createReplicationSlot().orElse(null);
-             * }
-             * catch (SQLException ex) {
-             * String message = "Creation of replication slot failed";
-             * if (ex.getMessage().contains("already exists")) {
-             * message += "; when setting up multiple connectors for the same database host,
-             * please make sure to use a distinct replication slot name for each.";
-             * }
-             * throw new DebeziumException(message, ex);
-             * }
-             * }
-             * else {
-             * slotCreatedInfo = null;
-             * }
-             * }
-             */
-
-            // try {
-            // jdbcConnection.commit();
-            // }
-            // catch (SQLException e) {
-            // throw new DebeziumException(e);
-            // }
 
             queue = new ChangeEventQueue.Builder<DataChangeEvent>()
                     .pollInterval(connectorConfig.getPollInterval())
@@ -256,8 +206,9 @@ public class YugabyteDBConnectorTask
                     schemaNameAdjuster,
                     jdbcConnection);
 
-            ChangeEventSourceCoordinator<YugabyteDBPartition, YugabyteDBOffsetContext> coordinator = new YugabyteDBChangeEventSourceCoordinator(
-                    previousOffsets,
+            YugabyteDBChangeEventSourceCoordinator coordinator = new YugabyteDBChangeEventSourceCoordinator(
+                    new Offsets<>(Collections.singletonMap(new YugabyteDBPartition(),
+                            context)), // previousOffsets,
                     errorHandler,
                     YugabyteDBConnector.class,
                     connectorConfig,
@@ -287,6 +238,58 @@ public class YugabyteDBConnectorTask
             previousContext.restore();
         }
     }
+
+    Map<YBPartition, YugabyteDBOffsetContext> getPreviousOffsetss(
+                                                                      Partition.Provider<YBPartition> provider,
+                                                                      OffsetContext.Loader<YugabyteDBOffsetContext> loader) {
+        // return super.getPreviousOffsets(provider, loader);
+        // LOGGER.info("SKSK The offset is being loaded.");
+        Set<YBPartition> partitions = provider.getPartitions();
+        LOGGER.info("SKSK The size of partitions is " + partitions.size());
+        OffsetReader<YBPartition, YugabyteDBOffsetContext, OffsetContext.Loader<YugabyteDBOffsetContext>> reader = new OffsetReader<>(
+                context.offsetStorageReader(), loader);
+        Map<YBPartition, YugabyteDBOffsetContext> offsets = reader.offsets(partitions);
+
+        boolean found = false;
+        for (YBPartition partition : partitions) {
+            YugabyteDBOffsetContext offset = offsets.get(partition);
+
+            if (offset != null) {
+                found = true;
+                LOGGER.info("Found previous partition offset {}: {}", partition, offset);
+            }
+        }
+
+        if (!found) {
+            LOGGER.info("No previous offsets found");
+        }
+        return offsets;
+        //return new Offsets<>(offsets);
+    }
+
+    // protected Offsets<P, O> getPreviousOffsets(Partition.Provider<P> provider, OffsetContext.Loader<O> loader) {
+    // // LOGGER.info("SKSK The offset is being loaded.");
+    // Set<P> partitions = provider.getPartitions();
+    // OffsetReader<P, O, OffsetContext.Loader<O>> reader = new OffsetReader<>(
+    // context.offsetStorageReader(), loader);
+    // Map<P, O> offsets = reader.offsets(partitions);
+    //
+    // boolean found = false;
+    // for (P partition : partitions) {
+    // O offset = offsets.get(partition);
+    //
+    // if (offset != null) {
+    // found = true;
+    // LOGGER.info("Found previous partition offset {}: {}", partition, offset);
+    // }
+    // }
+    //
+    // if (!found) {
+    // LOGGER.info("No previous offsets found");
+    // }
+    //
+    // return new Offsets<>(offsets);
+    // }
 
     public ReplicationConnection createReplicationConnection(YugabyteDBTaskContext taskContext,
                                                              boolean doSnapshot,
@@ -326,6 +329,9 @@ public class YugabyteDBConnectorTask
     @Override
     public List<SourceRecord> doPoll() throws InterruptedException {
 
+        // if all the tablets have been polled in a loop
+        // the poll the queue
+        // and notify.
         final List<DataChangeEvent> records = queue.poll();
         LOGGER.debug("SKSK doPoll Got the records from queue " + records);
         final List<SourceRecord> sourceRecords = records.stream()
