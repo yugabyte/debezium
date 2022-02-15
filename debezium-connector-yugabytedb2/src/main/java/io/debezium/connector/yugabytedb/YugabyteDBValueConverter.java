@@ -175,10 +175,12 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
     public SchemaBuilder schemaBuilder(Column column) {
         int oidValue = column.nativeType();
         switch (oidValue) {
-            case PgOid.BIT:
             case PgOid.BIT_ARRAY:
+                return null; // not taking forward bit array currently
+            case PgOid.BIT: // this currently means a bit string
             case PgOid.VARBIT:
-                return column.length() > 1 ? Bits.builder(column.length()) : SchemaBuilder.bool();
+                return SchemaBuilder.string();
+//                return column.length() > 1 ? Bits.builder(column.length()) : SchemaBuilder.bool();
             case PgOid.INTERVAL:
                 return intervalMode == IntervalHandlingMode.STRING ? Interval.builder() : MicroDuration.builder();
             case PgOid.TIMESTAMPTZ:
@@ -361,7 +363,8 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
         switch (oidValue) {
             case PgOid.BIT:
             case PgOid.VARBIT:
-                return convertBits(column, fieldDefn);
+                return data -> convertString(column, fieldDefn, data);
+//                return convertBits(column, fieldDefn);
             case PgOid.INTERVAL:
                 return data -> convertInterval(column, fieldDefn, data);
             case PgOid.TIME:

@@ -51,7 +51,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 	}
 
 	private CompletableFuture<Void> insertRecordsOfType(long numOfRowsToBeInserted) {
-		String formatInsertString = "INSERT INTO t1 VALUES (%d, '{12.345, 45.654}');";
+		String formatInsertString = "INSERT INTO t1 VALUES (%d, '1101101');";
 		return CompletableFuture.runAsync(() -> {
 			for (int i = 0; i < numOfRowsToBeInserted; i++) {
 				TestHelper.execute(String.format(formatInsertString, i));
