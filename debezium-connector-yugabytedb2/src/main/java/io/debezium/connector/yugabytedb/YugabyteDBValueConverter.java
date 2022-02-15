@@ -175,8 +175,6 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
     public SchemaBuilder schemaBuilder(Column column) {
         int oidValue = column.nativeType();
         switch (oidValue) {
-            case PgOid.BIT_ARRAY:
-                return null; // not taking forward bit array currently
             case PgOid.BIT: // this currently means a bit string
             case PgOid.VARBIT:
                 return SchemaBuilder.string();
@@ -194,6 +192,7 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
             case PgOid.JSONB_OID:
             case PgOid.JSON:
                 return Json.builder();
+            case PgOid.BIT_ARRAY:
             case PgOid.TSRANGE_OID:
             case PgOid.TSTZRANGE_OID:
             case PgOid.DATERANGE_OID:
@@ -222,6 +221,7 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
                 return SchemaBuilder.array(SchemaBuilder.OPTIONAL_INT32_SCHEMA);
             case PgOid.INT8_ARRAY:
                 return SchemaBuilder.array(SchemaBuilder.OPTIONAL_INT64_SCHEMA);
+            case PgOid.VARBIT_ARRAY:
             case PgOid.CHAR_ARRAY:
             case PgOid.VARCHAR_ARRAY:
             case PgOid.TEXT_ARRAY:
@@ -279,7 +279,6 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
             case PgOid.MONEY_ARRAY:
             case PgOid.NAME_ARRAY:
             case PgOid.INTERVAL_ARRAY:
-            case PgOid.VARBIT_ARRAY:
             case PgOid.XML_ARRAY:
             case PgOid.POINT_ARRAY:
             case PgOid.REF_CURSOR_ARRAY:
@@ -377,6 +376,7 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
                 return data -> convertTimeWithZone(column, fieldDefn, data);
             case PgOid.OID:
                 return data -> convertBigInt(column, fieldDefn, data);
+            case PgOid.BIT_ARRAY:
             case PgOid.JSONB_OID:
             case PgOid.UUID:
             case PgOid.TSRANGE_OID:
@@ -399,6 +399,7 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
                 return (data) -> convertDecimal(column, fieldDefn, data, decimalMode);
             case PgOid.BYTEA:
                 return data -> convertBinary(column, fieldDefn, data, binaryMode);
+            case PgOid.VARBIT_ARRAY:
             case PgOid.INT2_ARRAY:
             case PgOid.INT4_ARRAY:
             case PgOid.INT8_ARRAY:
@@ -437,7 +438,6 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
             case PgOid.MONEY_ARRAY:
             case PgOid.NAME_ARRAY:
             case PgOid.INTERVAL_ARRAY:
-            case PgOid.VARBIT_ARRAY:
             case PgOid.XML_ARRAY:
             case PgOid.POINT_ARRAY:
             case PgOid.REF_CURSOR_ARRAY:
