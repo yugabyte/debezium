@@ -6,9 +6,6 @@ import io.debezium.embedded.AbstractConnectorTest;
 import io.debezium.util.Strings;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.source.SourceRecord;
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -50,7 +47,19 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 		});
 	}
 
-	private CompletableFuture<Void> insertRecordsOfType(long numOfRowsToBeInserted) {
+	private CompletableFuture<Void> insertRecordsInSchema(long numOfRowsToBeInserted) {
+		String formatInsertString = "INSERT INTO test_schema.t1 VALUES (%d, 'Vaibhav', " +
+				"'Kushwaha', 30);";
+		return CompletableFuture.runAsync(() -> {
+			for (int i = 0; i < numOfRowsToBeInserted; i++) {
+				TestHelper.execute(String.format(formatInsertString, i));
+			}
+		}).exceptionally(throwable -> {
+			throw new RuntimeException(throwable);
+		});
+	}
+
+	private CompletableFuture<Void> insertRecordsForTest(long numOfRowsToBeInserted) {
 		String formatInsertString = "INSERT INTO t1 VALUES (%d, E'\\\\001');";
 		return CompletableFuture.runAsync(() -> {
 			for (int i = 0; i < numOfRowsToBeInserted; i++) {
@@ -61,19 +70,6 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 		});
 	}
 
-	// this is not working as the json String is not coming as expected
-	// some extra character is coming up while parsing
-	protected void /*Map<String, String>*/ printAfterValue(String jsonString) {
-		try {
-			System.out.println("VKVK string: " + jsonString);
-			JSONObject jsonObj = (JSONObject) new JSONParser().parse(jsonString);
-
-			System.out.println("VKVK value: " + jsonObj.get("value"));
-		} catch (ParseException pe) {
-			System.out.println("Exception while parsing json string: " + pe);
-			fail();
-		}
-	}
 
 	protected Configuration.Builder getConfigBuilder() throws Exception {
 		return TestHelper.defaultConfig()
@@ -82,7 +78,17 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 				.with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
 				.with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
 				.with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
-				.with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1"); // including t1 for now only
+				.with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1");
+	}
+
+	protected Configuration.Builder getConfigBuilderWithSchema() throws Exception {
+		return TestHelper.defaultConfig()
+				.with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1")
+				.with(YugabyteDBConnectorConfig.PORT, 5433)
+				.with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
+				.with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
+				.with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
+				.with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "test_schema.t1");
 	}
 
 	private void consumeRecords(long recordsCount) {
@@ -105,21 +111,6 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 		for (int i = 0; i < records.size(); ++i) {
 			// verify the records
 			assertInsert(records.get(i), "id", i);
-		}
-	}
-
-	private void getRecordsInJson(long recordsCount, List<String> recordsInJson) {
-		int totalConsumedRecords = 0;
-		long start = System.currentTimeMillis();
-		List<SourceRecord> records = new ArrayList<>();
-		while (totalConsumedRecords < recordsCount) {
-			int consumed = super.consumeAvailableRecords(record -> {
-				recordsInJson.add(SchemaUtil.asString(record));
-				// printAfterValue(SchemaUtil.asString(record)); // function not working --> throwing exception
-			});
-			if (consumed > 0) {
-				totalConsumedRecords += consumed;
-			}
 		}
 	}
 
@@ -203,7 +194,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 		assertConnectorIsRunning();
 		final long recordsCount = 1;
 
-		insertRecordsOfType(recordsCount);
+		insertRecordsForTest(recordsCount);
 
 		CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
 				.exceptionally(throwable -> {
@@ -229,28 +220,6 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 				}).get();
 	}
 
-	// todo vaibhav: this test fails with an exception while parsing json string as of now
-	// the error is due to the error while parsing the sequence list which is "sequence":"[null,"1:2::0:0"]"
-	@Test
-	public void testSample() throws Exception {
-		TestHelper.dropAllSchemas();
-		TestHelper.executeDDL("postgres_create_tables.ddl");
-		Thread.sleep(1000); // todo vaibhav: find why this is called
-		Configuration.Builder configBuilder = getConfigBuilder();
-		start(YugabyteDBConnector.class, configBuilder.build());
-		assertConnectorIsRunning();
-		final long recordsCount = 1;
-
-		// insert rows in the table t1 with values <some-pk, 'Vaibhav', 'Kushwaha', 30>
-		insertRecords(recordsCount);
-
-		List<String> recordsInJson = new ArrayList<>();
-		CompletableFuture.runAsync(() -> getRecordsInJson(recordsCount, recordsInJson))
-				.exceptionally(throwable -> {
-					throw new RuntimeException(throwable);
-				}).get();
-	}
-
 	@Test
 	public void testVerifyValue() throws Exception {
 		TestHelper.dropAllSchemas();
@@ -263,6 +232,25 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 
 		// insert rows in the table t1 with values <some-pk, 'Vaibhav', 'Kushwaha', 30>
 		insertRecords(recordsCount);
+
+		CompletableFuture.runAsync(() -> verifyValue(recordsCount))
+				.exceptionally(throwable -> {
+					throw new RuntimeException(throwable);
+				}).get();
+	}
+
+	@Test
+	public void testNonPublicSchema() throws Exception {
+		TestHelper.dropAllSchemas();
+		TestHelper.executeDDL("tables_in_non_public_schema.ddl");
+		Thread.sleep(1000);
+		Configuration.Builder configBuilder = getConfigBuilderWithSchema();
+		start(YugabyteDBConnector.class, configBuilder.build());
+		assertConnectorIsRunning();
+		final long recordsCount = 1;
+
+		// insert rows in the table t1 with values <some-pk, 'Vaibhav', 'Kushwaha', 30>
+		insertRecordsInSchema(recordsCount);
 
 		CompletableFuture.runAsync(() -> verifyValue(recordsCount))
 				.exceptionally(throwable -> {
