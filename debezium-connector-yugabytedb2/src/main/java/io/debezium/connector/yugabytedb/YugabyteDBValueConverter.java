@@ -175,7 +175,6 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
     public SchemaBuilder schemaBuilder(Column column) {
         int oidValue = column.nativeType();
         switch (oidValue) {
-//                return column.length() > 1 ? Bits.builder(column.length()) : SchemaBuilder.bool();
             case PgOid.INTERVAL:
                 return intervalMode == IntervalHandlingMode.STRING ? Interval.builder() : MicroDuration.builder();
             case PgOid.TIMESTAMPTZ:
@@ -189,8 +188,9 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
             case PgOid.JSONB_OID:
             case PgOid.JSON:
                 return Json.builder();
-            case PgOid.BIT: // this currently means a bit string
-            case PgOid.VARBIT: // this means bit string too
+            case PgOid.BIT:
+            case PgOid.VARBIT:
+                // The types BIT and VARBIT refer to the bit strings.
             case PgOid.BIT_ARRAY:
             case PgOid.TSRANGE_OID:
             case PgOid.TSTZRANGE_OID:
@@ -213,9 +213,9 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
             case PgOid.NUMERIC:
                 return numericSchema(column);
             case PgOid.BYTEA:
-                return BinaryHandlingMode.BYTES.getSchema();
-//                return SchemaBuilder.bytes();
+                // todo: commented because binary modes are not handled as of now, we send everything as a string only
 //                return binaryMode.getSchema();
+                return SchemaBuilder.string();
             case PgOid.INT2_ARRAY:
                 return SchemaBuilder.array(SchemaBuilder.OPTIONAL_INT16_SCHEMA);
             case PgOid.INT4_ARRAY:
@@ -342,7 +342,9 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
         if (decimalMode == DecimalMode.PRECISE && isVariableScaleDecimal(column)) {
             return VariableScaleDecimal.builder();
         }
+
         return SpecialValueDecimal.builder(decimalMode, column.length(), column.scale().orElseGet(() -> 0));
+//        return SpecialValueDecimal.builder(decimalMode, 1000, 0);
     }
 
     private SchemaBuilder hstoreSchema() {
@@ -397,7 +399,9 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
             case PgOid.NUMERIC:
                 return (data) -> convertDecimal(column, fieldDefn, data, decimalMode);
             case PgOid.BYTEA:
-                return data -> convertBinaryToBytes(column, fieldDefn, data);
+                return data -> convertString(column, fieldDefn, data);
+                // Commented out because bytea are converted to strings as of now and being sent
+                // across Debezium
 //                return data -> convertBinary(column, fieldDefn, data, binaryMode);
             case PgOid.VARBIT_ARRAY:
             case PgOid.INT2_ARRAY:
