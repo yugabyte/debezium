@@ -35,7 +35,6 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import io.debezium.time.*;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -55,7 +54,6 @@ import io.debezium.config.CommonConnectorConfig.BinaryHandlingMode;
 import io.debezium.connector.yugabytedb.YugabyteDBConnectorConfig.HStoreHandlingMode;
 import io.debezium.connector.yugabytedb.YugabyteDBConnectorConfig.IntervalHandlingMode;
 import io.debezium.connector.yugabytedb.data.Ltree;
-import io.debezium.data.Bits;
 import io.debezium.data.Json;
 import io.debezium.data.SpecialValueDecimal;
 import io.debezium.data.Uuid;
@@ -67,6 +65,7 @@ import io.debezium.jdbc.JdbcValueConverters;
 import io.debezium.jdbc.TemporalPrecisionMode;
 import io.debezium.relational.Column;
 import io.debezium.relational.ValueConverter;
+import io.debezium.time.*;
 import io.debezium.util.NumberConversions;
 import io.debezium.util.Strings;
 
@@ -214,7 +213,7 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
                 return numericSchema(column);
             case PgOid.BYTEA:
                 // todo: commented because binary modes are not handled as of now, we send everything as a string only
-//                return binaryMode.getSchema();
+                // return binaryMode.getSchema();
                 return SchemaBuilder.string();
             case PgOid.INT2_ARRAY:
                 return SchemaBuilder.array(SchemaBuilder.OPTIONAL_INT16_SCHEMA);
@@ -344,7 +343,7 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
         }
 
         return SpecialValueDecimal.builder(decimalMode, column.length(), column.scale().orElseGet(() -> 0));
-//        return SpecialValueDecimal.builder(decimalMode, 1000, 0);
+        // return SpecialValueDecimal.builder(decimalMode, 1000, 0);
     }
 
     private SchemaBuilder hstoreSchema() {
@@ -400,9 +399,9 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
                 return (data) -> convertDecimal(column, fieldDefn, data, decimalMode);
             case PgOid.BYTEA:
                 return data -> convertString(column, fieldDefn, data);
-                // Commented out because bytea are converted to strings as of now and being sent
-                // across Debezium
-//                return data -> convertBinary(column, fieldDefn, data, binaryMode);
+            // Commented out because bytea are converted to strings as of now and being sent
+            // across Debezium
+            // return data -> convertBinary(column, fieldDefn, data, binaryMode);
             case PgOid.VARBIT_ARRAY:
             case PgOid.INT2_ARRAY:
             case PgOid.INT4_ARRAY:

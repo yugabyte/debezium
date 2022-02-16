@@ -142,8 +142,7 @@ public class YugabyteDBConnectorTask
         // getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
         // new YugabyteDBOffsetContext.Loader(connectorConfig));
 
-        final Map<YBPartition, YugabyteDBOffsetContext> previousOffsets =
-                getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
+        final Map<YBPartition, YugabyteDBOffsetContext> previousOffsets = getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
                 new YugabyteDBOffsetContext.Loader(connectorConfig));
         final Clock clock = Clock.system();
         final Set<YugabyteDBOffsetContext> previousOffset = new HashSet<>(previousOffsets.values());
@@ -240,8 +239,8 @@ public class YugabyteDBConnectorTask
     }
 
     Map<YBPartition, YugabyteDBOffsetContext> getPreviousOffsetss(
-                                                                      Partition.Provider<YBPartition> provider,
-                                                                      OffsetContext.Loader<YugabyteDBOffsetContext> loader) {
+                                                                  Partition.Provider<YBPartition> provider,
+                                                                  OffsetContext.Loader<YugabyteDBOffsetContext> loader) {
         // return super.getPreviousOffsets(provider, loader);
         // LOGGER.info("SKSK The offset is being loaded.");
         Set<YBPartition> partitions = provider.getPartitions();
@@ -264,7 +263,7 @@ public class YugabyteDBConnectorTask
             LOGGER.info("No previous offsets found");
         }
         return offsets;
-        //return new Offsets<>(offsets);
+        // return new Offsets<>(offsets);
     }
 
     // protected Offsets<P, O> getPreviousOffsets(Partition.Provider<P> provider, OffsetContext.Loader<O> loader) {

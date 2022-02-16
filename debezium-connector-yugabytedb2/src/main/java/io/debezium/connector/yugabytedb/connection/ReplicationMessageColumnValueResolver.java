@@ -131,9 +131,9 @@ public class ReplicationMessageColumnValueResolver {
 
             case "bytea":
                 return value.asString();
-                // todo: commented because we send the value as hex strings, we need to check in
-                // future iterations if that can be modified back
-//                return value.asByteArray();
+            // todo: commented because we send the value as hex strings, we need to check in
+            // future iterations if that can be modified back
+            // return value.asByteArray();
 
             // these are all PG-specific types and we use the JDBC representations
             // note that, with the exception of point, no converters for these types are implemented yet,
