@@ -58,11 +58,6 @@
                 </dependency>
                 <dependency>
                     <groupId>io.debezium</groupId>
-                    <artifactId>debezium-connector-yugabytedb</artifactId>
-                    <scope>runtime</scope>
-                </dependency>
-                <dependency>
-                    <groupId>io.debezium</groupId>
                     <artifactId>debezium-connector-mongodb</artifactId>
                 </dependency>
                 <dependency>

@@ -419,7 +419,8 @@ public class YugabyteDBSnapshotChangeEventSource extends AbstractSnapshotChangeE
         // schema.refresh(jdbcConnection, false);
     }
 
-    protected SchemaChangeEvent getCreateTableEvent(RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext,
+    protected SchemaChangeEvent getCreateTableEvent(
+                                                    RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext,
                                                     Table table)
             throws SQLException {
         return new SchemaChangeEvent(
@@ -445,7 +446,8 @@ public class YugabyteDBSnapshotChangeEventSource extends AbstractSnapshotChangeE
      * @param tableId the table to generate a query for
      * @return a valid query string
      */
-    protected Optional<String> getSnapshotSelect(RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext,
+    protected Optional<String> getSnapshotSelect(
+                                                 RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext,
                                                  TableId tableId, List<String> columns) {
         return snapshotter.buildSnapshotQuery(tableId, columns);
     }

@@ -255,42 +255,39 @@ public class YugabyteDBStreamingChangeEventSource implements
         Set<String> tIds = new HashSet<>();
 
         for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-            LOGGER.info("SKSK The table name is " + tableInfo.getName() + " with schema: " +
+            LOGGER.info("SKSK The table name is " + tableInfo.getName() + " under schema: " +
                     tableInfo.getPgschemaName()); // todo vaibhav: it prints all the table names currently
-            // todo vaibhav: this works in tests but while running the connector image, this is giving
-            // an empty schema name so mapping it to ta value taken from connector config to safeguard
-            // todo vaibhav: this will fail when there are tables of the same name under multiple schemas
-            // String schemaFromMap = schemaOf.get(tableInfo.getName());
-            // LOGGER.info("VKVK Schema from map is: " + schemaFromMap);
-            // String schemaName = (tableInfo.getPgschemaName().isEmpty()) ? schemaFromMap : tableInfo.getPgschemaName();
-            LOGGER.info("VKVK pgSchemaName is present in table response: " + tableInfo.getPgschemaName());
             String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName()
                     + "." + tableInfo.getName();
-            LOGGER.info("VKVK fqlTableName is " + fqlTableName);
+            LOGGER.info("VKVK Fully qualified table name: " + fqlTableName);
             TableId tableId = YugabyteDBSchema.parseWithSchema(fqlTableName, tableInfo.getPgschemaName());
             if (this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
-                LOGGER.info("VKVK adding table ID: " + tableInfo.getId() + " of table: " + tableInfo.getName() + " in namespace: " + tableInfo.getNamespace().getName());
+                LOGGER.info(String.format("VKVK Adding table ID for streaming: %s (%s.%s.%s)",
+                        tableInfo.getId().toStringUtf8(), tableInfo.getNamespace().getName(),
+                        tableInfo.getPgschemaName(), tableInfo.getName()));
                 tIds.add(tableInfo.getId().toStringUtf8());
             }
         }
 
         Map<String, YBTable> tableIdToTable = new HashMap<>();
         String streamId = this.connectorConfig.streamId();
-        // LOGGER.info(String.format("Using stream with id %s", streamId));
 
         List<Map<String, List<String>>> tableIdsToTabletIdsMapList = new ArrayList<>(1);
         int concurrency = 1;
         boolean createStream = true;
-        // if the user has specified a stream ID in the configuration, do not create a stream and use
+
+        // If the user has specified a stream ID in the configuration, do not create a stream and use
         // the specified one
         if (streamId != null && streamId.isEmpty() == false) {
             LOGGER.info("VKVK: Using a user specified stream ID: " + streamId);
             createStream = false;
         }
+
         for (String tId : tIds) {
             LOGGER.info("SKSK the table uuid is " + tIds);
             YBTable table = this.syncClient.openTableByUUID(tId);
             tableIdToTable.put(tId, table);
+
             if (createStream) {
                 streamId = this.syncClient.createCDCStream(table, connectorConfig.databaseName(),
                         "PROTO",
@@ -298,6 +295,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                 LOGGER.info(String.format("Created a new stream ID: %s", streamId));
                 createStream = false;
             }
+
             List<LocatedTablet> tabletLocations = table.getTabletsLocations(30000);
 
             for (int i = 0; i < concurrency; i++) {
@@ -334,8 +332,8 @@ public class YugabyteDBStreamingChangeEventSource implements
             for (AbstractMap.SimpleImmutableEntry<String, String> entry : listTabletIdTableIdPair) {
                 final String tabletId = entry.getKey();
                 YBPartition part = new YBPartition(tabletId);
-                // the following will specify the connector polling interval at which yb-client will ask the database
-                // for changes
+                // The following will specify the connector polling interval at which
+                // yb-client will ask the database for changes
                 Thread.sleep(connectorConfig.cdcPollIntervalms());
 
                 YBTable table = tableIdToTable.get(entry.getValue());
@@ -414,16 +412,18 @@ public class YugabyteDBStreamingChangeEventSource implements
                         else if (message.isDDLMessage()) {
                             LOGGER.debug("Received DDL message {}", message.getSchema().toString()
                                     + " the table is " + message.getTable());
-                            // TODO: Update the schema
-                            // final String catalogName = "yugabyte";
+
                             TableId tableId = null;
                             if (message.getOperation() != Operation.NOOP) {
                                 tableId = YugabyteDBSchema.parseWithSchema(message.getTable(), pgSchemaNameInRecord);
                                 Objects.requireNonNull(tableId);
                             }
+                            // Getting the table with the help of the schema.
                             Table t = schema.tableFor(tableId);
                             LOGGER.debug("The schema is already registered {}", t);
                             if (t == null) {
+                                // If we fail to achieve the table, that means we have not specified correct schema information,
+                                // now try to refresh the schema.
                                 schema.refreshWithSchema(tableId, message.getSchema(), pgSchemaNameInRecord);
                             }
                         }
@@ -434,8 +434,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                                 tableId = YugabyteDBSchema.parseWithSchema(message.getTable(), pgSchemaNameInRecord);
                                 Objects.requireNonNull(tableId);
                             }
-                            LOGGER.info("Received DML record {}", record);
-                            LOGGER.info("VKV tableId is: " + tableId + " with schema: " + tableId.schema());
+                            // If you need to print the received record, change debug level to info
+                            LOGGER.debug("Received DML record {}", record);
 
                             offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn,
                                     message.getCommitTime(),
@@ -455,7 +455,6 @@ public class YugabyteDBStreamingChangeEventSource implements
                                                             tableId,
                                                             message,
                                                             pgSchemaNameInRecord));
-                            LOGGER.info("VKVK dispatch status: " + dispatched);
 
                             maybeWarnAboutGrowingWalBacklog(dispatched);
                         }
