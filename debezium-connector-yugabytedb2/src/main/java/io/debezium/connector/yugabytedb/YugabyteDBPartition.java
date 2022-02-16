@@ -5,8 +5,6 @@
  */
 package io.debezium.connector.yugabytedb;
 
-import static io.debezium.connector.yugabytedb.YugabyteDBSchema.PUBLIC_SCHEMA_NAME;
-
 import java.util.*;
 
 import org.slf4j.Logger;
@@ -52,43 +50,33 @@ public class YugabyteDBPartition implements Partition {
             final AsyncYBClient asyncYBClient;
             final YBClient syncClient;
             asyncYBClient = new AsyncYBClient.AsyncYBClientBuilder(masterAddress)
-                    .defaultAdminOperationTimeoutMs(30000)
-                    .defaultOperationTimeoutMs(30000)
-                    .defaultSocketReadTimeoutMs(30000)
+                    .defaultAdminOperationTimeoutMs(connectorConfig.adminOperationTimeoutMs())
+                    .defaultOperationTimeoutMs(connectorConfig.operationTimeoutMs())
+                    .defaultSocketReadTimeoutMs(connectorConfig.socketReadTimeoutMs())
+                    .numTablets(connectorConfig.maxNumTablets())
+                    .sslCertFile(connectorConfig.sslRootCert())
+                    .sslClientCertFiles(connectorConfig.sslClientCert(), connectorConfig.sslClientKey())
                     .build();
 
             syncClient = new YBClient(asyncYBClient);
 
             ListTablesResponse tablesResp = null;
+
             try {
                 tablesResp = syncClient.getTablesList();
-
-                String tId = "";
-                // this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded();
-
-                for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-                    LOGGER.info("SKSK The table name is " + tableInfo.getName());
-                    if (tableInfo.getName().equals("t1") &&
-                            tableInfo.getNamespace().getName().equals("yugabyte")) {
-                        tId = tableInfo.getId().toStringUtf8();
-                    }
-                }
-                LOGGER.info("SKSK the table uuid is " + tId);
-                YBTable table = syncClient.openTableByUUID(tId);
-
             }
             catch (Exception e) {
                 e.printStackTrace();
             }
+
             Set<YBPartition> partititons = new HashSet<>();
             for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-                LOGGER.info("SKSK The table name is " + tableInfo.getName()); // todo vaibhav: it prints all the table names currently
-                String fqlTableName = tableInfo.getNamespace().getName() + "." + "" + PUBLIC_SCHEMA_NAME
+                LOGGER.info("SKSK The table name is " + tableInfo.getName());
+                String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName()
                         + "." + tableInfo.getName();
-                TableId tableId = YugabyteDBSchema.parse(fqlTableName);
+                TableId tableId = YugabyteDBSchema.parseWithSchema(fqlTableName, tableInfo.getPgschemaName());
                 if (this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
-                    LOGGER.info(
-                            "VKVK adding table ID: " + tableInfo.getId() + " of table: " + tableInfo.getName() + " in namespace: " + tableInfo.getNamespace().getName());
+                    LOGGER.info("VKVK adding tableId " + tableInfo.getId().toStringUtf8() + " to get the partition");
                     String tId = tableInfo.getId().toStringUtf8();
 
                     try {
