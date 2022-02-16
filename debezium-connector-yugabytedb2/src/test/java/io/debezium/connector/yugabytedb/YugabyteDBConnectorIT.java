@@ -2142,9 +2142,9 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
             // .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
             start(YugabyteDBConnector.class, configBuilder.build());
             assertConnectorIsRunning();
-            final long recordsCount = 2;
+            final long recordsCount = 20000;
 
-            TestHelper.insertData();
+            //TestHelper.insertData();
             // final int batchSize = 10;
 
             // batchInsertRecords(recordsCount, batchSize);

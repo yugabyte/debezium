@@ -5,15 +5,16 @@
  */
 package io.debezium.connector.yugabytedb;
 
-import java.util.*;
-
+import io.debezium.pipeline.spi.Partition;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.yb.client.*;
-import org.yb.master.MasterDdlOuterClass;
 
-import io.debezium.pipeline.spi.Partition;
-import io.debezium.relational.TableId;
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class YugabyteDBPartition implements Partition {
     @Override
@@ -42,60 +43,22 @@ public class YugabyteDBPartition implements Partition {
 
         @Override
         public Set<YBPartition> getPartitions() {
-            // TODO: we need to get all the tablets for the YugabyteDB
-            // Return set of all the tablets
-            // connect and get all the tablet ids
-            // return a set of YBPartition for each tablet id
-            String masterAddress = connectorConfig.masterAddresses();
-            final AsyncYBClient asyncYBClient;
-            final YBClient syncClient;
-            asyncYBClient = new AsyncYBClient.AsyncYBClientBuilder(masterAddress)
-                    .defaultAdminOperationTimeoutMs(connectorConfig.adminOperationTimeoutMs())
-                    .defaultOperationTimeoutMs(connectorConfig.operationTimeoutMs())
-                    .defaultSocketReadTimeoutMs(connectorConfig.socketReadTimeoutMs())
-                    .numTablets(connectorConfig.maxNumTablets())
-                    .sslCertFile(connectorConfig.sslRootCert())
-                    .sslClientCertFiles(connectorConfig.sslClientCert(), connectorConfig.sslClientKey())
-                    .build();
-
-            syncClient = new YBClient(asyncYBClient);
-
-            ListTablesResponse tablesResp = null;
-
+            String tabletList = this.connectorConfig.getConfig().getString(YugabyteDBConnectorConfig.TABLET_LIST);
+            List<Pair<String, String>> tabletPairList = null;
             try {
-                tablesResp = syncClient.getTablesList();
+                tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
+                LOGGER.info("The tablet list is " + tabletPairList);
             }
-            catch (Exception e) {
+            catch (IOException e) {
                 e.printStackTrace();
             }
-
-            Set<YBPartition> partititons = new HashSet<>();
-            for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-                LOGGER.info("SKSK The table name is " + tableInfo.getName());
-                String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName()
-                        + "." + tableInfo.getName();
-                TableId tableId = YugabyteDBSchema.parseWithSchema(fqlTableName, tableInfo.getPgschemaName());
-                if (this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
-                    LOGGER.info("VKVK adding tableId " + tableInfo.getId().toStringUtf8() + " to get the partition");
-                    String tId = tableInfo.getId().toStringUtf8();
-
-                    try {
-                        YBTable table = syncClient.openTableByUUID(tId);
-                        List<LocatedTablet> tabletLocations = table.getTabletsLocations(30000);
-                        int i = 0;
-                        for (LocatedTablet tablet : tabletLocations) {
-                            i++;
-                            String tabletId = new String(tablet.getTabletId());
-                            partititons.add(new YBPartition(tabletId));
-                        }
-                    }
-                    catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
+            catch (ClassNotFoundException e) {
+                e.printStackTrace();
             }
-            // return Collections.singleton(new YugabyteDBPartition(connectorConfig.getLogicalName
-            // ()));
+            Set<YBPartition> partititons = new HashSet<>();
+            for (Pair<String, String> tabletPair : tabletPairList) {
+                partititons.add(new YBPartition(tabletPair.getRight()));
+            }
             LOGGER.info("The partition being returned is " + partititons);
             return partititons;
         }

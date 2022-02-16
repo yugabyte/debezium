@@ -6,12 +6,14 @@
 
 package io.debezium.connector.yugabytedb;
 
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.sql.SQLException;
-import java.util.*;
-import java.util.stream.Collectors;
-
+import com.google.common.net.HostAndPort;
+import io.debezium.config.Configuration;
+import io.debezium.connector.common.RelationalBaseSourceConnector;
+import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
+import io.debezium.relational.RelationalDatabaseConnectorConfig;
+import io.debezium.relational.TableId;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.connect.connector.Task;
@@ -20,15 +22,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yb.client.*;
 import org.yb.master.MasterDdlOuterClass;
-import org.yb.util.Pair;
 
-import com.google.common.net.HostAndPort;
-
-import io.debezium.config.Configuration;
-import io.debezium.connector.common.RelationalBaseSourceConnector;
-import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
-import io.debezium.relational.RelationalDatabaseConnectorConfig;
-import io.debezium.relational.TableId;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * A Kafka Connect source connector that creates tasks which use YugabyteDB CDC API
@@ -111,9 +110,18 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         Map<String, ConfigValue> results = validateAllFields(config);
 
         validateTServerConnection(results, config);
+        String streamIdValue = "";
+        if (this.yugabyteDBConnectorConfig.streamId() == null) {
+            streamIdValue = this.props.get(YugabyteDBConnectorConfig.STREAM_ID.toString());
+        }
 
-        int numGroups = Math.min(this.tableIds.size(), maxTasks);
+        LOGGER.info("The streamid being used is" + streamIdValue);
+
+        int numGroups = Math.min(this.tabletIds.size(), maxTasks);
+        LOGGER.info("The tabletIds size are " + tabletIds.size() + " maxTasks" + maxTasks);
+
         List<List<Pair<String, String>>> tabletIdsGrouped = ConnectorUtils.groupPartitions(this.tabletIds, numGroups);
+        LOGGER.info("The grouped tabletIds are " + tabletIdsGrouped.size());
         List<Map<String, String>> taskConfigs = new ArrayList<>(tabletIdsGrouped.size());
 
         for (List<Pair<String, String>> taskTables : tabletIdsGrouped) {
@@ -121,10 +129,19 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             Map<String, String> taskProps = new HashMap<>(this.props);
             int taskId = taskConfigs.size();
             taskProps.put(YugabyteDBConnectorConfig.TASK_ID.toString(), String.valueOf(taskId));
-            taskProps.put(YugabyteDBConnectorConfig.TABLET_LIST.toString(), taskTables.toString());
+            String taskTablesSerialized = "";
+            try {
+                taskTablesSerialized = ObjectUtil.serializeObjectToString(taskTables);
+                LOGGER.info("The taskTablesSerialized " + taskTablesSerialized);
+            }
+            catch (IOException e) {
+                e.printStackTrace();
+            }
+            taskProps.put(YugabyteDBConnectorConfig.TABLET_LIST.toString(), taskTablesSerialized);
             taskProps.put(YugabyteDBConnectorConfig.CHAR_SET.toString(), charSetName);
             taskProps.put(YugabyteDBConnectorConfig.NAME_TO_TYPE.toString(), serializedNameToType);
             taskProps.put(YugabyteDBConnectorConfig.OID_TO_TYPE.toString(), serializedOidToType);
+            taskProps.put(YugabyteDBConnectorConfig.STREAM_ID.toString(), streamIdValue);
             taskConfigs.add(taskProps);
         }
 
@@ -239,13 +256,6 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     protected void validateTServerConnection(Map<String, ConfigValue> configValues,
                                              Configuration config) {
-        // ConfigValue hostnameValue = configValues.get(YugabyteDBConnectorConfig.MASTER_ADDRESSES.name());
-        // ConfigValue portValue = configValues.get(YugabyteDBConnectorConfig.MASTER_PORT.name());
-
-        // String hostname = config.getString(YugabyteDBConnectorConfig.MASTER_HOSTNAME.toString());
-        // int port = config.getInteger(YugabyteDBConnectorConfig.MASTER_PORT.toString());
-        // TODO: Suranjan Check for timeout, socket timeout property (vaibhav: implemented below)
-        // TODO: Suranjan check for SSL property too and validate if set
         // TODO: CDCSDK We will check in future for user login and roles.
         String hostAddress = config.getString(YugabyteDBConnectorConfig.MASTER_ADDRESSES.toString());
         // todo vaibhav: check if the static variables can be replaced with their respective functions
@@ -272,9 +282,36 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         // TODO: Find out where to do validation for table whitelist
         ConfigValue streamId = configValues.get(YugabyteDBConnectorConfig.STREAM_ID);
         String streamIdValue = this.props.get(YugabyteDBConnectorConfig.STREAM_ID);
+
+        this.tableIds = fetchTabletList();
+
+        if (tableIds.isEmpty()) {
+            LOGGER.info(String.format("The table id is empty."));
+            System.exit(1);
+        }
+
+        if (streamIdValue == null || streamIdValue.isEmpty()) {
+            // Create stream.
+            String tableid = tableIds.stream().findFirst().get();
+            try {
+                YBTable t = this.ybClient.openTableByUUID(tableid);
+                streamIdValue = this.ybClient.createCDCStream(t, yugabyteDBConnectorConfig.databaseName(),
+                        "PROTO",
+                        "IMPLICIT").getStreamId();
+                this.props.put(yugabyteDBConnectorConfig.STREAM_ID.toString(), streamIdValue);
+            }
+            catch (Exception e) {
+                e.printStackTrace();
+            }
+            LOGGER.info(String.format("Created a new stream ID: %s", streamId));
+        }
         try {
             // TODO: Need to change for tableid here otherwise it will not work.
             GetDBStreamInfoResponse res = this.ybClient.getDBStreamInfo(streamIdValue);
+            if (res.getTableInfoList().isEmpty()) {
+                LOGGER.info("The table info is empty!");
+            }
+            // Get all the table_ids
         }
         catch (Exception e) {
             LOGGER.error("Failed fetching all tables for the streamid {} ",
@@ -283,14 +320,12 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                     + e.getMessage());
         }
 
-        this.tableIds = fetchTabletList();
-
         this.tabletIds = new ArrayList<>();
         try {
             for (String tableId : tableIds) {
                 YBTable table = ybClient.openTableByUUID(tableId);
-                tabletIds.addAll(ybClient.getTabletUUIDs(table).stream()
-                        .map(tabletId -> new Pair<>(tableId, tabletId))
+                this.tabletIds.addAll(ybClient.getTabletUUIDs(table).stream()
+                        .map(tabletId -> new ImmutablePair<String,String>(tableId, tabletId))
                         .collect(Collectors.toList()));
             }
         }
@@ -305,8 +340,6 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         try {
             ListTablesResponse tablesResp = this.ybClient.getTablesList();
             for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-                LOGGER.info("SKSK The table name is " + tableInfo.getName() + " with schema: " +
-                        tableInfo.getPgschemaName());
                 String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName()
                         + "." + tableInfo.getName();
                 LOGGER.info("VKVK fqlTableName is " + fqlTableName);
