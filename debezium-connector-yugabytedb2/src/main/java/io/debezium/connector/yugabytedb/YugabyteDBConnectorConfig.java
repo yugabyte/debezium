@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import io.debezium.jdbc.JdbcValueConverters;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
@@ -609,6 +610,17 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDescription(
                     "Whether or not to delete the logical replication stream when the connector finishes orderly" +
                             "By default the replication is kept so that on restart progress can resume from the last recorded location");
+
+    // Changing the default decimal.handling.mode to double
+    @Override
+    public JdbcValueConverters.DecimalMode getDecimalMode() {
+        if (super.getDecimalMode() == JdbcValueConverters.DecimalMode.PRECISE) {
+            LOGGER.info("decimal.handling.mode PRECISE is not supported, defaulting to double");
+            return JdbcValueConverters.DecimalMode.DOUBLE;
+        }
+
+        return super.getDecimalMode();
+    }
 
     public enum AutoCreateMode implements EnumeratedValue {
         /**
