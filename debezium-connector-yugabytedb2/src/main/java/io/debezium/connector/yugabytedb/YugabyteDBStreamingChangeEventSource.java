@@ -260,9 +260,9 @@ public class YugabyteDBStreamingChangeEventSource implements
             // todo vaibhav: this works in tests but while running the connector image, this is giving
             // an empty schema name so mapping it to ta value taken from connector config to safeguard
             // todo vaibhav: this will fail when there are tables of the same name under multiple schemas
-//            String schemaFromMap = schemaOf.get(tableInfo.getName());
-//            LOGGER.info("VKVK Schema from map is: " + schemaFromMap);
-//            String schemaName = (tableInfo.getPgschemaName().isEmpty()) ? schemaFromMap : tableInfo.getPgschemaName();
+            // String schemaFromMap = schemaOf.get(tableInfo.getName());
+            // LOGGER.info("VKVK Schema from map is: " + schemaFromMap);
+            // String schemaName = (tableInfo.getPgschemaName().isEmpty()) ? schemaFromMap : tableInfo.getPgschemaName();
             LOGGER.info("VKVK pgSchemaName is present in table response: " + tableInfo.getPgschemaName());
             String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName()
                     + "." + tableInfo.getName();
@@ -327,7 +327,6 @@ public class YugabyteDBStreamingChangeEventSource implements
             offsetContext.initSourceInfo(tabletId, this.connectorConfig);
         }
         LOGGER.debug("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
-
 
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                 (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {

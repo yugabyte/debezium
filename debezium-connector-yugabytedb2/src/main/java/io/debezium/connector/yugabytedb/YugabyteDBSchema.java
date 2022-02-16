@@ -116,8 +116,8 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
     }
 
     protected YugabyteDBSchema refreshWithSchema(TableId tableId,
-                                                CdcService.CDCSDKSchemaPB schemaPB,
-                                                String schemaName) {
+                                                 CdcService.CDCSDKSchemaPB schemaPB,
+                                                 String schemaName) {
         // and then refresh the schemas
         // refreshSchemas();
         if (cdcsdkSchemaPB == null) {
@@ -243,12 +243,12 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
     }
 
     private Map<TableId, List<Column>> getColumnsDetailsWithSchema(String databaseCatalog,
-                                                         String schemaNamePattern,
-                                                         String tableName,
-                                                         Tables.TableFilter tableFilter,
-                                                         Tables.ColumnNameFilter columnFilter,
-                                                         CdcService.CDCSDKSchemaPB schemaPB,
-                                                         String schemaNameFromYb) {
+                                                                   String schemaNamePattern,
+                                                                   String tableName,
+                                                                   Tables.TableFilter tableFilter,
+                                                                   Tables.ColumnNameFilter columnFilter,
+                                                                   CdcService.CDCSDKSchemaPB schemaPB,
+                                                                   String schemaNameFromYb) {
         Map<TableId, List<Column>> columnsByTable = new HashMap<>();
 
         int position = 1;

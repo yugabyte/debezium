@@ -516,12 +516,12 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDefault(DEFAULT_PORT);
 
     public static final Field MASTER_ADDRESSES = Field.create(DATABASE_CONFIG_PREFIX + "master.addresses")
-        .withDisplayName("Master Addresses")
-        .withType(Type.STRING)
-        .withImportance(Importance.HIGH)
-        .withDefault(DEFAULT_MASTER_ADDRESS)
-        .withDescription("Comma separated values of master addresses in the form host:port")
-        .required();
+            .withDisplayName("Master Addresses")
+            .withType(Type.STRING)
+            .withImportance(Importance.HIGH)
+            .withDefault(DEFAULT_MASTER_ADDRESS)
+            .withDescription("Comma separated values of master addresses in the form host:port")
+            .required();
 
     public static final Field STREAM_ID = Field.create(DATABASE_CONFIG_PREFIX + "streamid")
             .withDisplayName("YugabyteDB Stream ID")
@@ -532,6 +532,11 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             // .withValidation(Field::isUuid)
             .withDescription("ID of the Stream created in YugabyteDB");
 
+    protected static final Field TASK_ID = Field.create("yugabytedb.task.id")
+            .withDescription("Internal use only")
+            .withValidation(Field::isInteger)
+            .withInvisibleRecommender();
+
     public static final Field TABLET_LIST = Field.create(TASK_CONFIG_PREFIX + "tabletlist")
             .withDisplayName("YugabyteDB Tablet LIST for a Task")
             .withType(ConfigDef.Type.STRING)
@@ -539,37 +544,37 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDescription("Internal task config: List of TabletIds to be fetched by this task");
 
     public static final Field MAX_NUM_TABLETS = Field.create("table.max.num.tablets")
-        .withDisplayName("Maximum number of tablets that can be polled for in a table")
-        .withType(Type.INT)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_MAX_NUM_TABLETS)
-        .withDescription("Specify the maximum number of tablets that the client can poll for");
+            .withDisplayName("Maximum number of tablets that can be polled for in a table")
+            .withType(Type.INT)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_MAX_NUM_TABLETS)
+            .withDescription("Specify the maximum number of tablets that the client can poll for");
 
     public static final Field ADMIN_OPERATION_TIMEOUT_MS = Field.create("admin.operation.timeout.ms")
-        .withDisplayName("Admin operation timeout in milliseconds")
-        .withType(Type.LONG)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_ADMIN_OPERATION_TIMEOUT_MS)
-        .withDescription("Timeout after which the admin operations for the yb-client would fail");
+            .withDisplayName("Admin operation timeout in milliseconds")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_ADMIN_OPERATION_TIMEOUT_MS)
+            .withDescription("Timeout after which the admin operations for the yb-client would fail");
 
     public static final Field OPERATION_TIMEOUT_MS = Field.create("operation.timeout.ms")
-        .withDisplayName("Operation timeout in milliseconds")
-        .withType(Type.LONG)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_OPERATION_TIMEOUT_MS);
+            .withDisplayName("Operation timeout in milliseconds")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_OPERATION_TIMEOUT_MS);
 
     public static final Field SOCKET_READ_TIMEOUT_MS = Field.create("socket.read.timeout.ms")
-        .withDisplayName("Socket read timeout in milliseconds")
-        .withType(Type.LONG)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_SOCKET_READ_TIMEOUT_MS);
+            .withDisplayName("Socket read timeout in milliseconds")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_SOCKET_READ_TIMEOUT_MS);
 
     public static final Field CDC_POLL_INTERVAL_MS = Field.create("cdc.poll.interval.ms")
-        .withDisplayName("Poll interval in milliseconds to get changes from database")
-        .withType(Type.LONG)
-        .withImportance(Importance.LOW)
-        .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
-        .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
+            .withDisplayName("Poll interval in milliseconds to get changes from database")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
+            .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
 
     public static final Field CHAR_SET = Field.create(TASK_CONFIG_PREFIX + "charset")
             .withDisplayName("YugabyteDB charset")

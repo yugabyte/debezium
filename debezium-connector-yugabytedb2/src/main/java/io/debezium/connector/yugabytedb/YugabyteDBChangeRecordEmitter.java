@@ -256,7 +256,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
 
     private void refreshTableFromDatabase(TableId tableId) {
         try {
-//            schema.refresh(connection, tableId, connectorConfig.skipRefreshSchemaOnMissingToastableData());
+            // schema.refresh(connection, tableId, connectorConfig.skipRefreshSchemaOnMissingToastableData());
             schema.refresh(connection, tableId, connectorConfig.skipRefreshSchemaOnMissingToastableData(), schema.getSchemaPB());
         }
         catch (SQLException e) {

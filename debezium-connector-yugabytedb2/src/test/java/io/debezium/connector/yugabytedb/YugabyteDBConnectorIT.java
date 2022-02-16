@@ -2132,6 +2132,7 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
             TestHelper.executeDDL("postgres_create_tables.ddl");
             Thread.sleep(1000);
             Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                    .with("tasks.max", "2")
                     .with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1")
                     .with(YugabyteDBConnectorConfig.PORT, 5433)
                     .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
