@@ -108,15 +108,15 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             e.printStackTrace();
         }
 
-        // Configuration config = Configuration.from(this.props);
-        // Map<String, ConfigValue> results = validateAllFields(config);
+        Configuration config = Configuration.from(this.props);
+        Map<String, ConfigValue> results = validateAllFields(config);
 
-        // validateTServerConnection(results, config);
-        String streamIdValue = "";
+        validateTServerConnection(results, config);
+        String streamIdValue = this.yugabyteDBConnectorConfig.streamId();
         LOGGER.info("The streamid in config is" + this.yugabyteDBConnectorConfig.streamId());
 
-        if (this.yugabyteDBConnectorConfig.streamId() == null) {
-            streamIdValue = this.props.get(YugabyteDBConnectorConfig.STREAM_ID.toString());
+        if (streamIdValue == null) {
+            streamIdValue = results.get(YugabyteDBConnectorConfig.STREAM_ID.toString()).toString();
         }
 
         LOGGER.info("The streamid being used is" + streamIdValue);
@@ -288,6 +288,9 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             LOGGER.info(String.format("The table id is empty."));
             System.exit(1);
         }
+
+        LOGGER.info("streamid is: " + streamId);
+        LOGGER.info("streamid value is: " + streamIdValue);
 
         if (streamIdValue == null || streamId.isEmpty()) {
             // Create stream.
