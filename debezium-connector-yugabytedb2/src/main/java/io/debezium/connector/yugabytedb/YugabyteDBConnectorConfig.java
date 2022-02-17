@@ -572,6 +572,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
             .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
 
+    public static final Field AUTO_CREATE_STREAM = Field.create("auto.create.stream")
+            .withDefault("Specify whether to create a stream by default")
+            .withType(Type.BOOLEAN)
+            .withImportance(Importance.LOW)
+            .withDefault(false)
+            .withDescription("This will be enabled for testing purposes only, if set to true, the connector will create a DB stream ID");
+
     public static final Field CHAR_SET = Field.create(TASK_CONFIG_PREFIX + "charset")
             .withDisplayName("YugabyteDB charset")
             .withType(ConfigDef.Type.STRING)
@@ -977,17 +984,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         return getConfig().getString(MASTER_ADDRESSES);
     }
 
-    // public int masterPort() {
-    // return getConfig().getInteger(MASTER_PORT);
-    // };
-    //
-    // public String masterHost() {
-    // return getConfig().getString(MASTER_HOSTNAME);
-    // };
-
     public String streamId() {
         return getConfig().getString(STREAM_ID);
     };
+
+    public boolean autoCreateStream() {
+        return getConfig().getBoolean(AUTO_CREATE_STREAM);
+    }
 
     public int maxNumTablets() {
         return getConfig().getInteger(MAX_NUM_TABLETS);
