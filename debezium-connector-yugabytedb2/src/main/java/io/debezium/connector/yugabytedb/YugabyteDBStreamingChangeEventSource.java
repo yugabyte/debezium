@@ -5,6 +5,20 @@
  */
 package io.debezium.connector.yugabytedb;
 
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
+
+import org.apache.commons.lang3.tuple.Pair;
+import org.postgresql.core.BaseConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.yb.cdc.CdcService;
+import org.yb.client.*;
+
 import io.debezium.connector.yugabytedb.connection.*;
 import io.debezium.connector.yugabytedb.connection.ReplicationMessage.Operation;
 import io.debezium.connector.yugabytedb.connection.pgproto.YbProtoReplicationMessage;
@@ -18,19 +32,6 @@ import io.debezium.relational.TableId;
 import io.debezium.util.Clock;
 import io.debezium.util.DelayStrategy;
 import io.debezium.util.ElapsedTimeStrategy;
-import org.apache.commons.lang3.tuple.Pair;
-import org.postgresql.core.BaseConnection;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.yb.cdc.CdcService;
-import org.yb.client.*;
-
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 /**
  *
@@ -261,27 +262,26 @@ public class YugabyteDBStreamingChangeEventSource implements
             e.printStackTrace();
         }
 
-
         Map<String, YBTable> tableIdToTable = new HashMap<>();
         String streamId = this.connectorConfig.streamId();
 
         LOGGER.info("The streamId is  " + streamId);
 
-        Set<String> tIds = tabletPairList.stream().map(pair-> pair.getLeft()).collect(Collectors.toSet());
+        Set<String> tIds = tabletPairList.stream().map(pair -> pair.getLeft()).collect(Collectors.toSet());
         for (String tId : tIds) {
             LOGGER.info("SKSK the table uuid is " + tIds);
             YBTable table = this.syncClient.openTableByUUID(tId);
             tableIdToTable.put(tId, table);
         }
-//        Map<String, List<String>> tableIdsToTabletIds = tabletPairList.stream()
-//                .collect(Collectors.groupingBy(Pair::getKey, Collectors.mapping(Pair::getValue, Collectors.toList())));
-//
-//        List<AbstractMap.SimpleImmutableEntry<String, String>> listTabletIdTableIdPair;
-//        listTabletIdTableIdPair = tableIdsToTabletIds.entrySet().stream()
-//                .flatMap(e -> e.getValue().stream()
-//                        .map(v -> new AbstractMap.SimpleImmutableEntry<>(v, e.getKey())))
-//                .collect(Collectors.toList());
-//        LOGGER.debug("The listTabletIdTableId is " + listTabletIdTableIdPair);
+        // Map<String, List<String>> tableIdsToTabletIds = tabletPairList.stream()
+        // .collect(Collectors.groupingBy(Pair::getKey, Collectors.mapping(Pair::getValue, Collectors.toList())));
+        //
+        // List<AbstractMap.SimpleImmutableEntry<String, String>> listTabletIdTableIdPair;
+        // listTabletIdTableIdPair = tableIdsToTabletIds.entrySet().stream()
+        // .flatMap(e -> e.getValue().stream()
+        // .map(v -> new AbstractMap.SimpleImmutableEntry<>(v, e.getKey())))
+        // .collect(Collectors.toList());
+        // LOGGER.debug("The listTabletIdTableId is " + listTabletIdTableIdPair);
 
         int noMessageIterations = 0;
         for (Pair<String, String> entry : tabletPairList) {

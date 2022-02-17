@@ -5,16 +5,17 @@
  */
 package io.debezium.connector.yugabytedb;
 
-import io.debezium.pipeline.spi.Partition;
-import org.apache.commons.lang3.tuple.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import org.apache.commons.lang3.tuple.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import io.debezium.pipeline.spi.Partition;
 
 public class YugabyteDBPartition implements Partition {
     @Override

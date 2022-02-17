@@ -6,12 +6,12 @@
 
 package io.debezium.connector.yugabytedb;
 
-import com.google.common.net.HostAndPort;
-import io.debezium.config.Configuration;
-import io.debezium.connector.common.RelationalBaseSourceConnector;
-import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
-import io.debezium.relational.RelationalDatabaseConnectorConfig;
-import io.debezium.relational.TableId;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.stream.Collectors;
+
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.kafka.common.config.ConfigDef;
@@ -23,11 +23,13 @@ import org.slf4j.LoggerFactory;
 import org.yb.client.*;
 import org.yb.master.MasterDdlOuterClass;
 
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.sql.SQLException;
-import java.util.*;
-import java.util.stream.Collectors;
+import com.google.common.net.HostAndPort;
+
+import io.debezium.config.Configuration;
+import io.debezium.connector.common.RelationalBaseSourceConnector;
+import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
+import io.debezium.relational.RelationalDatabaseConnectorConfig;
+import io.debezium.relational.TableId;
 
 /**
  * A Kafka Connect source connector that creates tasks which use YugabyteDB CDC API
@@ -65,7 +67,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
-        LOGGER.debug("Props " + props);
+        LOGGER.info("Props " + props);
         Configuration config = Configuration.from(this.props);
         this.yugabyteDBConnectorConfig = new YugabyteDBConnectorConfig(config);
     }
@@ -106,11 +108,13 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             e.printStackTrace();
         }
 
-        Configuration config = Configuration.from(this.props);
-        Map<String, ConfigValue> results = validateAllFields(config);
+        // Configuration config = Configuration.from(this.props);
+        // Map<String, ConfigValue> results = validateAllFields(config);
 
-        validateTServerConnection(results, config);
+        // validateTServerConnection(results, config);
         String streamIdValue = "";
+        LOGGER.info("The streamid in config is" + this.yugabyteDBConnectorConfig.streamId());
+
         if (this.yugabyteDBConnectorConfig.streamId() == null) {
             streamIdValue = this.props.get(YugabyteDBConnectorConfig.STREAM_ID.toString());
         }
@@ -256,7 +260,6 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     protected void validateTServerConnection(Map<String, ConfigValue> configValues,
                                              Configuration config) {
-        // TODO: CDCSDK We will check in future for user login and roles.
         String hostAddress = config.getString(YugabyteDBConnectorConfig.MASTER_ADDRESSES.toString());
         // todo vaibhav: check if the static variables can be replaced with their respective functions
         this.ybClient = getYBClientBase(hostAddress,
@@ -268,21 +271,17 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 yugabyteDBConnectorConfig.sslClientCert(),
                 yugabyteDBConnectorConfig.sslClientKey()); // always passing the ssl root certs,
         // so whenever they are null, they will just be ignored
-        // todo vaibhav: remove this comment
-        // this.ybClient = getYBClient(hostAddress, 60000,
-        // 60000, 60000);
         LOGGER.debug("The master host address is " + hostAddress);
         HostAndPort masterHostPort = ybClient.getLeaderMasterHostAndPort();
         if (masterHostPort == null) {
             LOGGER.error("Failed testing connection at {}", yugabyteDBConnectorConfig.hostname());
         }
 
-        // do a get and check if the streamid exists.
+        // Do a get and check if the streamid exists.
         // TODO: Suranjan check the db stream info and verify if the tableIds are present
         // TODO: Find out where to do validation for table whitelist
-        ConfigValue streamId = configValues.get(YugabyteDBConnectorConfig.STREAM_ID);
-        String streamIdValue = this.props.get(YugabyteDBConnectorConfig.STREAM_ID);
-
+        String streamId = config.getString(YugabyteDBConnectorConfig.STREAM_ID.toString());
+        final ConfigValue streamIdValue = configValues.get(YugabyteDBConnectorConfig.STREAM_ID);
         this.tableIds = fetchTabletList();
 
         if (tableIds.isEmpty()) {
@@ -290,33 +289,31 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             System.exit(1);
         }
 
-        if (streamIdValue == null || streamIdValue.isEmpty()) {
+        if (streamIdValue == null || streamId.isEmpty()) {
             // Create stream.
             String tableid = tableIds.stream().findFirst().get();
             try {
                 YBTable t = this.ybClient.openTableByUUID(tableid);
-                streamIdValue = this.ybClient.createCDCStream(t, yugabyteDBConnectorConfig.databaseName(),
+                streamId = this.ybClient.createCDCStream(t, yugabyteDBConnectorConfig.databaseName(),
                         "PROTO",
                         "IMPLICIT").getStreamId();
-                this.props.put(yugabyteDBConnectorConfig.STREAM_ID.toString(), streamIdValue);
+                configValues.put(YugabyteDBConnectorConfig.STREAM_ID.toString(), new ConfigValue(streamId));
             }
             catch (Exception e) {
                 e.printStackTrace();
             }
-            LOGGER.info(String.format("Created a new stream ID: %s", streamId));
+            LOGGER.info(String.format("Created a new stream ID: %s", streamIdValue));
         }
         try {
-            // TODO: Need to change for tableid here otherwise it will not work.
-            GetDBStreamInfoResponse res = this.ybClient.getDBStreamInfo(streamIdValue);
+            GetDBStreamInfoResponse res = this.ybClient.getDBStreamInfo(streamId);
             if (res.getTableInfoList().isEmpty()) {
                 LOGGER.info("The table info is empty!");
             }
-            // Get all the table_ids
         }
         catch (Exception e) {
             LOGGER.error("Failed fetching all tables for the streamid {} ",
-                    streamId, e);
-            streamId.addErrorMessage("Failed fetching all tables for the streamid: "
+                    streamIdValue, e);
+            streamIdValue.addErrorMessage("Failed fetching all tables for the streamid: "
                     + e.getMessage());
         }
 
@@ -325,7 +322,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             for (String tableId : tableIds) {
                 YBTable table = ybClient.openTableByUUID(tableId);
                 this.tabletIds.addAll(ybClient.getTabletUUIDs(table).stream()
-                        .map(tabletId -> new ImmutablePair<String,String>(tableId, tabletId))
+                        .map(tabletId -> new ImmutablePair<String, String>(tableId, tabletId))
                         .collect(Collectors.toList()));
             }
         }
@@ -334,7 +331,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
     }
 
-    Set<String> fetchTabletList() {
+    private Set<String> fetchTabletList() {
         LOGGER.info("Fetching tables");
         Set<String> tIds = new HashSet<>();
         try {

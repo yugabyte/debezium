@@ -6,6 +6,22 @@
 
 package io.debezium.connector.yugabytedb;
 
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+import java.util.stream.Collectors;
+
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.RetriableException;
+import org.apache.kafka.connect.source.SourceRecord;
+import org.postgresql.core.Encoding;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.debezium.DebeziumException;
 import io.debezium.config.Configuration;
 import io.debezium.config.Field;
@@ -32,21 +48,6 @@ import io.debezium.util.Clock;
 import io.debezium.util.LoggingContext;
 import io.debezium.util.Metronome;
 import io.debezium.util.SchemaNameAdjuster;
-import org.apache.commons.lang3.tuple.Pair;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.errors.RetriableException;
-import org.apache.kafka.connect.source.SourceRecord;
-import org.postgresql.core.Encoding;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.sql.SQLException;
-import java.time.Duration;
-import java.time.temporal.ChronoUnit;
-import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Kafka connect source task which uses YugabyteDB CDC API to process DB changes.
