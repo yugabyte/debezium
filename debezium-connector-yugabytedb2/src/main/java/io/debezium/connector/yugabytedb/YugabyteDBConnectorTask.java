@@ -14,6 +14,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -74,7 +75,19 @@ public class YugabyteDBConnectorTask
 
         LOGGER.info("The config is " + config);
 
-        LOGGER.info("The tablet list is " + config.getString(YugabyteDBConnectorConfig.TABLET_LIST));
+        String tabletList = config.getString(YugabyteDBConnectorConfig.TABLET_LIST);
+        List<Pair<String, String>> tabletPairList = null;
+        try {
+            tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
+            LOGGER.info("The tablet list is " + tabletPairList);
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+        catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+
         if (snapshotter == null) {
             throw new ConnectException("Unable to load snapshotter, if using custom snapshot mode," +
                     " double check your settings");

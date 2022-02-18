@@ -5,25 +5,22 @@
  */
 package io.debezium.connector.yugabytedb;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.postgresql.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yb.cdc.CdcService;
 import org.yb.client.*;
-import org.yb.master.MasterDdlOuterClass;
 
-import io.debezium.connector.yugabytedb.connection.OpId;
-import io.debezium.connector.yugabytedb.connection.ReplicationConnection;
+import io.debezium.connector.yugabytedb.connection.*;
 import io.debezium.connector.yugabytedb.connection.ReplicationMessage.Operation;
-import io.debezium.connector.yugabytedb.connection.ReplicationStream;
-import io.debezium.connector.yugabytedb.connection.WalPositionLocator;
-import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
 import io.debezium.connector.yugabytedb.connection.pgproto.YbProtoReplicationMessage;
 import io.debezium.connector.yugabytedb.spi.Snapshotter;
 import io.debezium.heartbeat.Heartbeat;
@@ -252,76 +249,43 @@ public class YugabyteDBStreamingChangeEventSource implements
         LOGGER.info("Processing messages");
         ListTablesResponse tablesResp = syncClient.getTablesList();
 
-        Set<String> tIds = new HashSet<>();
-
-        for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-            LOGGER.info("SKSK The table name is " + tableInfo.getName() + " under schema: " +
-                    tableInfo.getPgschemaName()); // todo vaibhav: it prints all the table names currently
-            String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName()
-                    + "." + tableInfo.getName();
-            LOGGER.info("VKVK Fully qualified table name: " + fqlTableName);
-            TableId tableId = YugabyteDBSchema.parseWithSchema(fqlTableName, tableInfo.getPgschemaName());
-            if (this.connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
-                LOGGER.info(String.format("VKVK Adding table ID for streaming: %s (%s.%s.%s)",
-                        tableInfo.getId().toStringUtf8(), tableInfo.getNamespace().getName(),
-                        tableInfo.getPgschemaName(), tableInfo.getName()));
-                tIds.add(tableInfo.getId().toStringUtf8());
-            }
+        String tabletList = this.connectorConfig.getConfig().getString(YugabyteDBConnectorConfig.TABLET_LIST);
+        List<Pair<String, String>> tabletPairList = null;
+        try {
+            tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
+            LOGGER.info("The tablet list is " + tabletPairList);
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+        catch (ClassNotFoundException e) {
+            e.printStackTrace();
         }
 
         Map<String, YBTable> tableIdToTable = new HashMap<>();
         String streamId = this.connectorConfig.streamId();
 
-        List<Map<String, List<String>>> tableIdsToTabletIdsMapList = new ArrayList<>(1);
-        int concurrency = 1;
-        boolean createStream = true;
+        LOGGER.info("The streamId is  " + streamId);
 
-        // If the user has specified a stream ID in the configuration, do not create a stream and use
-        // the specified one
-        if (streamId != null && streamId.isEmpty() == false) {
-            LOGGER.info("VKVK: Using a user specified stream ID: " + streamId);
-            createStream = false;
-        }
-
+        Set<String> tIds = tabletPairList.stream().map(pair -> pair.getLeft()).collect(Collectors.toSet());
         for (String tId : tIds) {
             LOGGER.info("SKSK the table uuid is " + tIds);
             YBTable table = this.syncClient.openTableByUUID(tId);
             tableIdToTable.put(tId, table);
-
-            if (createStream) {
-                streamId = this.syncClient.createCDCStream(table, connectorConfig.databaseName(),
-                        "PROTO",
-                        "IMPLICIT").getStreamId();
-                LOGGER.info(String.format("Created a new stream ID: %s", streamId));
-                createStream = false;
-            }
-
-            List<LocatedTablet> tabletLocations = table.getTabletsLocations(30000);
-
-            for (int i = 0; i < concurrency; i++) {
-                tableIdsToTabletIdsMapList.add(new HashMap<>());
-            }
-            int i = 0;
-            for (LocatedTablet tablet : tabletLocations) {
-                i++;
-                String tabletId = new String(tablet.getTabletId());
-                LOGGER.info(String.format("Polling for new tablet %s", tabletId));
-                tableIdsToTabletIdsMapList.get(i % concurrency).putIfAbsent(tId, new ArrayList<>());
-                tableIdsToTabletIdsMapList.get(i % concurrency).get(tId).add(tabletId);
-            }
-            LOGGER.debug("SKSK The final map is " + tableIdsToTabletIdsMapList);
         }
-        Map<String, List<String>> tableIdsToTabletIds = tableIdsToTabletIdsMapList.get(0);
-        List<AbstractMap.SimpleImmutableEntry<String, String>> listTabletIdTableIdPair;
-        listTabletIdTableIdPair = tableIdsToTabletIds.entrySet().stream()
-                .flatMap(e -> e.getValue().stream()
-                        .map(v -> new AbstractMap.SimpleImmutableEntry<>(v, e.getKey())))
-                .collect(Collectors.toList());
-        LOGGER.debug("The listTabletIdTableId is " + listTabletIdTableIdPair);
+        // Map<String, List<String>> tableIdsToTabletIds = tabletPairList.stream()
+        // .collect(Collectors.groupingBy(Pair::getKey, Collectors.mapping(Pair::getValue, Collectors.toList())));
+        //
+        // List<AbstractMap.SimpleImmutableEntry<String, String>> listTabletIdTableIdPair;
+        // listTabletIdTableIdPair = tableIdsToTabletIds.entrySet().stream()
+        // .flatMap(e -> e.getValue().stream()
+        // .map(v -> new AbstractMap.SimpleImmutableEntry<>(v, e.getKey())))
+        // .collect(Collectors.toList());
+        // LOGGER.debug("The listTabletIdTableId is " + listTabletIdTableIdPair);
 
         int noMessageIterations = 0;
-        for (AbstractMap.SimpleImmutableEntry<String, String> entry : listTabletIdTableIdPair) {
-            final String tabletId = entry.getKey();
+        for (Pair<String, String> entry : tabletPairList) {
+            final String tabletId = entry.getValue();
             offsetContext.initSourceInfo(tabletId, this.connectorConfig);
         }
         LOGGER.debug("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
@@ -329,14 +293,14 @@ public class YugabyteDBStreamingChangeEventSource implements
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                 (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
 
-            for (AbstractMap.SimpleImmutableEntry<String, String> entry : listTabletIdTableIdPair) {
-                final String tabletId = entry.getKey();
+            for (Pair<String, String> entry : tabletPairList) {
+                final String tabletId = entry.getValue();
                 YBPartition part = new YBPartition(tabletId);
                 // The following will specify the connector polling interval at which
                 // yb-client will ask the database for changes
                 Thread.sleep(connectorConfig.cdcPollIntervalms());
 
-                YBTable table = tableIdToTable.get(entry.getValue());
+                YBTable table = tableIdToTable.get(entry.getKey());
                 OpId cp = offsetContext.lsn(tabletId);
 
                 // GetChangesResponse response = getChangeResponse(offsetContext);

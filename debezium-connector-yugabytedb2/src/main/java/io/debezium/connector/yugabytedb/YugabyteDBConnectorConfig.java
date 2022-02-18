@@ -533,6 +533,11 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             // .withValidation(Field::isUuid)
             .withDescription("ID of the Stream created in YugabyteDB");
 
+    protected static final Field TASK_ID = Field.create("yugabytedb.task.id")
+            .withDescription("Internal use only")
+            .withValidation(Field::isInteger)
+            .withInvisibleRecommender();
+
     public static final Field TABLET_LIST = Field.create(TASK_CONFIG_PREFIX + "tabletlist")
             .withDisplayName("YugabyteDB Tablet LIST for a Task")
             .withType(ConfigDef.Type.STRING)
