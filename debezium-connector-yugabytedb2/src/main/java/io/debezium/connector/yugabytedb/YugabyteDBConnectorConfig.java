@@ -1088,12 +1088,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
     @Override
     protected SourceInfoStructMaker<? extends AbstractSourceInfo> getSourceInfoStructMaker(Version version) {
-        // switch (version) {
-        // case V1:
-        // return new LegacyV1PostgresSourceInfoStructMaker(Module.name(), Module.version(), this);
-        // default:
         return new YugabyteDBSourceInfoStructMaker(Module.name(), Module.version(), this);
-        // }
     }
 
     private static final ConfigDefinition CONFIG_DEFINITION = RelationalDatabaseConnectorConfig.CONFIG_DEFINITION.edit()
@@ -1119,7 +1114,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
                     SSL_SOCKET_FACTORY,
                     STATUS_UPDATE_INTERVAL_MS,
                     TCP_KEEPALIVE,
-                    MAX_NUM_TABLETS)
+                    MAX_NUM_TABLETS,
+                    AUTO_CREATE_STREAM)
             .events(
                     INCLUDE_UNKNOWN_DATATYPES,
                     DatabaseHeartbeatImpl.HEARTBEAT_ACTION_QUERY)
