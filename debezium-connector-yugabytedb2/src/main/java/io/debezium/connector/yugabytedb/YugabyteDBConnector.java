@@ -12,7 +12,6 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import io.debezium.DebeziumException;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.kafka.common.config.ConfigDef;
@@ -26,6 +25,7 @@ import org.yb.master.MasterDdlOuterClass;
 
 import com.google.common.net.HostAndPort;
 
+import io.debezium.DebeziumException;
 import io.debezium.config.Configuration;
 import io.debezium.connector.common.RelationalBaseSourceConnector;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
@@ -307,7 +307,8 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             catch (Exception e) {
                 e.printStackTrace();
             }
-        } else if (streamId == null || streamId.isEmpty()) {
+        }
+        else if (streamId == null || streamId.isEmpty()) {
             // Coming to this block means the auto.create.stream is set to false and no stream ID is provided, the connector should not proceed forward.
             throw new DebeziumException("DB Stream ID not provided, please provide a DB stream ID to proceed...");
         }

@@ -390,7 +390,7 @@ public class YugabyteDBStreamingChangeEventSource implements
 
                             boolean dispatched = message.getOperation() != Operation.NOOP
                                     && dispatcher.dispatchDataChangeEvent(tableId, new YugabyteDBChangeRecordEmitter(part, offsetContext, clock, connectorConfig,
-                                                                          schema, connection, tableId, message, pgSchemaNameInRecord));
+                                            schema, connection, tableId, message, pgSchemaNameInRecord));
 
                             maybeWarnAboutGrowingWalBacklog(dispatched);
                         }

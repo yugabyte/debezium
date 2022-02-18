@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import io.debezium.jdbc.JdbcValueConverters;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
@@ -37,6 +36,7 @@ import io.debezium.connector.yugabytedb.snapshot.NeverSnapshotter;
 import io.debezium.connector.yugabytedb.spi.Snapshotter;
 import io.debezium.heartbeat.DatabaseHeartbeatImpl;
 import io.debezium.jdbc.JdbcConfiguration;
+import io.debezium.jdbc.JdbcValueConverters;
 import io.debezium.relational.ColumnFilterMode;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.TableId;

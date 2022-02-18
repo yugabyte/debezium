@@ -5,6 +5,17 @@
  */
 package io.debezium.connector.yugabytedb;
 
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Struct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.debezium.connector.SnapshotRecord;
 import io.debezium.connector.yugabytedb.connection.OpId;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
@@ -17,16 +28,6 @@ import io.debezium.relational.TableId;
 import io.debezium.schema.DataCollectionId;
 import io.debezium.time.Conversions;
 import io.debezium.util.Clock;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Struct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class YugabyteDBOffsetContext implements OffsetContext {
     public static final String LAST_COMPLETELY_PROCESSED_LSN_KEY = "lsn_proc";
@@ -333,23 +334,25 @@ public class YugabyteDBOffsetContext implements OffsetContext {
 
             LOGGER.debug("The offset being loaded in YugabyteDBOffsetContext.. " + offset);
 
-            /*final OpId lsn = OpId.valueOf(readOptionalString(offset, SourceInfo.LSN_KEY));
-            final OpId lastCompletelyProcessedLsn = OpId.valueOf(readOptionalString(offset,
-                    LAST_COMPLETELY_PROCESSED_LSN_KEY));
-            final OpId lastCommitLsn = OpId.valueOf(readOptionalString(offset,
-                    LAST_COMPLETELY_PROCESSED_LSN_KEY));
-            final String txId = readOptionalString(offset, SourceInfo.TXID_KEY);
-
-            final Instant useconds = Conversions.toInstantFromMicros((Long) offset
-                    .get(SourceInfo.TIMESTAMP_USEC_KEY));
-            final boolean snapshot = (boolean) ((Map<String, Object>) offset)
-                    .getOrDefault(SourceInfo.SNAPSHOT_KEY, Boolean.FALSE);
-            final boolean lastSnapshotRecord = (boolean) ((Map<String, Object>) offset)
-                    .getOrDefault(SourceInfo.LAST_SNAPSHOT_RECORD_KEY, Boolean.FALSE);
-            return new YugabyteDBOffsetContext(connectorConfig, lsn, lastCompletelyProcessedLsn,
-                    lastCommitLsn, txId, useconds, snapshot, lastSnapshotRecord,
-                    TransactionContext.load(offset), SignalBasedIncrementalSnapshotContext
-                    .load(offset));*/
+            /*
+             * final OpId lsn = OpId.valueOf(readOptionalString(offset, SourceInfo.LSN_KEY));
+             * final OpId lastCompletelyProcessedLsn = OpId.valueOf(readOptionalString(offset,
+             * LAST_COMPLETELY_PROCESSED_LSN_KEY));
+             * final OpId lastCommitLsn = OpId.valueOf(readOptionalString(offset,
+             * LAST_COMPLETELY_PROCESSED_LSN_KEY));
+             * final String txId = readOptionalString(offset, SourceInfo.TXID_KEY);
+             * 
+             * final Instant useconds = Conversions.toInstantFromMicros((Long) offset
+             * .get(SourceInfo.TIMESTAMP_USEC_KEY));
+             * final boolean snapshot = (boolean) ((Map<String, Object>) offset)
+             * .getOrDefault(SourceInfo.SNAPSHOT_KEY, Boolean.FALSE);
+             * final boolean lastSnapshotRecord = (boolean) ((Map<String, Object>) offset)
+             * .getOrDefault(SourceInfo.LAST_SNAPSHOT_RECORD_KEY, Boolean.FALSE);
+             * return new YugabyteDBOffsetContext(connectorConfig, lsn, lastCompletelyProcessedLsn,
+             * lastCommitLsn, txId, useconds, snapshot, lastSnapshotRecord,
+             * TransactionContext.load(offset), SignalBasedIncrementalSnapshotContext
+             * .load(offset));
+             */
 
             return new YugabyteDBOffsetContext(connectorConfig,
                     new OpId(0, 0, null, 0, 0),
