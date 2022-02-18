@@ -12,6 +12,7 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import io.debezium.DebeziumException;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.kafka.common.config.ConfigDef;
@@ -116,10 +117,10 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         LOGGER.info("The streamid in config is" + this.yugabyteDBConnectorConfig.streamId());
 
         if (streamIdValue == null) {
-            streamIdValue = results.get(YugabyteDBConnectorConfig.STREAM_ID.toString()).toString();
+            streamIdValue = results.get(YugabyteDBConnectorConfig.STREAM_ID.name()).value().toString();
         }
 
-        LOGGER.info("The streamid being used is" + streamIdValue);
+        LOGGER.info("The streamid being used is " + streamIdValue);
 
         int numGroups = Math.min(this.tabletIds.size(), maxTasks);
         LOGGER.info("The tabletIds size are " + tabletIds.size() + " maxTasks" + maxTasks);
@@ -280,8 +281,8 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         // Do a get and check if the streamid exists.
         // TODO: Suranjan check the db stream info and verify if the tableIds are present
         // TODO: Find out where to do validation for table whitelist
-        String streamId = config.getString(YugabyteDBConnectorConfig.STREAM_ID.toString());
-        final ConfigValue streamIdValue = configValues.get(YugabyteDBConnectorConfig.STREAM_ID);
+        String streamId = yugabyteDBConnectorConfig.streamId();
+        final ConfigValue streamIdConfig = configValues.get(YugabyteDBConnectorConfig.STREAM_ID.name());
         this.tableIds = fetchTabletList();
 
         if (tableIds.isEmpty()) {
@@ -289,24 +290,30 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             System.exit(1);
         }
 
-        LOGGER.info("streamid is: " + streamId);
-        LOGGER.info("streamid value is: " + streamIdValue);
-
-        if (streamIdValue == null || streamId.isEmpty()) {
+        if (yugabyteDBConnectorConfig.autoCreateStream()) {
+            LOGGER.info("auto.create.stream set to true");
             // Create stream.
             String tableid = tableIds.stream().findFirst().get();
             try {
                 YBTable t = this.ybClient.openTableByUUID(tableid);
-                streamId = this.ybClient.createCDCStream(t, yugabyteDBConnectorConfig.databaseName(),
-                        "PROTO",
-                        "IMPLICIT").getStreamId();
-                configValues.put(YugabyteDBConnectorConfig.STREAM_ID.toString(), new ConfigValue(streamId));
+                streamId = this.ybClient.createCDCStream(t, yugabyteDBConnectorConfig.databaseName(), "PROTO", "IMPLICIT").getStreamId();
+
+                LOGGER.info(String.format("Created a new stream ID: %s", streamId));
+
+                configValues.put(YugabyteDBConnectorConfig.STREAM_ID.name(),
+                        new ConfigValue(YugabyteDBConnectorConfig.STREAM_ID.name(), streamId, new ArrayList<>(), new ArrayList<>()));
+
             }
             catch (Exception e) {
                 e.printStackTrace();
             }
-            LOGGER.info(String.format("Created a new stream ID: %s", streamIdValue));
+        } else if (streamId == null || streamId.isEmpty()) {
+            // Coming to this block means the auto.create.stream is set to false and no stream ID is provided, the connector should not proceed forward.
+            throw new DebeziumException("DB Stream ID not provided, please provide a DB stream ID to proceed...");
         }
+
+        LOGGER.info("Using the DB stream ID: " + streamId);
+
         try {
             GetDBStreamInfoResponse res = this.ybClient.getDBStreamInfo(streamId);
             if (res.getTableInfoList().isEmpty()) {
@@ -314,10 +321,8 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             }
         }
         catch (Exception e) {
-            LOGGER.error("Failed fetching all tables for the streamid {} ",
-                    streamIdValue, e);
-            streamIdValue.addErrorMessage("Failed fetching all tables for the streamid: "
-                    + e.getMessage());
+            LOGGER.error("Failed fetching all tables for the streamid {} ", streamIdConfig, e);
+            streamIdConfig.addErrorMessage("Failed fetching all tables for the streamid: " + e.getMessage());
         }
 
         this.tabletIds = new ArrayList<>();
@@ -340,13 +345,10 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         try {
             ListTablesResponse tablesResp = this.ybClient.getTablesList();
             for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
-                String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName()
-                        + "." + tableInfo.getName();
-                LOGGER.info("VKVK fqlTableName is " + fqlTableName);
+                String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName() + "." + tableInfo.getName();
                 TableId tableId = YugabyteDBSchema.parseWithSchema(fqlTableName, tableInfo.getPgschemaName());
                 if (yugabyteDBConnectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
-                    LOGGER.info(
-                            "VKVK adding table ID: " + tableInfo.getId() + " of table: " + tableInfo.getName() + " in namespace: " + tableInfo.getNamespace().getName());
+                    LOGGER.info(String.format("Adding table %s for streaming (%s)", tableInfo.getId().toStringUtf8(), fqlTableName));
                     tIds.add(tableInfo.getId().toStringUtf8());
                 }
             }

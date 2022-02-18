@@ -525,12 +525,11 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .required();
 
     public static final Field STREAM_ID = Field.create(DATABASE_CONFIG_PREFIX + "streamid")
-            .withDisplayName("YugabyteDB Stream ID")
+            .withDisplayName("YugabyteDB DB Stream ID")
             .withType(Type.STRING)
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 9))
             .withWidth(Width.MEDIUM)
             .withImportance(Importance.HIGH)
-            // .withValidation(Field::isUuid)
             .withDescription("ID of the Stream created in YugabyteDB");
 
     protected static final Field TASK_ID = Field.create("yugabytedb.task.id")
@@ -578,7 +577,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
 
     public static final Field AUTO_CREATE_STREAM = Field.create("auto.create.stream")
-            .withDefault("Specify whether to create a stream by default")
+            .withDisplayName("Specify whether to create a stream by default")
             .withType(Type.BOOLEAN)
             .withImportance(Importance.LOW)
             .withDefault(false)

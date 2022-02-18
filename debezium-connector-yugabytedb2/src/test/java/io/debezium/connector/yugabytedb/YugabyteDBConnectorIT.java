@@ -2165,11 +2165,11 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
         while (totalConsumedRecords < recordsCount) {
             int consumed = super.consumeAvailableRecords(record -> {
                 record.value();
-                System.out.println("SKSK The record being consumed is " + record);
+                System.out.println("The record being consumed is " + record);
             });
             if (consumed > 0) {
                 totalConsumedRecords += consumed;
-                System.out.println("SKSK consumed " + totalConsumedRecords + " records");
+                System.out.println("Consumed " + totalConsumedRecords + " records");
             }
         }
         System.out.println("total duration to ingest '" + recordsCount + "' records: " +

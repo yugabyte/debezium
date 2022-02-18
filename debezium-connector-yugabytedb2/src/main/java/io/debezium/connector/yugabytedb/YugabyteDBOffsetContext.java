@@ -78,7 +78,7 @@ public class YugabyteDBOffsetContext implements OffsetContext {
         this.sourceInfoSchema = sourceInfo.schema();
         for (YugabyteDBOffsetContext context : s) {
             if (context != null) {
-                LOGGER.info("SKSK populating the tabletsourceinfo" + context.getTabletSourceInfo());
+                LOGGER.debug("Populating the tabletsourceinfo" + context.getTabletSourceInfo());
                 if (context.getTabletSourceInfo() != null) {
                     this.tabletSourceInfo.putAll(context.getTabletSourceInfo());
                 }
@@ -331,7 +331,7 @@ public class YugabyteDBOffsetContext implements OffsetContext {
         @Override
         public YugabyteDBOffsetContext load(Map<String, ?> offset) {
 
-            LOGGER.debug("SKSK the offset being loaded.. " + offset);
+            LOGGER.debug("The offset being loaded in YugabyteDBOffsetContext.. " + offset);
 
             /*final OpId lsn = OpId.valueOf(readOptionalString(offset, SourceInfo.LSN_KEY));
             final OpId lastCompletelyProcessedLsn = OpId.valueOf(readOptionalString(offset,

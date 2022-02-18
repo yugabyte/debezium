@@ -244,7 +244,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                              YugabyteDBPartition partitionn,
                              YugabyteDBOffsetContext offsetContext)
             throws Exception {
-        LOGGER.debug("SKSK The offset is " + offsetContext.getOffset());
+        LOGGER.debug("The offset is " + offsetContext.getOffset());
 
         LOGGER.info("Processing messages");
         ListTablesResponse tablesResp = syncClient.getTablesList();
@@ -253,7 +253,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         List<Pair<String, String>> tabletPairList = null;
         try {
             tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
-            LOGGER.info("The tablet list is " + tabletPairList);
+            LOGGER.debug("The tablet list is " + tabletPairList);
         }
         catch (IOException e) {
             e.printStackTrace();
@@ -263,25 +263,16 @@ public class YugabyteDBStreamingChangeEventSource implements
         }
 
         Map<String, YBTable> tableIdToTable = new HashMap<>();
-        String streamId = this.connectorConfig.streamId();
+        String streamId = connectorConfig.streamId(); // todo: fix this vaibhav
 
-        LOGGER.info("The streamId is  " + streamId);
+        LOGGER.info("DB streamId used while streaming is " + streamId);
 
         Set<String> tIds = tabletPairList.stream().map(pair -> pair.getLeft()).collect(Collectors.toSet());
         for (String tId : tIds) {
-            LOGGER.info("SKSK the table uuid is " + tIds);
+            LOGGER.info("Table UUID: " + tIds);
             YBTable table = this.syncClient.openTableByUUID(tId);
             tableIdToTable.put(tId, table);
         }
-        // Map<String, List<String>> tableIdsToTabletIds = tabletPairList.stream()
-        // .collect(Collectors.groupingBy(Pair::getKey, Collectors.mapping(Pair::getValue, Collectors.toList())));
-        //
-        // List<AbstractMap.SimpleImmutableEntry<String, String>> listTabletIdTableIdPair;
-        // listTabletIdTableIdPair = tableIdsToTabletIds.entrySet().stream()
-        // .flatMap(e -> e.getValue().stream()
-        // .map(v -> new AbstractMap.SimpleImmutableEntry<>(v, e.getKey())))
-        // .collect(Collectors.toList());
-        // LOGGER.debug("The listTabletIdTableId is " + listTabletIdTableIdPair);
 
         int noMessageIterations = 0;
         for (Pair<String, String> entry : tabletPairList) {
@@ -296,6 +287,7 @@ public class YugabyteDBStreamingChangeEventSource implements
             for (Pair<String, String> entry : tabletPairList) {
                 final String tabletId = entry.getValue();
                 YBPartition part = new YBPartition(tabletId);
+
                 // The following will specify the connector polling interval at which
                 // yb-client will ask the database for changes
                 Thread.sleep(connectorConfig.cdcPollIntervalms());
@@ -344,12 +336,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                                 }
                                 if (message.getOperation() == Operation.COMMIT) {
                                     LOGGER.info("LSN in case of COMMIT is " + lsn);
-                                    offsetContext.updateWalPosition(tabletId, lsn,
-                                            lastCompletelyProcessedLsn,
-                                            message.getCommitTime(), String
-                                                    .valueOf(message.getTransactionId()),
-                                            null,
-                                            null/* taskContext.getSlotXmin(connection) */);
+                                    offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn, message.getCommitTime(),
+                                            String.valueOf(message.getTransactionId()), null, null/* taskContext.getSlotXmin(connection) */);
                                     commitMessage(part, offsetContext, lsn);
                                 }
                                 continue;
@@ -362,12 +350,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                             }
                             else if (message.getOperation() == Operation.COMMIT) {
                                 LOGGER.info("LSN in case of COMMIT is " + lsn);
-                                offsetContext.updateWalPosition(tabletId, lsn,
-                                        lastCompletelyProcessedLsn,
-                                        message.getCommitTime(),
-                                        String.valueOf(message.getTransactionId()),
-                                        null,
-                                        null/* taskContext.getSlotXmin(connection) */);
+                                offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn, message.getCommitTime(),
+                                        String.valueOf(message.getTransactionId()), null, null/* taskContext.getSlotXmin(connection) */);
                                 commitMessage(part, offsetContext, lsn);
                                 dispatcher.dispatchTransactionCommittedEvent(part, offsetContext);
                             }
@@ -401,24 +385,12 @@ public class YugabyteDBStreamingChangeEventSource implements
                             // If you need to print the received record, change debug level to info
                             LOGGER.debug("Received DML record {}", record);
 
-                            offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn,
-                                    message.getCommitTime(),
-                                    String.valueOf(message.getTransactionId()), tableId,
-                                    null/* taskContext.getSlotXmin(connection) */);
+                            offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn, message.getCommitTime(),
+                                    String.valueOf(message.getTransactionId()), tableId, null/* taskContext.getSlotXmin(connection) */);
 
                             boolean dispatched = message.getOperation() != Operation.NOOP
-                                    && dispatcher
-                                            .dispatchDataChangeEvent(tableId,
-                                                    new YugabyteDBChangeRecordEmitter(
-                                                            part,
-                                                            offsetContext,
-                                                            clock,
-                                                            connectorConfig,
-                                                            schema,
-                                                            connection,
-                                                            tableId,
-                                                            message,
-                                                            pgSchemaNameInRecord));
+                                    && dispatcher.dispatchDataChangeEvent(tableId, new YugabyteDBChangeRecordEmitter(part, offsetContext, clock, connectorConfig,
+                                                                          schema, connection, tableId, message, pgSchemaNameInRecord));
 
                             maybeWarnAboutGrowingWalBacklog(dispatched);
                         }
@@ -452,8 +424,6 @@ public class YugabyteDBStreamingChangeEventSource implements
                     // streaming will not lose the current view of data. Since we need to hold the transaction open
                     // for the snapshot, this block must not commit during catch up streaming.
                     // CDCSDK Find out why this fails : connection.commit();
-                    // todo vaibhav: the above fails because the connection's auto-commit has been set to false while
-                    // initializing (check with Suranjan if this is what he was looking for)
                 }
             }
         }
@@ -544,9 +514,9 @@ public class YugabyteDBStreamingChangeEventSource implements
     @Override
     public void commitOffset(Map<String, ?> offset) {
         // try {
-        LOGGER.debug("SKSK the commitoffset is " + offset);
-        ReplicationStream replicationStream = null;// this.replicationStream.get();
-        final OpId commitLsn = null;// OpId.valueOf((String) offset.get(PostgresOffsetContext.LAST_COMMIT_LSN_KEY));
+        LOGGER.debug("Commit offset: " + offset);
+        ReplicationStream replicationStream = null; // this.replicationStream.get();
+        final OpId commitLsn = null; // OpId.valueOf((String) offset.get(PostgresOffsetContext.LAST_COMMIT_LSN_KEY));
         final OpId changeLsn = OpId.valueOf((String) offset.get(YugabyteDBOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
         final OpId lsn = (commitLsn != null) ? commitLsn : changeLsn;
 
