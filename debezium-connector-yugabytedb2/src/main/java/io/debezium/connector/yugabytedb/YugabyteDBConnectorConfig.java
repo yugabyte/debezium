@@ -36,6 +36,7 @@ import io.debezium.connector.yugabytedb.snapshot.NeverSnapshotter;
 import io.debezium.connector.yugabytedb.spi.Snapshotter;
 import io.debezium.heartbeat.DatabaseHeartbeatImpl;
 import io.debezium.jdbc.JdbcConfiguration;
+import io.debezium.jdbc.JdbcValueConverters;
 import io.debezium.relational.ColumnFilterMode;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.TableId;
@@ -524,13 +525,17 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .required();
 
     public static final Field STREAM_ID = Field.create(DATABASE_CONFIG_PREFIX + "streamid")
-            .withDisplayName("YugabyteDB Stream ID")
+            .withDisplayName("YugabyteDB DB Stream ID")
             .withType(Type.STRING)
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 9))
             .withWidth(Width.MEDIUM)
             .withImportance(Importance.HIGH)
-            // .withValidation(Field::isUuid)
             .withDescription("ID of the Stream created in YugabyteDB");
+
+    protected static final Field TASK_ID = Field.create("yugabytedb.task.id")
+            .withDescription("Internal use only")
+            .withValidation(Field::isInteger)
+            .withInvisibleRecommender();
 
     public static final Field TABLET_LIST = Field.create(TASK_CONFIG_PREFIX + "tabletlist")
             .withDisplayName("YugabyteDB Tablet LIST for a Task")
@@ -571,6 +576,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
             .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
 
+    public static final Field AUTO_CREATE_STREAM = Field.create("auto.create.stream")
+            .withDisplayName("Specify whether to create a stream by default")
+            .withType(Type.BOOLEAN)
+            .withImportance(Importance.LOW)
+            .withDefault(false)
+            .withDescription("This will be enabled for testing purposes only, if set to true, the connector will create a DB stream ID");
+
     public static final Field CHAR_SET = Field.create(TASK_CONFIG_PREFIX + "charset")
             .withDisplayName("YugabyteDB charset")
             .withType(ConfigDef.Type.STRING)
@@ -609,6 +621,17 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDescription(
                     "Whether or not to delete the logical replication stream when the connector finishes orderly" +
                             "By default the replication is kept so that on restart progress can resume from the last recorded location");
+
+    // Changing the default decimal.handling.mode to double
+    @Override
+    public JdbcValueConverters.DecimalMode getDecimalMode() {
+        if (super.getDecimalMode() == JdbcValueConverters.DecimalMode.PRECISE) {
+            LOGGER.debug("decimal.handling.mode PRECISE is not supported, defaulting to double");
+            return JdbcValueConverters.DecimalMode.DOUBLE;
+        }
+
+        return super.getDecimalMode();
+    }
 
     public enum AutoCreateMode implements EnumeratedValue {
         /**
@@ -671,7 +694,6 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         }
     }
 
-    // todo vaibhav: check if this can be removed or reused
     public static final Field PUBLICATION_AUTOCREATE_MODE = Field.create("stream.autocreate.mode")
             .withDisplayName("YB Stream Auto Create Mode")
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 9))
@@ -965,17 +987,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         return getConfig().getString(MASTER_ADDRESSES);
     }
 
-    // public int masterPort() {
-    // return getConfig().getInteger(MASTER_PORT);
-    // };
-    //
-    // public String masterHost() {
-    // return getConfig().getString(MASTER_HOSTNAME);
-    // };
-
     public String streamId() {
         return getConfig().getString(STREAM_ID);
     };
+
+    public boolean autoCreateStream() {
+        return getConfig().getBoolean(AUTO_CREATE_STREAM);
+    }
 
     public int maxNumTablets() {
         return getConfig().getInteger(MAX_NUM_TABLETS);
@@ -1073,12 +1091,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
     @Override
     protected SourceInfoStructMaker<? extends AbstractSourceInfo> getSourceInfoStructMaker(Version version) {
-        // switch (version) {
-        // case V1:
-        // return new LegacyV1PostgresSourceInfoStructMaker(Module.name(), Module.version(), this);
-        // default:
         return new YugabyteDBSourceInfoStructMaker(Module.name(), Module.version(), this);
-        // }
     }
 
     private static final ConfigDefinition CONFIG_DEFINITION = RelationalDatabaseConnectorConfig.CONFIG_DEFINITION.edit()
@@ -1104,7 +1117,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
                     SSL_SOCKET_FACTORY,
                     STATUS_UPDATE_INTERVAL_MS,
                     TCP_KEEPALIVE,
-                    MAX_NUM_TABLETS)
+                    MAX_NUM_TABLETS,
+                    AUTO_CREATE_STREAM)
             .events(
                     INCLUDE_UNKNOWN_DATATYPES,
                     DatabaseHeartbeatImpl.HEARTBEAT_ACTION_QUERY)

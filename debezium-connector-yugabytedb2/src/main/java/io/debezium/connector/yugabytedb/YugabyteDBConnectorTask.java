@@ -14,6 +14,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -72,9 +73,21 @@ public class YugabyteDBConnectorTask
         final Snapshotter snapshotter = connectorConfig.getSnapshotter();
         final SchemaNameAdjuster schemaNameAdjuster = SchemaNameAdjuster.create();
 
-        LOGGER.info("The config is " + config);
+        LOGGER.debug("The config is " + config);
 
-        LOGGER.info("The tablet list is " + config.getString(YugabyteDBConnectorConfig.TABLET_LIST));
+        String tabletList = config.getString(YugabyteDBConnectorConfig.TABLET_LIST);
+        List<Pair<String, String>> tabletPairList = null;
+        try {
+            tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
+            LOGGER.debug("The tablet list is " + tabletPairList);
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+        catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+
         if (snapshotter == null) {
             throw new ConnectException("Unable to load snapshotter, if using custom snapshot mode," +
                     " double check your settings");
@@ -242,9 +255,8 @@ public class YugabyteDBConnectorTask
                                                                   Partition.Provider<YBPartition> provider,
                                                                   OffsetContext.Loader<YugabyteDBOffsetContext> loader) {
         // return super.getPreviousOffsets(provider, loader);
-        // LOGGER.info("SKSK The offset is being loaded.");
         Set<YBPartition> partitions = provider.getPartitions();
-        LOGGER.info("SKSK The size of partitions is " + partitions.size());
+        LOGGER.debug("The size of partitions is " + partitions.size());
         OffsetReader<YBPartition, YugabyteDBOffsetContext, OffsetContext.Loader<YugabyteDBOffsetContext>> reader = new OffsetReader<>(
                 context.offsetStorageReader(), loader);
         Map<YBPartition, YugabyteDBOffsetContext> offsets = reader.offsets(partitions);
@@ -265,30 +277,6 @@ public class YugabyteDBConnectorTask
         return offsets;
         // return new Offsets<>(offsets);
     }
-
-    // protected Offsets<P, O> getPreviousOffsets(Partition.Provider<P> provider, OffsetContext.Loader<O> loader) {
-    // // LOGGER.info("SKSK The offset is being loaded.");
-    // Set<P> partitions = provider.getPartitions();
-    // OffsetReader<P, O, OffsetContext.Loader<O>> reader = new OffsetReader<>(
-    // context.offsetStorageReader(), loader);
-    // Map<P, O> offsets = reader.offsets(partitions);
-    //
-    // boolean found = false;
-    // for (P partition : partitions) {
-    // O offset = offsets.get(partition);
-    //
-    // if (offset != null) {
-    // found = true;
-    // LOGGER.info("Found previous partition offset {}: {}", partition, offset);
-    // }
-    // }
-    //
-    // if (!found) {
-    // LOGGER.info("No previous offsets found");
-    // }
-    //
-    // return new Offsets<>(offsets);
-    // }
 
     public ReplicationConnection createReplicationConnection(YugabyteDBTaskContext taskContext,
                                                              boolean doSnapshot,
@@ -332,7 +320,7 @@ public class YugabyteDBConnectorTask
         // the poll the queue
         // and notify.
         final List<DataChangeEvent> records = queue.poll();
-        LOGGER.debug("SKSK doPoll Got the records from queue " + records);
+        LOGGER.debug("Got the records from queue: " + records);
         final List<SourceRecord> sourceRecords = records.stream()
                 .map(DataChangeEvent::getRecord)
                 .collect(Collectors.toList());

@@ -77,7 +77,8 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
                 .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
                 .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
                 .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
-                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1");
+                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1")
+                .with(YugabyteDBConnectorConfig.AUTO_CREATE_STREAM, true);
     }
 
     protected Configuration.Builder getConfigBuilderWithSchema() throws Exception {
@@ -87,7 +88,8 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
                 .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
                 .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
                 .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
-                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "test_schema.t1");
+                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "test_schema.t1")
+                .with(YugabyteDBConnectorConfig.AUTO_CREATE_STREAM, true);
     }
 
     private void consumeRecords(long recordsCount) {
@@ -96,7 +98,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
         List<SourceRecord> records = new ArrayList<>();
         while (totalConsumedRecords < recordsCount) {
             int consumed = super.consumeAvailableRecords(record -> {
-                System.out.println("VKVK the record being consumed is " + record);
+                System.out.println("The record being consumed is " + record);
                 records.add(record);
             });
             if (consumed > 0) {

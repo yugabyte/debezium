@@ -202,7 +202,7 @@ public final class TestHelper {
 
         try {
             for (int i = 0; i < insertStmts.length; ++i) {
-                System.out.println("VKVK executing the statement: " + insertStmts[i]);
+                System.out.println("Executing statement: " + insertStmts[i]);
                 TestHelper.execute(insertStmts[i]);
             }
         }

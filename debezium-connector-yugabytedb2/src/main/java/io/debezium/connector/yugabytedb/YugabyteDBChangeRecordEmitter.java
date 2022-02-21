@@ -109,7 +109,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
     @Override
     public void emitChangeRecords(DataCollectionSchema schema, Receiver receiver) throws InterruptedException {
         schema = synchronizeTableSchema(schema);
-        LOGGER.debug("SKSK the schema of the table is " + schema);
+        LOGGER.debug("The schema of the table is " + schema);
         super.emitChangeRecords(schema, receiver);
     }
 
@@ -130,7 +130,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                     return null;
                 // return columnValues(message.getOldTupleList(), tableId, true,
                 // message.hasTypeMetadata(), true, true);
-                default: // vaibhav: I guess the default case is triggered in case of DELETE ops
+                default:
                     return columnValues(message.getOldTupleList(), tableId, true,
                             message.hasTypeMetadata(), false, true);
             }

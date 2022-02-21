@@ -2132,6 +2132,7 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
             TestHelper.executeDDL("postgres_create_tables.ddl");
             Thread.sleep(1000);
             Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                    .with("tasks.max", "2")
                     .with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1")
                     .with(YugabyteDBConnectorConfig.PORT, 5433)
                     .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
@@ -2141,9 +2142,9 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
             // .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
             start(YugabyteDBConnector.class, configBuilder.build());
             assertConnectorIsRunning();
-            final long recordsCount = 2;
+            final long recordsCount = 20000;
 
-            TestHelper.insertData();
+            // TestHelper.insertData();
             // final int batchSize = 10;
 
             // batchInsertRecords(recordsCount, batchSize);
@@ -2164,11 +2165,11 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
         while (totalConsumedRecords < recordsCount) {
             int consumed = super.consumeAvailableRecords(record -> {
                 record.value();
-                System.out.println("SKSK The record being consumed is " + record);
+                System.out.println("The record being consumed is " + record);
             });
             if (consumed > 0) {
                 totalConsumedRecords += consumed;
-                System.out.println("SKSK consumed " + totalConsumedRecords + " records");
+                System.out.println("Consumed " + totalConsumedRecords + " records");
             }
         }
         System.out.println("total duration to ingest '" + recordsCount + "' records: " +
