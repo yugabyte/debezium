@@ -68,7 +68,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
-        LOGGER.info("Props " + props);
+        LOGGER.debug("Props " + props);
         Configuration config = Configuration.from(this.props);
         this.yugabyteDBConnectorConfig = new YugabyteDBConnectorConfig(config);
     }
@@ -114,30 +114,30 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
         validateTServerConnection(results, config);
         String streamIdValue = this.yugabyteDBConnectorConfig.streamId();
-        LOGGER.info("The streamid in config is" + this.yugabyteDBConnectorConfig.streamId());
+        LOGGER.debug("The streamid in config is" + this.yugabyteDBConnectorConfig.streamId());
 
         if (streamIdValue == null) {
             streamIdValue = results.get(YugabyteDBConnectorConfig.STREAM_ID.name()).value().toString();
         }
 
-        LOGGER.info("The streamid being used is " + streamIdValue);
+        LOGGER.debug("The streamid being used is " + streamIdValue);
 
         int numGroups = Math.min(this.tabletIds.size(), maxTasks);
-        LOGGER.info("The tabletIds size are " + tabletIds.size() + " maxTasks" + maxTasks);
+        LOGGER.debug("The tabletIds size are " + tabletIds.size() + " maxTasks" + maxTasks);
 
         List<List<Pair<String, String>>> tabletIdsGrouped = ConnectorUtils.groupPartitions(this.tabletIds, numGroups);
-        LOGGER.info("The grouped tabletIds are " + tabletIdsGrouped.size());
+        LOGGER.debug("The grouped tabletIds are " + tabletIdsGrouped.size());
         List<Map<String, String>> taskConfigs = new ArrayList<>(tabletIdsGrouped.size());
 
         for (List<Pair<String, String>> taskTables : tabletIdsGrouped) {
-            LOGGER.info("The taskTables are " + taskTables);
+            LOGGER.debug("The taskTables are " + taskTables);
             Map<String, String> taskProps = new HashMap<>(this.props);
             int taskId = taskConfigs.size();
             taskProps.put(YugabyteDBConnectorConfig.TASK_ID.toString(), String.valueOf(taskId));
             String taskTablesSerialized = "";
             try {
                 taskTablesSerialized = ObjectUtil.serializeObjectToString(taskTables);
-                LOGGER.info("The taskTablesSerialized " + taskTablesSerialized);
+                LOGGER.debug("The taskTablesSerialized " + taskTablesSerialized);
             }
             catch (IOException e) {
                 e.printStackTrace();
@@ -262,7 +262,6 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     protected void validateTServerConnection(Map<String, ConfigValue> configValues,
                                              Configuration config) {
         String hostAddress = config.getString(YugabyteDBConnectorConfig.MASTER_ADDRESSES.toString());
-        // todo vaibhav: check if the static variables can be replaced with their respective functions
         this.ybClient = getYBClientBase(hostAddress,
                 yugabyteDBConnectorConfig.adminOperationTimeoutMs(),
                 yugabyteDBConnectorConfig.operationTimeoutMs(),
@@ -313,8 +312,6 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             throw new DebeziumException("DB Stream ID not provided, please provide a DB stream ID to proceed...");
         }
 
-        LOGGER.info("Using the DB stream ID: " + streamId);
-
         try {
             GetDBStreamInfoResponse res = this.ybClient.getDBStreamInfo(streamId);
             if (res.getTableInfoList().isEmpty()) {
@@ -341,7 +338,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     }
 
     private Set<String> fetchTabletList() {
-        LOGGER.info("Fetching tables");
+        LOGGER.debug("Fetching tables");
         Set<String> tIds = new HashSet<>();
         try {
             ListTablesResponse tablesResp = this.ybClient.getTablesList();

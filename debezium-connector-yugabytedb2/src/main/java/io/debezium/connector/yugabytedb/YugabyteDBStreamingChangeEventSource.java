@@ -263,13 +263,13 @@ public class YugabyteDBStreamingChangeEventSource implements
         }
 
         Map<String, YBTable> tableIdToTable = new HashMap<>();
-        String streamId = connectorConfig.streamId(); // todo: fix this vaibhav
+        String streamId = connectorConfig.streamId();
 
-        LOGGER.info("DB streamId used while streaming is " + streamId);
+        LOGGER.info("Using DB stream ID: " + streamId);
 
         Set<String> tIds = tabletPairList.stream().map(pair -> pair.getLeft()).collect(Collectors.toSet());
         for (String tId : tIds) {
-            LOGGER.info("Table UUID: " + tIds);
+            LOGGER.debug("Table UUID: " + tIds);
             YBTable table = this.syncClient.openTableByUUID(tId);
             tableIdToTable.put(tId, table);
         }
@@ -328,14 +328,14 @@ public class YugabyteDBStreamingChangeEventSource implements
                         // Tx BEGIN/END event
                         if (message.isTransactionalMessage()) {
                             if (!connectorConfig.shouldProvideTransactionMetadata()) {
-                                LOGGER.info("Received transactional message {}", record);
+                                LOGGER.debug("Received transactional message {}", record);
                                 // Don't skip on BEGIN message as it would flush LSN for the whole transaction
                                 // too early
                                 if (message.getOperation() == Operation.BEGIN) {
-                                    LOGGER.info("LSN in case of BEGIN is " + lsn);
+                                    LOGGER.debug("LSN in case of BEGIN is " + lsn);
                                 }
                                 if (message.getOperation() == Operation.COMMIT) {
-                                    LOGGER.info("LSN in case of COMMIT is " + lsn);
+                                    LOGGER.debug("LSN in case of COMMIT is " + lsn);
                                     offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn, message.getCommitTime(),
                                             String.valueOf(message.getTransactionId()), null, null/* taskContext.getSlotXmin(connection) */);
                                     commitMessage(part, offsetContext, lsn);
@@ -344,12 +344,12 @@ public class YugabyteDBStreamingChangeEventSource implements
                             }
 
                             if (message.getOperation() == Operation.BEGIN) {
-                                LOGGER.info("LSN in case of BEGIN is " + lsn);
+                                LOGGER.debug("LSN in case of BEGIN is " + lsn);
                                 dispatcher.dispatchTransactionStartedEvent(part,
                                         message.getTransactionId(), offsetContext);
                             }
                             else if (message.getOperation() == Operation.COMMIT) {
-                                LOGGER.info("LSN in case of COMMIT is " + lsn);
+                                LOGGER.debug("LSN in case of COMMIT is " + lsn);
                                 offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn, message.getCommitTime(),
                                         String.valueOf(message.getTransactionId()), null, null/* taskContext.getSlotXmin(connection) */);
                                 commitMessage(part, offsetContext, lsn);

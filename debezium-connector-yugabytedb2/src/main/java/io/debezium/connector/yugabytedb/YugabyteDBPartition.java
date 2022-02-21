@@ -48,7 +48,7 @@ public class YugabyteDBPartition implements Partition {
             List<Pair<String, String>> tabletPairList = null;
             try {
                 tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
-                LOGGER.info("The tablet list is " + tabletPairList);
+                LOGGER.debug("The tablet list is " + tabletPairList);
             }
             catch (IOException e) {
                 e.printStackTrace();
@@ -60,7 +60,7 @@ public class YugabyteDBPartition implements Partition {
             for (Pair<String, String> tabletPair : tabletPairList) {
                 partititons.add(new YBPartition(tabletPair.getRight()));
             }
-            LOGGER.info("The partition being returned is " + partititons);
+            LOGGER.debug("The partition being returned is " + partititons);
             return partititons;
         }
     }

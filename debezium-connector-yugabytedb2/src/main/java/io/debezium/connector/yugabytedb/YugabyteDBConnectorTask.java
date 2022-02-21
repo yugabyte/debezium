@@ -79,7 +79,7 @@ public class YugabyteDBConnectorTask
         List<Pair<String, String>> tabletPairList = null;
         try {
             tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
-            LOGGER.info("The tablet list is " + tabletPairList);
+            LOGGER.debug("The tablet list is " + tabletPairList);
         }
         catch (IOException e) {
             e.printStackTrace();
@@ -256,7 +256,7 @@ public class YugabyteDBConnectorTask
                                                                   OffsetContext.Loader<YugabyteDBOffsetContext> loader) {
         // return super.getPreviousOffsets(provider, loader);
         Set<YBPartition> partitions = provider.getPartitions();
-        LOGGER.info("The size of partitions is " + partitions.size());
+        LOGGER.debug("The size of partitions is " + partitions.size());
         OffsetReader<YBPartition, YugabyteDBOffsetContext, OffsetContext.Loader<YugabyteDBOffsetContext>> reader = new OffsetReader<>(
                 context.offsetStorageReader(), loader);
         Map<YBPartition, YugabyteDBOffsetContext> offsets = reader.offsets(partitions);

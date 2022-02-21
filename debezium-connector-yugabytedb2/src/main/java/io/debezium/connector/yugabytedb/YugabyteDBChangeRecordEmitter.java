@@ -130,7 +130,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                     return null;
                 // return columnValues(message.getOldTupleList(), tableId, true,
                 // message.hasTypeMetadata(), true, true);
-                default: // vaibhav: I guess the default case is triggered in case of DELETE ops
+                default:
                     return columnValues(message.getOldTupleList(), tableId, true,
                             message.hasTypeMetadata(), false, true);
             }

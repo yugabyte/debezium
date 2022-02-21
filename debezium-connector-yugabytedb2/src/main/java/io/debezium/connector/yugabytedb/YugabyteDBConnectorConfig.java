@@ -626,7 +626,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     @Override
     public JdbcValueConverters.DecimalMode getDecimalMode() {
         if (super.getDecimalMode() == JdbcValueConverters.DecimalMode.PRECISE) {
-            LOGGER.info("decimal.handling.mode PRECISE is not supported, defaulting to double");
+            LOGGER.debug("decimal.handling.mode PRECISE is not supported, defaulting to double");
             return JdbcValueConverters.DecimalMode.DOUBLE;
         }
 
@@ -694,7 +694,6 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         }
     }
 
-    // todo vaibhav: check if this can be removed or reused
     public static final Field PUBLICATION_AUTOCREATE_MODE = Field.create("stream.autocreate.mode")
             .withDisplayName("YB Stream Auto Create Mode")
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 9))
