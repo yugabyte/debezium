@@ -107,17 +107,35 @@ public final class SourceInfo extends BaseSourceInfo {
      * @param commitTime the commit time of the transaction that generated the event;
      * may be null indicating that this information is not available
      * @param txId the ID of the transaction that generated the transaction; may be null if this information is not available
-     * @param tableId the table that should be included in the source info; may be null
      * @param xmin the xmin of the slot, may be null
+     * @param tableId the table that should be included in the source info; may be null
      * @return this instance
      */
-    protected SourceInfo update(Lsn lsn, Instant commitTime, Long txId, TableId tableId, Long xmin) {
+    protected SourceInfo update(Lsn lsn, Instant commitTime, Long txId, Long xmin, TableId tableId) {
         this.lsn = lsn;
         if (commitTime != null) {
             this.timestamp = commitTime;
         }
         this.txId = txId;
         this.xmin = xmin;
+        if (tableId != null && tableId.schema() != null) {
+            this.schemaName = tableId.schema();
+        }
+        else {
+            this.schemaName = "";
+        }
+        if (tableId != null && tableId.table() != null) {
+            this.tableName = tableId.table();
+        }
+        else {
+            this.tableName = "";
+        }
+        return this;
+    }
+
+    // TODO https://issues.redhat.com/browse/DBZ-4329, make this call the method above, so to reset the attributes not provided here
+    protected SourceInfo update(Instant timestamp, TableId tableId) {
+        this.timestamp = timestamp;
         if (tableId != null && tableId.schema() != null) {
             this.schemaName = tableId.schema();
         }
@@ -136,17 +154,6 @@ public final class SourceInfo extends BaseSourceInfo {
         return this;
     }
 
-    protected SourceInfo update(Instant timestamp, TableId tableId) {
-        this.timestamp = timestamp;
-        if (tableId != null && tableId.schema() != null) {
-            this.schemaName = tableId.schema();
-        }
-        if (tableId != null && tableId.table() != null) {
-            this.tableName = tableId.table();
-        }
-        return this;
-    }
-
     public Lsn lsn() {
         return this.lsn;
     }
@@ -155,6 +162,7 @@ public final class SourceInfo extends BaseSourceInfo {
         return this.xmin;
     }
 
+    @Override
     public String sequence() {
         List<String> sequence = new ArrayList<String>(2);
         String lastCommitLsn = (this.lastCommitLsn != null)

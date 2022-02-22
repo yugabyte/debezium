@@ -19,6 +19,7 @@ deploy/
 target/
 mods/
 *.swp
+.tags
 epom
 log
 npm-debug.log
@@ -31,3 +32,6 @@ generated-sources/
 bin/
 gen/
 *.tokens
+
+jenkins-jobs/docker/rhel_kafka/plugins
+jenkins-jobs/docker/artifact-server/plugins

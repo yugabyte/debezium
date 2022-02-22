@@ -5,6 +5,7 @@
  */
 package io.debezium.connector.mongodb;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -23,6 +24,7 @@ import io.debezium.config.Configuration;
 import io.debezium.config.Field;
 import io.debezium.connector.base.ChangeEventQueue;
 import io.debezium.connector.common.BaseSourceTask;
+import io.debezium.connector.mongodb.MongoDbConnectorConfig.CaptureMode;
 import io.debezium.connector.mongodb.metrics.MongoDbChangeEventSourceMetricsFactory;
 import io.debezium.pipeline.ChangeEventSourceCoordinator;
 import io.debezium.pipeline.DataChangeEvent;
@@ -47,6 +49,8 @@ import io.debezium.util.SchemaNameAdjuster;
  */
 @ThreadSafe
 public final class MongoDbConnectorTask extends BaseSourceTask<MongoDbPartition, MongoDbOffsetContext> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(MongoDbConnectorTask.class);
 
     private static final String CONTEXT_NAME = "mongodb-connector-task";
 
@@ -79,6 +83,36 @@ public final class MongoDbConnectorTask extends BaseSourceTask<MongoDbPartition,
         final MongoDbOffsetContext previousOffset = getPreviousOffset(connectorConfig, replicaSets);
         final Clock clock = Clock.system();
 
+        if (previousOffset != null) {
+            final List<ReplicaSetOffsetContext> oplogBasedOffsets = new ArrayList<>();
+            final List<ReplicaSetOffsetContext> changeStreamBasedOffsets = new ArrayList<>();
+            replicaSets.all().forEach(rs -> {
+                final ReplicaSetOffsetContext offset = previousOffset.getReplicaSetOffsetContext(rs);
+                if (rs == null) {
+                    return;
+                }
+                if (offset.isFromChangeStream()) {
+                    changeStreamBasedOffsets.add(offset);
+                }
+                if (offset.isFromOplog()) {
+                    oplogBasedOffsets.add(offset);
+                }
+            });
+            if (!oplogBasedOffsets.isEmpty() && !changeStreamBasedOffsets.isEmpty()) {
+                LOGGER.error(
+                        "Replica set offsets are partially from oplog and partially from change streams. This is not supported situation and can lead to unpredicable behaviour.");
+            }
+            else if (!oplogBasedOffsets.isEmpty() && taskContext.getCaptureMode().isChangeStreams()) {
+                LOGGER.info("Stored offsets were created using oplog capturing, trying to switch to change streams.");
+            }
+            else if (!changeStreamBasedOffsets.isEmpty() && !taskContext.getCaptureMode().isChangeStreams()) {
+                LOGGER.warn("Stored offsets were created using change streams capturing. Connector configuration expects oplog capturing.");
+                LOGGER.warn("Switching configuration to '{}'", CaptureMode.CHANGE_STREAMS_UPDATE_FULL);
+                LOGGER.warn("Either reconfigure the connector or remove the old offsets");
+                taskContext.overrideCaptureMode(CaptureMode.CHANGE_STREAMS_UPDATE_FULL);
+            }
+        }
+
         PreviousContext previousLogContext = taskContext.configureLoggingContext(taskName);
 
         try {
@@ -91,7 +125,7 @@ public final class MongoDbConnectorTask extends BaseSourceTask<MongoDbPartition,
                     .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
                     .build();
 
-            errorHandler = new MongoDbErrorHandler(connectorConfig.getLogicalName(), queue);
+            errorHandler = new MongoDbErrorHandler(connectorConfig, queue);
 
             final MongoDbEventMetadataProvider metadataProvider = new MongoDbEventMetadataProvider();
 
@@ -106,7 +140,8 @@ public final class MongoDbConnectorTask extends BaseSourceTask<MongoDbPartition,
                     schemaNameAdjuster);
 
             ChangeEventSourceCoordinator<MongoDbPartition, MongoDbOffsetContext> coordinator = new ChangeEventSourceCoordinator<>(
-                    new Offsets<>(Collections.singletonMap(new MongoDbPartition(), previousOffset)),
+                    // TODO pass offsets from all the partitions
+                    Offsets.of(Collections.singletonMap(new MongoDbPartition(), previousOffset)),
                     errorHandler,
                     MongoDbConnector.class,
                     connectorConfig,
@@ -116,7 +151,8 @@ public final class MongoDbConnectorTask extends BaseSourceTask<MongoDbPartition,
                             dispatcher,
                             clock,
                             replicaSets,
-                            taskContext),
+                            taskContext,
+                            schema),
                     new MongoDbChangeEventSourceMetricsFactory(),
                     dispatcher,
                     schema);

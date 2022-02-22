@@ -103,15 +103,15 @@ public class PostgresConnection extends JdbcConnection {
      * @param config {@link Configuration} instance, may not be null.
      * @param typeRegistry an existing/already-primed {@link TypeRegistry} instance
      */
-    public PostgresConnection(Configuration config, TypeRegistry typeRegistry) {
-        super(config, FACTORY, PostgresConnection::validateServerVersion, PostgresConnection::defaultSettings, "\"", "\"");
+    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry) {
+        super(config.getJdbcConfig(), FACTORY, PostgresConnection::validateServerVersion, PostgresConnection::defaultSettings, "\"", "\"");
         if (Objects.isNull(typeRegistry)) {
             this.typeRegistry = null;
             this.defaultValueConverter = null;
         }
         else {
             this.typeRegistry = typeRegistry;
-            final PostgresValueConverter valueConverter = PostgresValueConverter.of(new PostgresConnectorConfig(config), this.getDatabaseCharset(), typeRegistry);
+            final PostgresValueConverter valueConverter = PostgresValueConverter.of(config, this.getDatabaseCharset(), typeRegistry);
             this.defaultValueConverter = new PostgresDefaultValueConverter(valueConverter, this.getTimestampUtils());
         }
     }
@@ -123,7 +123,7 @@ public class PostgresConnection extends JdbcConnection {
      * @param config {@link Configuration} instance, may not be null.
      */
     public PostgresConnection(Configuration config) {
-        this(config, (TypeRegistry) null);
+        this(config, null);
     }
 
     /**
@@ -567,9 +567,9 @@ public class PostgresConnection extends JdbcConnection {
                 column.scale(nativeType.getDefaultScale());
             }
 
-            final String defaultValue = columnMetadata.getString(13);
-            if (defaultValue != null) {
-                getDefaultValue(column.create(), defaultValue).ifPresent(column::defaultValue);
+            final String defaultValueExpression = columnMetadata.getString(13);
+            if (defaultValueExpression != null && getDefaultValueConverter().supportConversion(column.typeName())) {
+                column.defaultValueExpression(defaultValueExpression);
             }
 
             return Optional.of(column);
@@ -578,9 +578,9 @@ public class PostgresConnection extends JdbcConnection {
         return Optional.empty();
     }
 
-    @Override
-    protected Optional<Object> getDefaultValue(Column column, String defaultValue) {
-        return defaultValueConverter.parseDefaultValue(column, defaultValue);
+    public PostgresDefaultValueConverter getDefaultValueConverter() {
+        Objects.requireNonNull(defaultValueConverter, "Connection does not provide default value converter");
+        return defaultValueConverter;
     }
 
     public TypeRegistry getTypeRegistry() {

@@ -16,7 +16,7 @@ This feature is currently in incubating state, i.e. exact semantics, configurati
 
 == Overview
 
-This extension is inspired by the {link-prefix}:{link-outbox-event-router}[Outbox Event Router] single message transformation (SMT).
+This extension is inspired by the xref:transformations/outbox-event-router.adoc[Outbox Event Router] single message transformation (SMT).
 As discussed in the blog post link:/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/[Reliable Microservices Data Exchange with the Outbox Pattern], microservices often need to exchange information with one another and an excellent way to deal with that is using the Outbox pattern combined with {prodname}'s Outbox Event Router SMT.
 
 The following image shows the overall architecture of this pattern:
@@ -92,6 +92,12 @@ public class OrderCreatedEvent implements ExportedEvent<String, JsonNode> {
     public Instant getTimestamp() {
         return timestamp;
     }
+
+    @Override
+    public Map<String, Object> getAdditionalFieldValues() {
+        // no additional fields
+        return Collections.emptyMap();
+    }
 }
 ----
 
@@ -102,6 +108,10 @@ The following example illustrates an `OrderService` that emits the `OrderCreated
 ----
 @ApplicationScoped
 public class OrderService {
+
+    @Inject
+    OrderRepository orderRepository;
+
     @Inject
     Event<ExportedEvent<?, ?>> event;
 
@@ -117,7 +127,63 @@ public class OrderService {
 When the application code fires the event by calling `Event#fire()`, the Outbox extension will be notified that the event occurred and persists the contents of the event into an outbox event table within the scope of the current transaction.
 The {prodname} CDC connector in conjunction with the Outbox Event Router will be monitoring this table and will be responsible for relaying that data using CDC events.
 
-To see a full end-to-end demo, the https://github.com/debezium/debezium-examples/tree/master/outbox[Outbox] example illustrates two Quarkus microservice applications using the outbox pattern to share data between them when orders are placed or cancelled.
+To see a full end-to-end demo, the https://github.com/debezium/debezium-examples/tree/main/outbox[Outbox] example illustrates two Quarkus microservice applications using the outbox pattern to share data between them when orders are placed or cancelled.
+
+[id=additional-field-mappings]
+== Additional Field mappings
+
+The {prodname} Outbox SMT can be configured to read additional fields and emit those field values either as event headers, or as part of the event value.
+
+In order to pass additional field mappings to be saved by the Quarkus Outbox extension,
+the configuration property `quarkus.debezium-outbox.additional-fields` must be specified in the `application.properties`.
+This configuration property is a comma-separated list of additional field definitions that will be added to the Outbox entity mapping and passed by the application's implementation of the `ExportedEvent` interface.
+
+Each entry in this comma-separated list must follow this format:
+[source]
+----
+<field-name>:<field-java-type>[:<field-column-definition>[:<field-jpa-attribute-converter>]]
+----
+
+The pattern indicates that the field's name and java-type are required while the column definition and JPA attribute converter are optional.
+However, please note that if you wish to specify a JPA attribute converter then the column definition must be specified.
+
+The following example shows how to define an additional field called `customer_name` that is represented in Java as a `String` and which should be stored in the outbox table as a `VARCHAR(100)` column.
+This example also shows a JPA Attribute converter defined that forces the storage of the string to upper-case.
+
+.application.properties
+[source,properties,indent=0]
+----
+quarkus.debezium-outbox.additional-fields=customer_name:string:varchar(100):example.UpperCase
+----
+
+Once the field(s) are configured in the application's `.properties` file, the application's code needs to provide the corresponding values through its exported events.
+In order to do this, the application class that extends the `ExportedEvent` needs to override the method called `getAdditionalFieldValues()` and return a `Map` of the additional field names and values.
+
+In the following example, we show how to specify the `customer_name` field with a value of `Acme Goods`.
+Using our `OrderCreatedEvent` from the example section above, we've extended the event:
+
+.OrderCreatedEvent.java
+[source,java,indent=0]
+----
+public class OrderCreatedEvent implements ExportedEvent<String, JsonNode> {
+    ...
+    @Override
+    public Map<String, Object> getAdditionalFieldValues() {
+        return Collections.singletonMap("customer_name", "Acme Goods");
+    }
+}
+----
+
+[NOTE]
+====
+Additional field mappings do allow specifying a JPA attribute converter per field.
+
+In this example, we defined `example.UpperCase` that will convert any supplied string-value to upper-case prior to insertion.
+A JPA attribute converter allows decoupling this type of behavior from the call site, allowing reuse of a common behavior.
+====
+
+With the configuration in the application's `.properties` file and updating of `OrderCreateedEvent` to provide these additional fields and values,
+the {prodname} Outbox SMT now can access these additional field values and place them in the emitted event.
 
 == Configuration
 
@@ -235,16 +301,29 @@ for example, `com.company.TheAttributeConverter`
 |string
 |
 
-|[[quarkus-debezium-outbox-tracingspancontext-name]]<<quarkus-debezium-outbox-tracingspancontext-name,`+quarkus.debezium-outbox.tracingspancontext.name+`>>::
+|[[quarkus-debezium-outbox-payload-type]]<<quarkus-debezium-outbox-payload-type,`+quarkus.debezium-outbox.payload.type+`>>::
+A fully-qualified class name of a Hibernate https://docs.jboss.org/hibernate/orm/current/userguide/html_single/Hibernate_User_Guide.html#basic-custom-type[user type] implementation. +
+for example, `io.company.types.JsonNodeBinaryType`
+|string
+|
+
+|[[quarkus-debezium-outbox-tracing-span-name]]<<quarkus-debezium-outbox-tracing-span-name,`+quarkus.debezium-outbox.tracing-span.name+`>>::
 The column name for the tracing span context column.
 |string
 |`tracingspancontext`
 
-|[[quarkus-debezium-outbox-tracingspancontext-column-definition]]<<quarkus-debezium-outbox-tracingspancontext-column-definition,`+quarkus.debezium-outbox.tracingspancontext.column-definition+`>>::
-The database-specific column definition for the tracingspancontext. +
+|[[quarkus-debezium-outbox-tracing-span-column-definition]]<<quarkus-debezium-outbox-tracing-span-column-definition,`+quarkus.debezium-outbox.tracingspancontext.column-definition+`>>::
+The database-specific column definition for the tracing span context column. +
 for example, `text not null`
 |string
 |`VARCHAR(256)`
+
+|[[quarkus-debezium-outbox-additional-fields]]<<quarkus-debezium-outbox-additional-fields,`+quarkus.debezium-outbox.additional-fields+`>>::
+A comma-separated list of additional field mappings that will be persisted in the outbox table. +
+ +
+See xref:#additional-field-mappings[additional field mappings] for details on format and usage.
+|string
+|
 
 |===
 

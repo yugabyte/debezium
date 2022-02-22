@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.common.config.ConfigException;
+import org.bson.BsonDocument;
 import org.bson.Document;
 
 import io.debezium.annotation.ThreadSafe;
@@ -35,7 +36,6 @@ public final class FieldSelector {
      * This filter is designed to exclude or rename fields in a document.
      */
     @ThreadSafe
-    @FunctionalInterface
     public static interface FieldFilter {
 
         /**
@@ -45,6 +45,30 @@ public final class FieldSelector {
          * @return modified document
          */
         Document apply(Document doc);
+
+        /**
+        * Applies this filter to the given document to exclude or rename fields.
+        *
+        * @param doc document to exclude or rename fields
+        * @return modified document
+        */
+        BsonDocument apply(BsonDocument doc);
+
+        /**
+        * Applies this filter to the given change document to exclude or rename fields.
+        *
+        * @param doc document to exclude or rename fields
+        * @return modified document
+        */
+        BsonDocument applyChange(BsonDocument doc);
+
+        /**
+        * Applies this filter to the full name of field to exclude or rename field.
+        *
+        * @param field the original name of field
+        * @return the new field name or {@code null} if the field should be removed
+        */
+        String apply(String field);
     }
 
     /**
@@ -120,7 +144,7 @@ public final class FieldSelector {
             }
         }
 
-        private String[] parseIntoParts(String name, String value, Predicate<Integer> lengthPredicate, Pattern delimiterPattern) {
+        static String[] parseIntoParts(String name, String value, Predicate<Integer> lengthPredicate, Pattern delimiterPattern) {
             String[] nodes = delimiterPattern.split(value.trim());
             if (lengthPredicate.test(nodes.length) || Arrays.stream(nodes).anyMatch(Strings::isNullOrEmpty)) {
                 throw new ConfigException("Invalid format: " + name);
@@ -170,25 +194,95 @@ public final class FieldSelector {
             List<Path> pathsApplyingToCollection = paths.stream()
                     .filter(path -> path.matches(namespace))
                     .collect(Collectors.toList());
-
+            final Map<String, Path> pathsByAddress = paths.stream()
+                    .collect(Collectors.toMap(Path::toString, Function.identity()));
             if (pathsApplyingToCollection.size() == 1) {
-                return doc -> {
-                    Document setDoc = doc.get("$set", Document.class);
-                    Document unsetDoc = doc.get("$unset", Document.class);
-                    pathsApplyingToCollection.get(0).modify(doc, setDoc, unsetDoc);
-                    return doc;
+                return new FieldFilter() {
+                    final Path path = pathsApplyingToCollection.get(0);
+
+                    @Override
+                    public String apply(String field) {
+                        return path.matchesPath(field) ? path.generateNewFieldName(field) : field;
+                    }
+
+                    @Override
+                    public BsonDocument apply(BsonDocument doc) {
+                        path.modify((Map) doc, null, null);
+                        return doc;
+                    }
+
+                    @Override
+                    public Document apply(Document doc) {
+                        Document setDoc = doc.get("$set", Document.class);
+                        Document unsetDoc = doc.get("$unset", Document.class);
+                        pathsApplyingToCollection.get(0).modify(doc, setDoc, unsetDoc);
+                        return doc;
+                    }
+
+                    @Override
+                    public BsonDocument applyChange(BsonDocument doc) {
+                        path.modify(null, (Map) doc, null);
+                        return doc;
+                    }
                 };
             }
             else if (pathsApplyingToCollection.size() > 1) {
-                return doc -> {
-                    Document setDoc = doc.get("$set", Document.class);
-                    Document unsetDoc = doc.get("$unset", Document.class);
-                    pathsApplyingToCollection.forEach(path -> path.modify(doc, setDoc, unsetDoc));
-                    return doc;
+                return new FieldFilter() {
+
+                    @Override
+                    public String apply(String field) {
+                        for (Path p : pathsApplyingToCollection) {
+                            if (p.matchesPath(field)) {
+                                return p.generateNewFieldName(field);
+                            }
+                        }
+                        return field;
+                    }
+
+                    @Override
+                    public BsonDocument apply(BsonDocument doc) {
+                        pathsApplyingToCollection.forEach(path -> path.modify((Map) doc, null, null));
+                        return doc;
+                    }
+
+                    @Override
+                    public Document apply(Document doc) {
+                        Document setDoc = doc.get("$set", Document.class);
+                        Document unsetDoc = doc.get("$unset", Document.class);
+                        pathsApplyingToCollection.forEach(path -> path.modify(doc, setDoc, unsetDoc));
+                        return doc;
+                    }
+
+                    @Override
+                    public BsonDocument applyChange(BsonDocument doc) {
+                        pathsApplyingToCollection.forEach(path -> path.modify(null, (Map) doc, null));
+                        return doc;
+                    }
                 };
             }
         }
-        return doc -> doc;
+        return new FieldFilter() {
+
+            @Override
+            public String apply(String field) {
+                return field;
+            }
+
+            @Override
+            public BsonDocument apply(BsonDocument doc) {
+                return doc;
+            }
+
+            @Override
+            public Document apply(Document doc) {
+                return doc;
+            }
+
+            @Override
+            public BsonDocument applyChange(BsonDocument doc) {
+                return doc;
+            }
+        };
     }
 
     private static final class FieldNameAndValue {
@@ -237,7 +331,7 @@ public final class FieldSelector {
          * @param setDoc   the value of {@code $set} field; may be {@code null}
          * @param unsetDoc the value of {@code $unset} field; may be {@code null}
          */
-        public void modify(Document doc, Document setDoc, Document unsetDoc) {
+        public void modify(Map<String, Object> doc, Map<String, Object> setDoc, Map<String, Object> unsetDoc) {
             if (setDoc == null && unsetDoc == null) {
                 modifyFields(doc, fieldNodes, 0);
             }
@@ -261,8 +355,8 @@ public final class FieldSelector {
          * @param nodes      the path nodes
          * @param beginIndex the begin index
          */
-        private void modifyFields(Document doc, String[] nodes, int beginIndex) {
-            Document current = doc;
+        private void modifyFields(Map<String, Object> doc, String[] nodes, int beginIndex) {
+            Map<String, Object> current = doc;
             int stopIndex = nodes.length - 1;
             for (int i = beginIndex; i < nodes.length; i++) {
                 String node = nodes[i];
@@ -272,8 +366,8 @@ public final class FieldSelector {
                 }
                 else {
                     Object next = current.get(node);
-                    if (next instanceof Document) {
-                        current = (Document) next;
+                    if (next instanceof Map<?, ?>) {
+                        current = (Map<String, Object>) next;
                     }
                     else {
                         modifyFields(next, nodes, i + 1);
@@ -292,7 +386,7 @@ public final class FieldSelector {
          *
          * @param doc the document to modify fields
          */
-        private void modifyFieldsWithDotNotation(Document doc) {
+        private void modifyFieldsWithDotNotation(Map<String, Object> doc) {
             // document can contain null value by key
             if (doc.containsKey(field)) {
                 modifyFieldWithDotNotation(doc, field);
@@ -316,8 +410,8 @@ public final class FieldSelector {
                     // key is a prefix of field, e.g. field is 'a.b' and key is 'a'
                     if (startsWith(keyNodes, fieldNodes)) {
                         Object value = entry.getValue();
-                        if (value instanceof Document) {
-                            modifyFields((Document) value, fieldNodes, keyNodes.length);
+                        if (value instanceof Map<?, ?>) {
+                            modifyFields((Map<String, Object>) value, fieldNodes, keyNodes.length);
                         }
                         else {
                             modifyFields(value, fieldNodes, keyNodes.length);
@@ -342,8 +436,8 @@ public final class FieldSelector {
         private void modifyFields(Object value, String[] fieldNodes, int length) {
             if (value instanceof List) {
                 for (Object item : (List<?>) value) {
-                    if (item instanceof Document) {
-                        modifyFields((Document) item, fieldNodes, length);
+                    if (item instanceof Map<?, ?>) {
+                        modifyFields((Map<String, Object>) item, fieldNodes, length);
                     }
                 }
             }
@@ -415,7 +509,7 @@ public final class FieldSelector {
             return list;
         }
 
-        String checkFieldExists(Document doc, String field) {
+        String checkFieldExists(Map<String, Object> doc, String field) {
             if (doc.containsKey(field)) {
                 throw new IllegalArgumentException("Document already contains field : " + field);
             }
@@ -428,7 +522,7 @@ public final class FieldSelector {
          * @param doc   the document to modify field
          * @param field the modified field
          */
-        abstract void modifyField(Document doc, String field);
+        abstract void modifyField(Map<String, Object> doc, String field);
 
         /**
          * Immediately modifies the field that uses the dot notation like {@code 'a.b'} in the document used for set and
@@ -437,7 +531,7 @@ public final class FieldSelector {
          * @param doc   the document to modify field
          * @param field the modified field
          */
-        abstract void modifyFieldWithDotNotation(Document doc, String field);
+        abstract void modifyFieldWithDotNotation(Map<String, Object> doc, String field);
 
         /**
          * Generates a new field name for the given value.
@@ -447,6 +541,32 @@ public final class FieldSelector {
          * @return a new field name for the given value
          */
         abstract FieldNameAndValue generateNewFieldName(String[] fieldNodes, Object value);
+
+        /**
+         * Generates a new field name.
+         *
+         * @param fieldName the original field name
+         * @return a new field name
+         */
+        abstract String generateNewFieldName(String fieldName);
+
+        /**
+         * Verifies whether a parameter representing path is the same or belongs under this path.
+         * 
+         * @param other - the string representing the other path
+         * @return - true if this path is the same or parent of the path passed
+         */
+        public boolean matchesPath(String other) {
+            final String[] otherParts = excludeNumericItems(FieldSelectorBuilder.parseIntoParts(other, other, length -> length < 1, DOT));
+            if (fieldNodes.length <= other.length()) {
+                for (int i = 0; i < fieldNodes.length; i++) {
+                    if (!fieldNodes[i].equals(otherParts[i])) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
 
         @Override
         public String toString() {
@@ -462,17 +582,23 @@ public final class FieldSelector {
         }
 
         @Override
-        void modifyField(Document doc, String field) {
+        void modifyField(Map<String, Object> doc, String field) {
             doc.remove(field);
         }
 
         @Override
-        void modifyFieldWithDotNotation(Document doc, String field) {
+        void modifyFieldWithDotNotation(Map<String, Object> doc, String field) {
             doc.remove(field);
         }
 
         @Override
         FieldNameAndValue generateNewFieldName(String[] fieldNodes, Object value) {
+            // this path doesn't support new field name generation
+            return null;
+        }
+
+        @Override
+        String generateNewFieldName(String fieldName) {
             // this path doesn't support new field name generation
             return null;
         }
@@ -493,7 +619,7 @@ public final class FieldSelector {
         }
 
         @Override
-        void modifyField(Document doc, String field) {
+        void modifyField(Map<String, Object> doc, String field) {
             // if the original field does not exist, make no change
             if (!doc.containsKey(field)) {
                 return;
@@ -502,7 +628,7 @@ public final class FieldSelector {
         }
 
         @Override
-        void modifyFieldWithDotNotation(Document doc, String field) {
+        void modifyFieldWithDotNotation(Map<String, Object> doc, String field) {
             // if the original field does not exist, make no change
             if (!doc.containsKey(field)) {
                 return;
@@ -514,6 +640,11 @@ public final class FieldSelector {
         FieldNameAndValue generateNewFieldName(String[] fieldNodes, Object value) {
             String newField = rename(fieldNodes);
             return new FieldNameAndValue(newField, value);
+        }
+
+        @Override
+        String generateNewFieldName(String fieldName) {
+            return rename(FieldSelectorBuilder.parseIntoParts(fieldName, fieldName, length -> length < 1, DOT));
         }
 
         /**

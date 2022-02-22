@@ -65,6 +65,12 @@ public class DebeziumOutboxConfig {
     public DebeziumOutboxConfigPayload payload;
 
     /**
+     * Outbox additional fields
+     */
+    @ConfigItem
+    public Optional<String> additionalFields;
+
+    /**
      * Outbox Tracing configurable attributes
      */
     @ConfigItem
@@ -199,6 +205,12 @@ public class DebeziumOutboxConfig {
          */
         @ConfigItem
         public Optional<String> converter;
+
+        /**
+         * The column's type definition class
+         */
+        @ConfigItem
+        public Optional<String> type;
     }
 
     @ConfigGroup

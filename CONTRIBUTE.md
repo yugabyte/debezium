@@ -5,8 +5,8 @@ The Debezium community welcomes anyone that wants to help out in any way, whethe
 ## Table of contents
 
 - [Talk to us](#talk-to-us)
-  - [User chat](https://gitter.im/debezium/user)
-  - [Developers chat](https://gitter.im/debezium/user) - Only for internal development subjects
+  - [User chat](https://debezium.zulipchat.com/#narrow/stream/302529-users)
+  - [Developers chat](https://debezium.zulipchat.com/#narrow/stream/302533-dev) - Only for internal development subjects
   - [Google Group](https://groups.google.com/forum/#!forum/debezium)
   - [JIRA](https://issues.jboss.org/projects/DBZ/issues/) - You can [create an account for free](https://developer.jboss.org/register.jspa)
 - [Install the tools](#install-the-tools)
@@ -27,7 +27,7 @@ The Debezium community welcomes anyone that wants to help out in any way, whethe
 
 ### Talk to us
 
-You can talk to us in our [chat room for users](https://gitter.im/debezium/user) or on our [Google Group](https://groups.google.com/forum/#!forum/debezium). If you want to contribute, consider joining the [chat room for developers](https://gitter.im/debezium/dev). We also [track our issues using JIRA](https://issues.jboss.org/projects/DBZ/issues/) and you can [create an account for free](https://developer.jboss.org/register.jspa); please don't create GitHub issues.
+You can talk to us in our [chat room for users](https://debezium.zulipchat.com/#narrow/stream/302529-users) or on our [Google Group](https://groups.google.com/forum/#!forum/debezium). If you want to contribute, consider joining the [chat room for developers](https://debezium.zulipchat.com/#narrow/stream/302533-dev). We also [track our issues using JIRA](https://issues.jboss.org/projects/DBZ/issues/) and you can [create an account for free](https://developer.jboss.org/register.jspa); please don't create GitHub issues.
 
 ### Install the tools
 
@@ -71,7 +71,7 @@ This repository knows about your fork, but it doesn't yet know about the officia
 
     $ git remote add upstream https://github.com/debezium/debezium.git
     $ git fetch upstream
-    $ git branch --set-upstream-to=upstream/master master
+    $ git branch --set-upstream-to=upstream/main main
 
 Now, when you check the status using Git, it will compare your local repository to the *upstream* repository.
 
@@ -80,16 +80,16 @@ Now, when you check the status using Git, it will compare your local repository 
 You will frequently need to get all the of the changes that are made to the upstream repository, and you can do this with these commands:
 
     $ git fetch upstream
-    $ git pull upstream master
+    $ git pull upstream main
 
-The first command fetches all changes on all branches, while the second actually updates your local `master` branch with the latest commits from the `upstream` repository.
+The first command fetches all changes on all branches, while the second actually updates your local `main` branch with the latest commits from the `upstream` repository.
 
 ### Building locally
 
-To build the source code locally, checkout and update the `master` branch:
+To build the source code locally, checkout and update the `main` branch:
 
-    $ git checkout master
-    $ git pull upstream master
+    $ git checkout main
+    $ git pull upstream main
 
 Then use Maven to compile everything, run all unit and integration tests, build all artifacts, and install all JAR, ZIP, and TAR files into your local Maven repository:
 
@@ -120,12 +120,12 @@ or the following Docker commands:
 Everything the community does with the codebase -- fixing bugs, adding features, making improvements, adding tests, etc. -- should be described by an issue in our [JIRA](https://issues.jboss.org/projects/DBZ/issues/). If no such issue exists for what you want to do, please create an issue with a meaningful and easy-to-understand description.
 If you are going to work on a specific issue and it's your first contribution,
 please add a short comment to the issue, so other people know you're working on it.
-If you are contributing repeatedly, ask in our [chat room for developers](https://gitter.im/debezium/dev) for the 'developer' JIRA role so you can assign issues to yourself.
+If you are contributing repeatedly, ask in our [chat room for developers](https://debezium.zulipchat.com/#narrow/stream/302533-dev) for the 'developer' JIRA role so you can assign issues to yourself.
 
-Before you make any changes, be sure to switch to the `master` branch and pull the latest commits on the `master` branch from the upstream repository. Also, it's probably good to run a build and verify all tests pass *before* you make any changes.
+Before you make any changes, be sure to switch to the `main` branch and pull the latest commits on the `main` branch from the upstream repository. Also, it's probably good to run a build and verify all tests pass *before* you make any changes.
 
-    $ git checkout master
-    $ git pull upstream master
+    $ git checkout main
+    $ git pull upstream main
     $ mvn clean install
 
 Once everything builds, create a *topic branch* named appropriately (we recommend using the issue number, such as `DBZ-1234`):
@@ -185,21 +185,21 @@ Please note that when running _validate_ checks, the build will stop as soon as 
 
 ### Rebasing
 
-If its been more than a day or so since you created your topic branch, we recommend *rebasing* your topic branch on the latest `master` branch. This requires switching to the `master` branch, pulling the latest changes, switching back to your topic branch, and rebasing:
+If its been more than a day or so since you created your topic branch, we recommend *rebasing* your topic branch on the latest `main` branch. This requires switching to the `main` branch, pulling the latest changes, switching back to your topic branch, and rebasing:
 
-    $ git checkout master
-    $ git pull upstream master
+    $ git checkout main
+    $ git pull upstream main
     $ git checkout DBZ-1234
-    $ git rebase master
+    $ git rebase main
 
-If your changes are compatible with the latest changes on `master`, this will complete and there's nothing else to do. However, if your changes affect the same files/lines as other changes have since been merged into the `master` branch, then your changes conflict with the other recent changes on `master`, and you will have to resolve them. The git output will actually tell you you need to do (e.g., fix a particular file, stage the file, and then run `git rebase --continue`), but if you have questions consult Git or GitHub documentation or spend some time reading about Git rebase conflicts on the Internet.
+If your changes are compatible with the latest changes on `main`, this will complete and there's nothing else to do. However, if your changes affect the same files/lines as other changes have since been merged into the `main` branch, then your changes conflict with the other recent changes on `main`, and you will have to resolve them. The git output will actually tell you you need to do (e.g., fix a particular file, stage the file, and then run `git rebase --continue`), but if you have questions consult Git or GitHub documentation or spend some time reading about Git rebase conflicts on the Internet.
 
 ### Documentation
 
 When adding new features such as e.g. a connector or configuration options, they must be documented accordingly in the Debezium [reference documentation](https://debezium.io/documentation/).
 The same applies when changing existing behaviors, e.g. type mappings, removing options etc.
 
-The documentation is written using AsciiDoc/Antora and can be found in the Debezium [source code repository](https://github.com/debezium/debezium/tree/master/documentation).
+The documentation is written using AsciiDoc/Antora and can be found in the Debezium [source code repository](https://github.com/debezium/debezium/tree/main/documentation).
 Any documentation update should be part of the pull request you submit for the code change.
 
 ### Creating a pull request
@@ -208,7 +208,7 @@ Once you're finished making your changes, your topic branch should have your com
 
     $ git push origin DBZ-1234
 
-Then, in a browser go to your forked repository, and you should see a small section near the top of the page with a button labeled "Contribute". GitHub recognized that you pushed a new topic branch to your fork of the upstream repository, and it knows you probably want to create a pull request with those changes. Click on the button, and a button "Open pull request" will apper. Click it and GitHub will present you the "Comparing changes" page, where you can view all changes that you are about to submit. With all revised, click in "Create pull request" and a short form will be given, that you should fill out with information about your pull request. The title should start with the JIRA issue and ending with a short phrase that summarizes the changes included in the pull request. (If the pull request contains a single commit, GitHub will automatically prepopulate the title and description fields from the commit message.)
+Then, in a browser go to your forked repository, and you should see a small section near the top of the page with a button labeled "Contribute". GitHub recognized that you pushed a new topic branch to your fork of the upstream repository, and it knows you probably want to create a pull request with those changes. Click on the button, and a button "Open pull request" will apper. Click it and GitHub will present you the "Comparing changes" page, where you can view all changes that you are about to submit. With all revised, click in "Create pull request" and a short form will be given, that you should fill out with information about your pull request. The title should start with the JIRA issue and end with a short phrase that summarizes the changes included in the pull request. (If the pull request contains a single commit, GitHub will automatically prepopulate the title and description fields from the commit message.)
 
 When completed, press the "Create" button and copy the URL to the new pull request. Go to the corresponding JIRA issue and record the pull request by pasting the URL into the "Pull request" field. (Be sure to not overwrite any URLs that were already in this field; this is how a single issue is bound to multiple pull requests.) Also, please add a JIRA comment with a clear description of what you changed. You might even use the commit message (except for the first line).
 
@@ -258,7 +258,7 @@ Here's a quick check list for a good pull request (PR):
 * No changes to code not directly related to your change (e.g. no formatting changes or refactoring to existing code, if you want to refactor/improve existing code that's a separate discussion and separate JIRA issue)
 * New/changed features have been documented
 * A full build completes successfully
-* Do a rebase on upstream `master`
+* Do a rebase on upstream `main`
 
 ### PR Handling (For Committers)
 

@@ -25,6 +25,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.MongoIterable;
+import com.mongodb.client.model.changestream.ChangeStreamDocument;
 import com.mongodb.connection.ClusterDescription;
 import com.mongodb.connection.ServerDescription;
 
@@ -242,6 +243,21 @@ public class MongoUtil {
         final String lsid = (id instanceof Binary) ? UUID.nameUUIDFromBytes(((Binary) id).getData()).toString() : ((UUID) id).toString();
         final Long txnNumber = oplogEvent.getLong("txnNumber");
         return lsid + ":" + txnNumber;
+    }
+
+    /**
+     * Helper function to extract the session transaction-id from an Change Stream event.
+     *
+     * @param event the Change Stream event
+     * @return the session transaction id from the event
+     */
+    public static SourceInfo.SessionTransactionId getChangeStreamSessionTransactionId(ChangeStreamDocument<Document> event) {
+        if (event.getLsid() == null || event.getTxnNumber() == null) {
+            return null;
+        }
+
+        return new SourceInfo.SessionTransactionId(event.getLsid() == null ? null : event.getLsid().toJson(JsonSerialization.COMPACT_JSON_SETTINGS),
+                event.getTxnNumber() == null ? null : event.getTxnNumber().longValue());
     }
 
     /**

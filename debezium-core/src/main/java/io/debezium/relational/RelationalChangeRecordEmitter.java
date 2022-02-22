@@ -27,10 +27,10 @@ import io.debezium.util.Clock;
  */
 public abstract class RelationalChangeRecordEmitter extends AbstractChangeRecordEmitter<TableSchema> {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(RelationalChangeRecordEmitter.class);
+
     public static final String PK_UPDATE_OLDKEY_FIELD = "__debezium.oldkey";
     public static final String PK_UPDATE_NEWKEY_FIELD = "__debezium.newkey";
-
-    protected final Logger logger = LoggerFactory.getLogger(getClass());
 
     public RelationalChangeRecordEmitter(Partition partition, OffsetContext offsetContext, Clock clock) {
         super(partition, offsetContext, clock);
@@ -72,7 +72,7 @@ public abstract class RelationalChangeRecordEmitter extends AbstractChangeRecord
 
         if (skipEmptyMessages() && (newColumnValues == null || newColumnValues.length == 0)) {
             // This case can be hit on UPDATE / DELETE when there's no primary key defined while using certain decoders
-            logger.warn("no new values found for table '{}' from create message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
+            LOGGER.warn("no new values found for table '{}' from create message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
             return;
         }
         receiver.changeRecord(getPartition(), tableSchema, Operation.CREATE, newKey, envelope, getOffset(), null);
@@ -102,7 +102,7 @@ public abstract class RelationalChangeRecordEmitter extends AbstractChangeRecord
         Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);
 
         if (skipEmptyMessages() && (newColumnValues == null || newColumnValues.length == 0)) {
-            logger.warn("no new values found for table '{}' from update message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
+            LOGGER.warn("no new values found for table '{}' from update message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
             return;
         }
         // some configurations does not provide old values in case of updates
@@ -134,7 +134,7 @@ public abstract class RelationalChangeRecordEmitter extends AbstractChangeRecord
         Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);
 
         if (skipEmptyMessages() && (oldColumnValues == null || oldColumnValues.length == 0)) {
-            logger.warn("no old values found for table '{}' from delete message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
+            LOGGER.warn("no old values found for table '{}' from delete message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
             return;
         }
 
@@ -145,12 +145,6 @@ public abstract class RelationalChangeRecordEmitter extends AbstractChangeRecord
     protected void emitTruncateRecord(Receiver receiver, TableSchema schema) throws InterruptedException {
         throw new UnsupportedOperationException("TRUNCATE not supported");
     }
-
-    /**
-     * Returns the operation done by the represented change.
-     */
-    @Override
-    protected abstract Operation getOperation();
 
     /**
      * Returns the old row state in case of an UPDATE or DELETE.

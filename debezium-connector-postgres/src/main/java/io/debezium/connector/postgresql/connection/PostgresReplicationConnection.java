@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -63,7 +64,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     private final PostgresConnectorConfig.AutoCreateMode publicationAutocreateMode;
     private final PostgresConnectorConfig.LogicalDecoder plugin;
     private final boolean dropSlotOnClose;
-    private final PostgresConnectorConfig originalConfig;
+    private final PostgresConnectorConfig connectorConfig;
     private final Duration statusUpdateInterval;
     private final MessageDecoder messageDecoder;
     private final TypeRegistry typeRegistry;
@@ -105,7 +106,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                                           PostgresSchema schema) {
         super(config.getJdbcConfig(), PostgresConnection.FACTORY, null, PostgresReplicationConnection::defaultSettings, "\"", "\"");
 
-        this.originalConfig = config;
+        this.connectorConfig = config;
         this.slotName = slotName;
         this.publicationName = publicationName;
         this.tableFilter = tableFilter;
@@ -121,7 +122,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     }
 
     private ServerInfo.ReplicationSlot getSlotInfo() throws SQLException, InterruptedException {
-        try (PostgresConnection connection = new PostgresConnection(originalConfig.getJdbcConfig())) {
+        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig())) {
             return connection.readReplicationSlotInfo(slotName, plugin.getPostgresPluginName());
         }
     }
@@ -178,10 +179,6 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             catch (SQLException e) {
                 throw new JdbcConnectionException(e);
             }
-
-            // This is what ties the publication definition to the replication stream
-            streamParams.put("proto_version", 1);
-            streamParams.put("publication_names", publicationName);
         }
     }
 
@@ -296,8 +293,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             LOGGER.debug("starting streaming from LSN '{}'", lsn);
         }
 
-        int maxRetries = config().getInteger(PostgresConnectorConfig.MAX_RETRIES);
-        int delay = config().getInteger(PostgresConnectorConfig.RETRY_DELAY_MS);
+        final int maxRetries = connectorConfig.maxRetries();
+        final Duration delay = connectorConfig.retryDelay();
         int tryCount = 0;
         while (true) {
             try {
@@ -313,7 +310,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                 }
                 else {
                     LOGGER.warn(message + ", waiting for {} ms and retrying, attempt number {} over {}", delay, tryCount, maxRetries);
-                    final Metronome metronome = Metronome.sleeper(Duration.ofMillis(delay), Clock.SYSTEM);
+                    final Metronome metronome = Metronome.sleeper(delay, Clock.SYSTEM);
                     metronome.pause();
                 }
             }
@@ -355,7 +352,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
         try (Statement stmt = pgConnection().createStatement()) {
             String createCommand = String.format(
-                    "CREATE_REPLICATION_SLOT %s %s LOGICAL %s",
+                    "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s",
                     slotName,
                     tempPart,
                     plugin.getPostgresPluginName());
@@ -563,17 +560,18 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         };
     }
 
-    private PGReplicationStream startPgReplicationStream(final Lsn lsn, Function<ChainedLogicalStreamBuilder, ChainedLogicalStreamBuilder> configurator)
+    private PGReplicationStream startPgReplicationStream(final Lsn lsn,
+                                                         BiFunction<ChainedLogicalStreamBuilder, Function<Integer, Boolean>, ChainedLogicalStreamBuilder> configurator)
             throws SQLException {
         assert lsn != null;
         ChainedLogicalStreamBuilder streamBuilder = pgConnection()
                 .getReplicationAPI()
                 .replicationStream()
                 .logical()
-                .withSlotName(slotName)
+                .withSlotName("\"" + slotName + "\"")
                 .withStartPosition(lsn.asLogSequenceNumber())
                 .withSlotOptions(streamParams);
-        streamBuilder = configurator.apply(streamBuilder);
+        streamBuilder = configurator.apply(streamBuilder, this::hasMinimumVersion);
 
         if (statusUpdateInterval != null && statusUpdateInterval.toMillis() > 0) {
             streamBuilder.withStatusInterval(toIntExact(statusUpdateInterval.toMillis()), TimeUnit.MILLISECONDS);
@@ -590,6 +588,15 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
         stream.forceUpdateStatus();
         return stream;
+    }
+
+    private Boolean hasMinimumVersion(int version) {
+        try {
+            return pgConnection().haveMinimumServerVersion(version);
+        }
+        catch (SQLException e) {
+            throw new DebeziumException(e);
+        }
     }
 
     @Override
@@ -615,7 +622,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
         if (dropSlotOnClose && dropSlot) {
             // we're dropping the replication slot via a regular - i.e. not a replication - connection
-            try (PostgresConnection connection = new PostgresConnection(originalConfig.getJdbcConfig())) {
+            try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig())) {
                 connection.dropReplicationSlot(slotName);
             }
             catch (Throwable e) {
@@ -647,7 +654,6 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         private RelationalTableFilters tableFilter;
         private PostgresConnectorConfig.AutoCreateMode publicationAutocreateMode = PostgresConnectorConfig.AutoCreateMode.ALL_TABLES;
         private PostgresConnectorConfig.LogicalDecoder plugin = PostgresConnectorConfig.LogicalDecoder.DECODERBUFS;
-        private PostgresConnectorConfig.TruncateHandlingMode truncateHandlingMode;
         private boolean dropSlotOnClose = DEFAULT_DROP_SLOT_ON_CLOSE;
         private Duration statusUpdateIntervalVal;
         private boolean doSnapshot;
@@ -696,13 +702,6 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
 
         @Override
-        public Builder withTruncateHandlingMode(PostgresConnectorConfig.TruncateHandlingMode truncateHandlingMode) {
-            assert truncateHandlingMode != null;
-            this.truncateHandlingMode = truncateHandlingMode;
-            return this;
-        }
-
-        @Override
         public ReplicationConnectionBuilder dropSlotOnClose(final boolean dropSlotOnClose) {
             this.dropSlotOnClose = dropSlotOnClose;
             return this;
@@ -741,8 +740,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         @Override
         public ReplicationConnection build() {
             assert plugin != null : "Decoding plugin name is not set";
-            return new PostgresReplicationConnection(config, slotName, publicationName, tableFilter, publicationAutocreateMode, plugin,
-                    dropSlotOnClose, doSnapshot, statusUpdateIntervalVal, typeRegistry, slotStreamParams, schema);
+            return new PostgresReplicationConnection(config, slotName, publicationName, tableFilter,
+                    publicationAutocreateMode, plugin, dropSlotOnClose, doSnapshot, statusUpdateIntervalVal, typeRegistry, slotStreamParams, schema);
         }
 
         @Override

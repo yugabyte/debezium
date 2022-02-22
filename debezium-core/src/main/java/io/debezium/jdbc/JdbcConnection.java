@@ -76,7 +76,7 @@ public class JdbcConnection implements AutoCloseable {
     private static final char STATEMENT_DELIMITER = ';';
     private static final int STATEMENT_CACHE_CAPACITY = 10_000;
     private final static Logger LOGGER = LoggerFactory.getLogger(JdbcConnection.class);
-
+    private static final int CONNECTION_VALID_CHECK_TIMEOUT_IN_SEC = 3;
     private final Map<String, PreparedStatement> statementCache = new BoundedConcurrentHashMap<>(STATEMENT_CACHE_CAPACITY, 16, Eviction.LIRS,
             new EvictionListener<String, PreparedStatement>() {
 
@@ -878,6 +878,10 @@ public class JdbcConnection implements AutoCloseable {
         return !conn.isClosed();
     }
 
+    public synchronized boolean isValid() throws SQLException {
+        return isConnected() && conn.isValid(CONNECTION_VALID_CHECK_TIMEOUT_IN_SEC);
+    }
+
     public synchronized Connection connection() throws SQLException {
         return connection(true);
     }
@@ -1169,7 +1173,7 @@ public class JdbcConnection implements AutoCloseable {
         try (final ResultSet rs = metadata.getTables(databaseCatalog, schemaNamePattern, null,
                 new String[]{ "VIEW", "MATERIALIZED VIEW", "TABLE" })) {
             while (rs.next()) {
-                final String catalogName = rs.getString(1);
+                final String catalogName = resolveCatalogName(rs.getString(1));
                 final String schemaName = rs.getString(2);
                 final String tableName = rs.getString(3);
                 final String tableType = rs.getString(4);
@@ -1194,6 +1198,8 @@ public class JdbcConnection implements AutoCloseable {
         }
         else {
             for (TableId includeTable : tableIds) {
+                LOGGER.debug("Retrieving columns of table {}", includeTable);
+
                 Map<TableId, List<Column>> cols = getColumnsDetails(databaseCatalog, schemaNamePattern, includeTable.table(), tableFilter,
                         columnFilter, metadata, viewIds);
                 columnsByTable.putAll(cols);
@@ -1219,6 +1225,11 @@ public class JdbcConnection implements AutoCloseable {
         }
     }
 
+    protected String resolveCatalogName(String catalogName) {
+        // default behavior is to simply return the value from the JDBC result set
+        return catalogName;
+    }
+
     private Map<TableId, List<Column>> getColumnsDetails(String databaseCatalog, String schemaNamePattern,
                                                          String tableName, TableFilter tableFilter, ColumnNameFilter columnFilter, DatabaseMetaData metadata,
                                                          final Set<TableId> viewIds)
@@ -1226,7 +1237,7 @@ public class JdbcConnection implements AutoCloseable {
         Map<TableId, List<Column>> columnsByTable = new HashMap<>();
         try (ResultSet columnMetadata = metadata.getColumns(databaseCatalog, schemaNamePattern, tableName, null)) {
             while (columnMetadata.next()) {
-                String catalogName = columnMetadata.getString(1);
+                String catalogName = resolveCatalogName(columnMetadata.getString(1));
                 String schemaName = columnMetadata.getString(2);
                 String metaTableName = columnMetadata.getString(3);
                 TableId tableId = new TableId(catalogName, schemaName, metaTableName);
@@ -1257,7 +1268,7 @@ public class JdbcConnection implements AutoCloseable {
 
         final String columnName = columnMetadata.getString(4);
         if (columnFilter == null || columnFilter.matches(tableId.catalog(), tableId.schema(), tableId.table(), columnName)) {
-            final ColumnEditor column = Column.editor().name(columnName);
+            ColumnEditor column = Column.editor().name(columnName);
             column.type(columnMetadata.getString(6));
             column.length(columnMetadata.getInt(7));
             if (columnMetadata.getObject(9) != null) {
@@ -1277,8 +1288,12 @@ public class JdbcConnection implements AutoCloseable {
 
             column.nativeType(resolveNativeType(column.typeName()));
             column.jdbcType(resolveJdbcType(columnMetadata.getInt(5), column.nativeType()));
+
+            // Allow implementation to make column changes if required before being added to table
+            column = overrideColumn(column);
+
             if (defaultValue != null) {
-                getDefaultValue(column.create(), defaultValue).ifPresent(column::defaultValue);
+                column.defaultValueExpression(defaultValue);
             }
             return Optional.of(column);
         }
@@ -1286,9 +1301,17 @@ public class JdbcConnection implements AutoCloseable {
         return Optional.empty();
     }
 
-    protected Optional<Object> getDefaultValue(Column column, String defaultValue) {
-        // nothing to do by default; overwrite in database specific implementation
-        return Optional.empty();
+    /**
+     * Allow implementations an opportunity to adjust the current state of the {@link ColumnEditor}
+     * that has been seeded with data from the column metadata from the JDBC driver.  In some
+     * cases, the data from the driver may be misleading and needs some adjustments.
+     *
+     * @param column the column editor, should not be {@code null}
+     * @return the adjusted column editor instance
+     */
+    protected ColumnEditor overrideColumn(ColumnEditor column) {
+        // allows the implementation to override column-specifics; the default does no overrides
+        return column;
     }
 
     public List<String> readPrimaryKeyNames(DatabaseMetaData metadata, TableId id) throws SQLException {

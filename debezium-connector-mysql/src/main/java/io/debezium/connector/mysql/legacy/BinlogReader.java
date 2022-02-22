@@ -19,7 +19,6 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.BitSet;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -315,23 +314,25 @@ public class BinlogReader extends AbstractReader {
 
         // Set up for JMX ...
         metrics = new BinlogReaderMetrics(client, context, name, changeEventQueueMetrics);
-        heartbeat = Heartbeat.create(configuration.getDuration(Heartbeat.HEARTBEAT_INTERVAL, ChronoUnit.MILLIS),
+        heartbeat = Heartbeat.create(context.getConnectorConfig().getHeartbeatInterval(),
                 context.topicSelector().getHeartbeatTopic(), context.getConnectorConfig().getLogicalName());
     }
 
     @Override
     protected void doInitialize() {
-        metrics.register(logger);
+        metrics.register();
     }
 
     @Override
     public void doDestroy() {
-        metrics.unregister(logger);
+        metrics.unregister();
     }
 
     @Override
     protected void doStart() {
-        context.dbSchema().assureNonEmptySchema();
+        if (context.snapshotMode() != MySqlConnectorConfig.SnapshotMode.NEVER) {
+            context.dbSchema().assureNonEmptySchema();
+        }
         Set<Operation> skippedOperations = context.getConnectorConfig().getSkippedOperations();
 
         // Register our event handlers ...
@@ -672,7 +673,7 @@ public class BinlogReader extends AbstractReader {
      */
     protected void handleServerIncident(Event event) {
         if (event.getData() instanceof EventDataDeserializationExceptionData) {
-            metrics.onErroneousEvent("source = " + event.toString());
+            metrics.onErroneousEvent("source = " + event);
             EventDataDeserializationExceptionData data = event.getData();
 
             EventHeaderV4 eventHeader = (EventHeaderV4) data.getCause().getEventHeader(); // safe cast, instantiated that ourselves
@@ -871,9 +872,9 @@ public class BinlogReader extends AbstractReader {
      * don't know, either ignore that event or raise a warning or error as per the
      * {@link MySqlConnectorConfig#INCONSISTENT_SCHEMA_HANDLING_MODE} configuration.
      */
-    private void informAboutUnknownTableIfRequired(Event event, TableId tableId, String typeToLog) {
+    private void informAboutUnknownTableIfRequired(Event event, TableId tableId, String typeToLog, Operation operation) {
         if (tableId != null && context.dbSchema().isTableCaptured(tableId)) {
-            metrics.onErroneousEvent("source = " + tableId + ", event " + event);
+            metrics.onErroneousEvent("source = " + tableId + ", event " + event, operation);
             EventHeaderV4 eventHeader = event.getHeader();
 
             if (inconsistentSchemaHandlingMode == EventProcessingFailureHandlingMode.FAIL) {
@@ -923,8 +924,12 @@ public class BinlogReader extends AbstractReader {
         }
         else {
             logger.debug("Filtering {} event: {} for non-monitored table {}", typeToLog, event, tableId);
-            metrics.onFilteredEvent("source = " + tableId);
+            metrics.onFilteredEvent("source = " + tableId, operation);
         }
+    }
+
+    private void informAboutUnknownTableIfRequired(Event event, TableId tableId, String typeToLog) {
+        informAboutUnknownTableIfRequired(event, tableId, typeToLog, null);
     }
 
     /**
@@ -972,7 +977,7 @@ public class BinlogReader extends AbstractReader {
             }
         }
         else {
-            informAboutUnknownTableIfRequired(event, recordMakers.getTableIdFromTableNumber(tableNumber), "insert row");
+            informAboutUnknownTableIfRequired(event, recordMakers.getTableIdFromTableNumber(tableNumber), "insert row", Operation.CREATE);
         }
         startingRowNumber = 0;
     }
@@ -1026,7 +1031,7 @@ public class BinlogReader extends AbstractReader {
             }
         }
         else {
-            informAboutUnknownTableIfRequired(event, recordMakers.getTableIdFromTableNumber(tableNumber), "update row");
+            informAboutUnknownTableIfRequired(event, recordMakers.getTableIdFromTableNumber(tableNumber), "update row", Operation.UPDATE);
         }
         startingRowNumber = 0;
     }
@@ -1076,7 +1081,7 @@ public class BinlogReader extends AbstractReader {
             }
         }
         else {
-            informAboutUnknownTableIfRequired(event, recordMakers.getTableIdFromTableNumber(tableNumber), "delete row");
+            informAboutUnknownTableIfRequired(event, recordMakers.getTableIdFromTableNumber(tableNumber), "delete row", Operation.DELETE);
         }
         startingRowNumber = 0;
     }

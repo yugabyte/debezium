@@ -5,11 +5,14 @@
  */
 package io.debezium.connector.oracle;
 
+import org.apache.kafka.connect.data.Struct;
+
 import io.debezium.data.Envelope.Operation;
 import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.pipeline.spi.Partition;
 import io.debezium.relational.RelationalChangeRecordEmitter;
 import io.debezium.relational.Table;
+import io.debezium.relational.TableSchema;
 import io.debezium.util.Clock;
 
 /**
@@ -24,6 +27,9 @@ public abstract class BaseChangeRecordEmitter<T> extends RelationalChangeRecordE
         this.table = table;
     }
 
-    abstract protected Operation getOperation();
+    protected void emitTruncateRecord(Receiver receiver, TableSchema tableSchema) throws InterruptedException {
+        Struct envelope = tableSchema.getEnvelopeSchema().truncate(getOffset().getSourceInfo(), getClock().currentTimeAsInstant());
+        receiver.changeRecord(getPartition(), tableSchema, Operation.TRUNCATE, null, envelope, getOffset(), null);
+    }
 
 }

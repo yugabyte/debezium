@@ -10,7 +10,7 @@
 
     <groupId>io.debezium</groupId>
     <artifactId>debezium-build-parent</artifactId>
-    <version>1.7.0-SNAPSHOT</version>
+    <version>1.9.0-SNAPSHOT</version>
     <name>Debezium Build Aggregator</name>
     <description>Debezium is an open source change data capture platform</description>
     <packaging>pom</packaging>
@@ -53,7 +53,11 @@
     </developers>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
+        <!-- Can't use the (generally preferable) release option yet, as the
+             Cassandra connector still needs to be built with Java 1.8 which
+             isn't aware of this option -->
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
 
@@ -63,7 +67,6 @@
         <!-- Maven Plugins -->
         <version.compiler.plugin>3.8.1</version.compiler.plugin>
         <version.resources.plugin>3.1.0</version.resources.plugin>
-        <version.filtering.plugin>3.1.1</version.filtering.plugin>
         <version.dependency.plugin>3.1.1</version.dependency.plugin>
         <version.enforcer.plugin>3.0.0-M2</version.enforcer.plugin>
 
@@ -76,11 +79,11 @@
         <version.staging.plugin>1.6.8</version.staging.plugin>
         <version.protoc.maven.plugin>3.8.0</version.protoc.maven.plugin>
         <version.javadoc.plugin>3.1.1</version.javadoc.plugin>
-        <version.code.formatter>2.15.0</version.code.formatter>
+        <version.code.formatter>2.16.0</version.code.formatter>
         <version.surefire.plugin>3.0.0-M3</version.surefire.plugin>
         <version.checkstyle.plugin>3.1.1</version.checkstyle.plugin>
         <version.release.plugin>2.5.3</version.release.plugin>
-        <version.impsort>1.6.0</version.impsort>
+        <version.impsort>1.6.2</version.impsort>
         <version.failsafe.plugin>${version.surefire.plugin}</version.failsafe.plugin>
         <version.checkstyle>8.32</version.checkstyle>
         <version.revapi.plugin>0.11.5</version.revapi.plugin>
@@ -92,16 +95,16 @@
         <release.endpoint>https://s01.oss.sonatype.org/</release.endpoint>
 
         <!-- Kafka and it's dependencies MUST reflect what the Kafka version uses -->
-        <version.kafka>2.8.0</version.kafka>
-        <version.zookeeper>3.5.9</version.zookeeper>
-        <version.jackson>2.10.5</version.jackson>
-        <version.jackson.databind>2.10.5.1</version.jackson.databind>
+        <version.kafka>3.1.0</version.kafka>
+        <version.zookeeper>3.6.3</version.zookeeper>
+        <version.jackson>2.12.3</version.jackson>
+        <version.jackson.databind>2.12.3</version.jackson.databind>
         <version.org.slf4j>1.7.30</version.org.slf4j>
         <version.log4j>1.2.17</version.log4j>
-        <version.netty>4.1.51.Final</version.netty>
+        <version.netty>4.1.68.Final</version.netty>
 
         <!-- Scala version used to build Kafka -->
-        <version.kafka.scala>2.12</version.kafka.scala>
+        <version.kafka.scala>2.13</version.kafka.scala>
 
         <!-- ANTLR -->
         <!-- Align with Antlr runtime version pulled in via Quarkus -->
@@ -109,9 +112,23 @@
         <version.antlr4test.plugin>1.18</version.antlr4test.plugin>
 
         <!-- Quarkus -->
-        <quarkus.version>2.0.0.Final</quarkus.version>
+        <!-- Must be aligned with Apicurio version below -->
+        <quarkus.version>2.6.2.Final</quarkus.version>
 
-        <!-- Databases, should align with database drivers in debezium-bom -->
+        <!-- Apicurio -->
+        <version.apicurio>2.1.5.Final</version.apicurio>
+
+        <!-- Database drivers, should align with databases -->
+        <version.postgresql.driver>42.3.1</version.postgresql.driver>
+        <version.mysql.driver>8.0.27</version.mysql.driver>
+        <version.mysql.binlog>0.25.4</version.mysql.binlog>
+        <version.mongo.driver>4.3.3</version.mongo.driver>
+        <version.sqlserver.driver>9.4.1.jre8</version.sqlserver.driver>
+        <version.oracle.driver>21.1.0.0</version.oracle.driver>
+        <version.db2.driver>11.5.0.0</version.db2.driver>
+        <version.cassandra.driver>3.11.0</version.cassandra.driver>
+
+        <!-- Databases, should align with database drivers -->
         <version.mysql.server>5.7</version.mysql.server>
         <version.mongo.server>3.6</version.mongo.server>
         <version.cassandra>3.11.10</version.cassandra>
@@ -139,6 +156,8 @@
         <module>debezium-scripting</module>
         <module>debezium-server</module>
         <module>debezium-testing</module>
+        <module>debezium-connect-rest-extension</module>
+        <module>debezium-schema-generator</module>
     </modules>
 
     <distributionManagement>
@@ -231,11 +250,6 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-resources-plugin</artifactId>
                     <version>${version.resources.plugin}</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.shared</groupId>
-                    <artifactId>maven-filtering</artifactId>
-                    <version>${version.filtering.plugin}</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

@@ -8,11 +8,14 @@ package io.debezium.relational.history;
 import static org.fest.assertions.Assertions.assertThat;
 
 import java.sql.Types;
+import java.util.List;
 import java.util.Map;
 
+import org.apache.kafka.connect.data.Struct;
 import org.junit.Test;
 
 import io.debezium.document.Array;
+import io.debezium.document.Document;
 import io.debezium.document.DocumentReader;
 import io.debezium.relational.Column;
 import io.debezium.relational.Table;
@@ -32,7 +35,11 @@ public class HistoryRecordTest {
         Map<String, Object> position = Collect.linkMapOf("file", "x.log", "positionInt", 100, "positionLong", Long.MAX_VALUE, "entry", 1);
         String databaseName = "db";
         String schemaName = "myschema";
-        String ddl = "CREATE TABLE foo ( first VARCHAR(22) NOT NULL );";
+        String ddl = "CREATE TABLE foo ("
+                + "  first VARCHAR(22) NOT NULL COMMENT 'first comment',"
+                + "  second ENUM('1','2') NOT NULL DEFAULT '1'"
+                + "  third VARCHAR(22) NULL DEFAULT '1' COMMENT 'third comment'"
+                + ") COMMENT='table comment';";
 
         Table table = Table.editor()
                 .tableId(new TableId(databaseName, schemaName, "foo"))
@@ -42,8 +49,27 @@ public class HistoryRecordTest {
                         .type("VARCHAR")
                         .length(22)
                         .optional(false)
+                        .comment("first comment")
+                        .create())
+                .addColumn(Column.editor()
+                        .name("second")
+                        .jdbcType(Types.INTEGER)
+                        .type("ENUM", "ENUM")
+                        .optional(false)
+                        .defaultValueExpression("1")
+                        .enumValues(Collect.arrayListOf("1", "2"))
+                        .create())
+                .addColumn(Column.editor()
+                        .name("third")
+                        .jdbcType(Types.VARCHAR)
+                        .type("VARCHAR")
+                        .length(22)
+                        .optional(true)
+                        .defaultValueExpression("1")
+                        .comment("third comment")
                         .create())
                 .setPrimaryKeyNames("first")
+                .setComment("table comment")
                 .create();
 
         TableChanges tableChanges = new TableChanges().create(table);
@@ -67,9 +93,23 @@ public class HistoryRecordTest {
         assertThat(deserialized.schemaName()).isEqualTo(schemaName);
         assertThat(deserialized.ddl()).isEqualTo(ddl);
 
-        System.out.println(record);
+        Document secondColumn = deserialized.tableChanges()
+                .get(0).asDocument()
+                .getDocument("table")
+                .getArray("columns")
+                .get(1).asDocument();
+
+        assertThat(secondColumn.get("defaultValueExpression")).isEqualTo("1");
+        // System.out.println(record);
+
         final TableChangesSerializer<Array> tableChangesSerializer = new JsonTableChangeSerializer();
         assertThat((Object) tableChangesSerializer.deserialize(deserialized.tableChanges(), true)).isEqualTo(tableChanges);
 
+        final TableChangesSerializer<List<Struct>> connectTableChangeSerializer = new ConnectTableChangeSerializer();
+        Struct struct = connectTableChangeSerializer.serialize(tableChanges).get(0);
+        Struct tableStruct = (Struct) struct.get(ConnectTableChangeSerializer.TABLE_KEY);
+        assertThat(tableStruct.get(ConnectTableChangeSerializer.COMMENT_KEY)).isEqualTo("table comment");
+        List<Struct> columnStructs = (List<Struct>) tableStruct.get(ConnectTableChangeSerializer.COLUMNS_KEY);
+        assertThat(columnStructs.get(0).get(ConnectTableChangeSerializer.COMMENT_KEY)).isEqualTo("first comment");
     }
 }

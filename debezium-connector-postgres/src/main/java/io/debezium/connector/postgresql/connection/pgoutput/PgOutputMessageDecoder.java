@@ -24,18 +24,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 import org.postgresql.replication.fluent.logical.ChainedLogicalStreamBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.postgresql.PostgresType;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.UnchangedToastedReplicationMessageColumn;
 import io.debezium.connector.postgresql.connection.AbstractMessageDecoder;
 import io.debezium.connector.postgresql.connection.AbstractReplicationMessageColumn;
+import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.MessageDecoderContext;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
@@ -45,6 +46,7 @@ import io.debezium.connector.postgresql.connection.ReplicationMessage.Operation;
 import io.debezium.connector.postgresql.connection.ReplicationStream.ReplicationMessageProcessor;
 import io.debezium.connector.postgresql.connection.TransactionMessage;
 import io.debezium.connector.postgresql.connection.WalPositionLocator;
+import io.debezium.data.Envelope;
 import io.debezium.relational.ColumnEditor;
 import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
@@ -69,7 +71,11 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
     private final PostgresConnection connection;
 
     private Instant commitTimestamp;
-    private int transactionId;
+
+    /**
+     * Will be null for a non-transactional decoding message
+     */
+    private Long transactionId;
 
     public enum MessageType {
         RELATION,
@@ -80,7 +86,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         DELETE,
         TYPE,
         ORIGIN,
-        TRUNCATE;
+        TRUNCATE,
+        LOGICAL_DECODING_MESSAGE;
 
         public static MessageType forType(char type) {
             switch (type) {
@@ -102,6 +109,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                     return ORIGIN;
                 case 'T':
                     return TRUNCATE;
+                case 'M':
+                    return LOGICAL_DECODING_MESSAGE;
                 default:
                     throw new IllegalArgumentException("Unsupported message type: " + type);
             }
@@ -110,7 +119,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
 
     public PgOutputMessageDecoder(MessageDecoderContext decoderContext) {
         this.decoderContext = decoderContext;
-        this.connection = new PostgresConnection(decoderContext.getConfig().getJdbcConfig(), decoderContext.getSchema().getTypeRegistry());
+        this.connection = new PostgresConnection(decoderContext.getConfig(), decoderContext.getSchema().getTypeRegistry());
     }
 
     @Override
@@ -138,7 +147,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                     LOGGER.trace("{} messages are always reprocessed", type);
                     return false;
                 default:
-                    // INSERT/UPDATE/DELETE/TRUNCATE/TYPE/ORIGIN
+                    // INSERT/UPDATE/DELETE/TRUNCATE/TYPE/ORIGIN/LOGICAL_DECODING_MESSAGE
                     // These should be excluded based on the normal behavior, delegating to default method
                     return candidateForSkipping;
             }
@@ -175,6 +184,9 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             case RELATION:
                 handleRelationMessage(buffer, typeRegistry);
                 break;
+            case LOGICAL_DECODING_MESSAGE:
+                handleLogicalDecodingMessage(buffer, processor);
+                break;
             case INSERT:
                 decodeInsert(buffer, typeRegistry, processor);
                 break;
@@ -185,7 +197,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 decodeDelete(buffer, typeRegistry, processor);
                 break;
             case TRUNCATE:
-                if (decoderContext.getConfig().truncateHandlingMode() == PostgresConnectorConfig.TruncateHandlingMode.INCLUDE) {
+                if (isTruncateEventsIncluded()) {
                     decodeTruncate(buffer, typeRegistry, processor);
                 }
                 else {
@@ -199,14 +211,25 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
     }
 
     @Override
-    public ChainedLogicalStreamBuilder optionsWithMetadata(ChainedLogicalStreamBuilder builder) {
-        return builder.withSlotOption("proto_version", 1)
+    public ChainedLogicalStreamBuilder optionsWithMetadata(ChainedLogicalStreamBuilder builder, Function<Integer, Boolean> hasMinimumServerVersion) {
+        builder = builder.withSlotOption("proto_version", 1)
                 .withSlotOption("publication_names", decoderContext.getConfig().publicationName());
+
+        // DBZ-4374 Use enum once the driver got updated
+        if (hasMinimumServerVersion.apply(140000)) {
+            builder = builder.withSlotOption("messages", true);
+        }
+
+        return builder;
     }
 
     @Override
-    public ChainedLogicalStreamBuilder optionsWithoutMetadata(ChainedLogicalStreamBuilder builder) {
+    public ChainedLogicalStreamBuilder optionsWithoutMetadata(ChainedLogicalStreamBuilder builder, Function<Integer, Boolean> hasMinimumServerVersion) {
         return builder;
+    }
+
+    private boolean isTruncateEventsIncluded() {
+        return !decoderContext.getConfig().getSkippedOperations().contains(Envelope.Operation.TRUNCATE);
     }
 
     /**
@@ -218,7 +241,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
     private void handleBeginMessage(ByteBuffer buffer, ReplicationMessageProcessor processor) throws SQLException, InterruptedException {
         final Lsn lsn = Lsn.valueOf(buffer.getLong()); // LSN
         this.commitTimestamp = PG_EPOCH.plus(buffer.getLong(), ChronoUnit.MICROS);
-        this.transactionId = buffer.getInt();
+        this.transactionId = Integer.toUnsignedLong(buffer.getInt());
         LOGGER.trace("Event: {}", MessageType.BEGIN);
         LOGGER.trace("Final LSN of transaction: {}", lsn);
         LOGGER.trace("Commit timestamp of transaction: {}", commitTimestamp);
@@ -262,7 +285,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         LOGGER.trace("Schema: '{}', Table: '{}'", schemaName, tableName);
 
         // Perform several out-of-bands database metadata queries
-        Map<String, Optional<Object>> columnDefaults;
+        Map<String, Optional<String>> columnDefaults;
         Map<String, Boolean> columnOptionality;
         List<String> primaryKeyColumns;
 
@@ -272,7 +295,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         final List<io.debezium.relational.Column> readColumns = getTableColumnsFromDatabase(connection, databaseMetadata, tableId);
         columnDefaults = readColumns.stream()
                 .filter(io.debezium.relational.Column::hasDefaultValue)
-                .collect(toMap(io.debezium.relational.Column::name, column -> Optional.ofNullable(column.defaultValue())));
+                .collect(toMap(io.debezium.relational.Column::name, io.debezium.relational.Column::defaultValueExpression));
 
         columnOptionality = readColumns.stream().collect(toMap(io.debezium.relational.Column::name, io.debezium.relational.Column::isOptional));
         primaryKeyColumns = connection.readPrimaryKeyNames(databaseMetadata, tableId);
@@ -299,9 +322,9 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             }
 
             final boolean hasDefault = columnDefaults.containsKey(columnName);
-            final Object defaultValue = columnDefaults.getOrDefault(columnName, Optional.empty()).orElse(null);
+            final String defaultValueExpression = columnDefaults.getOrDefault(columnName, Optional.empty()).orElse(null);
 
-            columns.add(new ColumnMetaData(columnName, postgresType, key, optional, hasDefault, defaultValue, attypmod));
+            columns.add(new ColumnMetaData(columnName, postgresType, key, optional, hasDefault, defaultValueExpression, attypmod));
             columnNames.add(columnName);
         }
 
@@ -554,6 +577,52 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
     }
 
     /**
+     * Callback handler for the 'M' logical decoding message
+     *
+     * @param buffer       The replication stream buffer
+     * @param processor    The replication message processor
+     */
+    private void handleLogicalDecodingMessage(ByteBuffer buffer, ReplicationMessageProcessor processor)
+            throws SQLException, InterruptedException {
+        // As of PG14, the MESSAGE message format is as described:
+        // Byte1 Always 'M'
+        // Int32 Xid of the transaction (only present for streamed transactions in protocol version 2).
+        // Int8 flags; Either 0 for no flags or 1 if the logical decoding message is transactional.
+        // Int64 The LSN of the logical decoding message
+        // String The prefix of the logical decoding message.
+        // Int32 Length of the content.
+        // Byten The content of the logical decoding message.
+
+        boolean isTransactional = buffer.get() == 1;
+        final Lsn lsn = Lsn.valueOf(buffer.getLong());
+        String prefix = readString(buffer);
+        int contentLength = buffer.getInt();
+        byte[] content = new byte[contentLength];
+        buffer.get(content);
+
+        // non-transactional messages do not have xids or commitTimestamps
+        if (!isTransactional) {
+            transactionId = null;
+            commitTimestamp = null;
+        }
+
+        LOGGER.trace("Event: {}", MessageType.LOGICAL_DECODING_MESSAGE);
+        LOGGER.trace("Commit LSN: {}", lsn);
+        LOGGER.trace("Commit timestamp of transaction: {}", commitTimestamp);
+        LOGGER.trace("XID of transaction: {}", transactionId);
+        LOGGER.trace("Transactional: {}", isTransactional);
+        LOGGER.trace("Prefix: {}", prefix);
+
+        processor.process(new LogicalDecodingMessage(
+                Operation.MESSAGE,
+                commitTimestamp,
+                transactionId,
+                isTransactional,
+                prefix,
+                content));
+    }
+
+    /**
      * Resolves a given replication message relation identifier to a {@link Table}.
      *
      * @param relationId The replication message stream's relation identifier
@@ -583,7 +652,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                     .scale(columnMetadata.getScale());
 
             if (columnMetadata.hasDefaultValue()) {
-                editor.defaultValue(columnMetadata.getDefaultValue());
+                editor.defaultValueExpression(columnMetadata.getDefaultValueExpression());
             }
 
             columns.add(editor.create());

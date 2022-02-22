@@ -9,7 +9,6 @@ package io.debezium.connector.postgresql;
 import java.nio.charset.Charset;
 import java.sql.SQLException;
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -26,16 +25,15 @@ import io.debezium.connector.base.ChangeEventQueue;
 import io.debezium.connector.common.BaseSourceTask;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.PostgresConnection.PostgresValueConverterBuilder;
+import io.debezium.connector.postgresql.connection.PostgresDefaultValueConverter;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.connector.postgresql.spi.Snapshotter;
-import io.debezium.heartbeat.DatabaseHeartbeatImpl;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.pipeline.ChangeEventSourceCoordinator;
 import io.debezium.pipeline.DataChangeEvent;
 import io.debezium.pipeline.ErrorHandler;
-import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.metrics.DefaultChangeEventSourceMetricsFactory;
 import io.debezium.pipeline.spi.Offsets;
 import io.debezium.relational.TableId;
@@ -59,6 +57,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
     private volatile ChangeEventQueue<DataChangeEvent> queue;
     private volatile PostgresConnection jdbcConnection;
     private volatile PostgresConnection heartbeatConnection;
+    private volatile ReplicationConnection replicationConnection = null;
     private volatile PostgresSchema schema;
 
     @Override
@@ -91,8 +90,9 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
         }
 
         final TypeRegistry typeRegistry = jdbcConnection.getTypeRegistry();
+        final PostgresDefaultValueConverter defaultValueConverter = jdbcConnection.getDefaultValueConverter();
 
-        schema = new PostgresSchema(connectorConfig, typeRegistry, topicSelector, valueConverterBuilder.build(typeRegistry));
+        schema = new PostgresSchema(connectorConfig, typeRegistry, defaultValueConverter, topicSelector, valueConverterBuilder.build(typeRegistry));
         this.taskContext = new PostgresTaskContext(connectorConfig, schema, topicSelector);
         final Offsets<PostgresPartition, PostgresOffsetContext> previousOffsets = getPreviousOffsets(
                 new PostgresPartition.Provider(connectorConfig), new PostgresOffsetContext.Loader(connectorConfig));
@@ -123,7 +123,6 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                 snapshotter.init(connectorConfig, previousOffset.asOffsetState(), slotInfo);
             }
 
-            ReplicationConnection replicationConnection = null;
             SlotCreationResult slotCreatedInfo = null;
             if (snapshotter.shouldStream()) {
                 final boolean doSnapshot = snapshotter.shouldSnapshot();
@@ -164,30 +163,29 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                     .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
                     .build();
 
-            ErrorHandler errorHandler = new PostgresErrorHandler(connectorConfig.getLogicalName(), queue);
+            ErrorHandler errorHandler = new PostgresErrorHandler(connectorConfig, queue);
 
             final PostgresEventMetadataProvider metadataProvider = new PostgresEventMetadataProvider();
 
-            Configuration configuration = connectorConfig.getConfig();
             Heartbeat heartbeat = Heartbeat.create(
-                    configuration.getDuration(Heartbeat.HEARTBEAT_INTERVAL, ChronoUnit.MILLIS),
-                    configuration.getString(DatabaseHeartbeatImpl.HEARTBEAT_ACTION_QUERY),
+                    connectorConfig.getHeartbeatInterval(),
+                    connectorConfig.getHeartbeatActionQuery(),
                     topicSelector.getHeartbeatTopic(),
                     connectorConfig.getLogicalName(), heartbeatConnection, exception -> {
                         String sqlErrorId = exception.getSQLState();
                         switch (sqlErrorId) {
                             case "57P01":
                                 // Postgres error admin_shutdown, see https://www.postgresql.org/docs/12/errcodes-appendix.html
-                                throw new DebeziumException("Could not execute heartbeat action (Error: " + sqlErrorId + ")", exception);
+                                throw new DebeziumException("Could not execute heartbeat action query (Error: " + sqlErrorId + ")", exception);
                             case "57P03":
                                 // Postgres error cannot_connect_now, see https://www.postgresql.org/docs/12/errcodes-appendix.html
-                                throw new RetriableException("Could not execute heartbeat action (Error: " + sqlErrorId + ")", exception);
+                                throw new RetriableException("Could not execute heartbeat action query (Error: " + sqlErrorId + ")", exception);
                             default:
                                 break;
                         }
                     });
 
-            final EventDispatcher<TableId> dispatcher = new EventDispatcher<>(
+            final PostgresEventDispatcher<TableId> dispatcher = new PostgresEventDispatcher<>(
                     connectorConfig,
                     topicSelector,
                     schema,
@@ -275,6 +273,19 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
     @Override
     protected void doStop() {
+        // The replication connection is regularly closed at the end of streaming phase
+        // in case of error it can happen that the connector is terminated before the stremaing
+        // phase is started. It can lead to a leaked connection.
+        // This is guard to make sure the connection is closed.
+        try {
+            if (replicationConnection != null) {
+                replicationConnection.close();
+            }
+        }
+        catch (Exception e) {
+            LOGGER.trace("Error while closing replication connection", e);
+        }
+
         if (jdbcConnection != null) {
             jdbcConnection.close();
         }

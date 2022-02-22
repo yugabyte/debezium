@@ -51,7 +51,7 @@ public class TestHelper {
     private static final Logger LOGGER = LoggerFactory.getLogger(TestHelper.class);
 
     public static final Path DB_HISTORY_PATH = Testing.Files.createTestingPath("file-db-history-connect.txt").toAbsolutePath();
-    public static final String TEST_DATABASE = "testdb";
+    public static final String TEST_DATABASE = "testDB";
     private static final String TEST_PROPERTY_PREFIX = "debezium.test.";
 
     private static final String STATEMENTS_PLACEHOLDER = "#";
@@ -142,17 +142,21 @@ public class TestHelper {
     }
 
     public static void createTestDatabase() {
+        createTestDatabase(TEST_DATABASE);
+    }
+
+    public static void createTestDatabase(String databaseName) {
         // NOTE: you cannot enable CDC for the "master" db (the default one) so
         // all tests must use a separate database...
         try (SqlServerConnection connection = adminConnection()) {
             connection.connect();
-            dropTestDatabase(connection);
-            String sql = "CREATE DATABASE testDB\n";
+            dropTestDatabase(connection, databaseName);
+            String sql = String.format("CREATE DATABASE [%s]\n", databaseName);
             connection.execute(sql);
-            connection.execute("USE testDB");
-            connection.execute("ALTER DATABASE testDB SET ALLOW_SNAPSHOT_ISOLATION ON");
+            connection.execute(String.format("USE [%s]", databaseName));
+            connection.execute(String.format("ALTER DATABASE [%s] SET ALLOW_SNAPSHOT_ISOLATION ON", databaseName));
             // NOTE: you cannot enable CDC on master
-            enableDbCdc(connection, "testDB");
+            enableDbCdc(connection, databaseName);
         }
         catch (SQLException e) {
             LOGGER.error("Error while initiating test database", e);
@@ -163,25 +167,25 @@ public class TestHelper {
     public static void dropTestDatabase() {
         try (SqlServerConnection connection = adminConnection()) {
             connection.connect();
-            dropTestDatabase(connection);
+            dropTestDatabase(connection, TEST_DATABASE);
         }
         catch (SQLException e) {
             throw new IllegalStateException("Error while dropping test database", e);
         }
     }
 
-    private static void dropTestDatabase(SqlServerConnection connection) throws SQLException {
+    private static void dropTestDatabase(SqlServerConnection connection, String databaseName) throws SQLException {
         try {
             Awaitility.await("Disabling CDC").atMost(60, TimeUnit.SECONDS).until(() -> {
                 try {
-                    connection.execute("USE testDB");
+                    connection.execute(String.format("USE [%s]", databaseName));
                 }
                 catch (SQLException e) {
                     // if the database doesn't yet exist, there is no need to disable CDC
                     return true;
                 }
                 try {
-                    disableDbCdc(connection, "testDB");
+                    disableDbCdc(connection, databaseName);
                     return true;
                 }
                 catch (SQLException e) {
@@ -190,22 +194,22 @@ public class TestHelper {
             });
         }
         catch (ConditionTimeoutException e) {
-            throw new IllegalArgumentException("Failed to disable CDC on testDB", e);
+            throw new IllegalArgumentException(String.format("Failed to disable CDC on %s", databaseName), e);
         }
 
         connection.execute("USE master");
 
         try {
-            Awaitility.await("Dropping database testDB").atMost(60, TimeUnit.SECONDS).until(() -> {
+            Awaitility.await(String.format("Dropping database %s", databaseName)).atMost(60, TimeUnit.SECONDS).until(() -> {
                 try {
-                    String sql = "IF EXISTS(select 1 from sys.databases where name = 'testDB') DROP DATABASE testDB";
+                    String sql = String.format("IF EXISTS(select 1 from sys.databases where name = '%s') DROP DATABASE [%s]", databaseName, databaseName);
                     connection.execute(sql);
                     return true;
                 }
                 catch (SQLException e) {
-                    LOGGER.warn("DROP DATABASE testDB failed (will be retried): {}", e.getMessage());
+                    LOGGER.warn(String.format("DROP DATABASE %s failed (will be retried): {}", databaseName), e.getMessage());
                     try {
-                        connection.execute("ALTER DATABASE testDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;");
+                        connection.execute(String.format("ALTER DATABASE [%s] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;", databaseName));
                     }
                     catch (SQLException e2) {
                         LOGGER.error("Failed to rollback immediately", e2);
@@ -221,17 +225,34 @@ public class TestHelper {
 
     public static SqlServerConnection adminConnection() {
         return new SqlServerConnection(TestHelper.adminJdbcConfig(), SourceTimestampMode.getDefaultMode(),
-                new SqlServerValueConverters(JdbcValueConverters.DecimalMode.PRECISE, TemporalPrecisionMode.ADAPTIVE, null), true);
+                new SqlServerValueConverters(JdbcValueConverters.DecimalMode.PRECISE, TemporalPrecisionMode.ADAPTIVE, null), () -> TestHelper.class.getClassLoader(),
+                Collections.emptySet(), true);
     }
 
     public static SqlServerConnection testConnection() {
+        return testConnection(TEST_DATABASE);
+    }
+
+    public static SqlServerConnection testConnection(String databaseName) {
+        Configuration config = defaultJdbcConfig()
+                .edit()
+                .with(JdbcConfiguration.ON_CONNECT_STATEMENTS, "USE [" + databaseName + "]")
+                .build();
+
+        return new SqlServerConnection(config, SourceTimestampMode.getDefaultMode(),
+                new SqlServerValueConverters(JdbcValueConverters.DecimalMode.PRECISE, TemporalPrecisionMode.ADAPTIVE, null), () -> TestHelper.class.getClassLoader(),
+                Collections.emptySet(), true);
+    }
+
+    public static SqlServerConnection testConnectionWithOptionRecompile() {
         Configuration config = defaultJdbcConfig()
                 .edit()
                 .with(JdbcConfiguration.ON_CONNECT_STATEMENTS, "USE [" + TEST_DATABASE + "]")
                 .build();
 
         return new SqlServerConnection(config, SourceTimestampMode.getDefaultMode(),
-                new SqlServerValueConverters(JdbcValueConverters.DecimalMode.PRECISE, TemporalPrecisionMode.ADAPTIVE, null), true);
+                new SqlServerValueConverters(JdbcValueConverters.DecimalMode.PRECISE, TemporalPrecisionMode.ADAPTIVE, null), () -> TestHelper.class.getClassLoader(),
+                Collections.emptySet(), true, true);
     }
 
     /**
@@ -337,7 +358,7 @@ public class TestHelper {
      *            the source table columns that are to be included in the change table, may not be {@code null}
      * @throws SQLException if anything unexpected fails
      */
-    public static void enableTableCdc(SqlServerConnection connection, String tableName, String captureName, List<String> captureColumnList) throws SQLException {
+    public static void enableTableCdc(JdbcConnection connection, String tableName, String captureName, List<String> captureColumnList) throws SQLException {
         Objects.requireNonNull(tableName);
         Objects.requireNonNull(captureName);
         Objects.requireNonNull(captureColumnList);
@@ -353,7 +374,7 @@ public class TestHelper {
      *            the name of the table, may not be {@code null}
      * @throws SQLException if anything unexpected fails
      */
-    public static void disableTableCdc(SqlServerConnection connection, String name) throws SQLException {
+    public static void disableTableCdc(JdbcConnection connection, String name) throws SQLException {
         Objects.requireNonNull(name);
         String disableCdcForTableStmt = DISABLE_TABLE_CDC.replace(STATEMENTS_PLACEHOLDER, name);
         connection.execute(disableCdcForTableStmt);
@@ -396,12 +417,16 @@ public class TestHelper {
     }
 
     public static void waitForMaxLsnAvailable(SqlServerConnection connection) throws Exception {
+        waitForMaxLsnAvailable(connection, TEST_DATABASE);
+    }
+
+    public static void waitForMaxLsnAvailable(SqlServerConnection connection, String databaseName) throws Exception {
         try {
             Awaitility.await("Max LSN not available")
                     .atMost(60, TimeUnit.SECONDS)
                     .pollDelay(Duration.ofSeconds(0))
                     .pollInterval(Duration.ofMillis(100))
-                    .until(() -> connection.getMaxLsn(TEST_DATABASE).isAvailable());
+                    .until(() -> connection.getMaxLsn(databaseName).isAvailable());
         }
         catch (ConditionTimeoutException e) {
             throw new IllegalArgumentException("A max LSN was not available", e);
@@ -436,7 +461,7 @@ public class TestHelper {
                             return false;
                         }
 
-                        for (SqlServerChangeTable ct : connection.listOfChangeTables(TEST_DATABASE)) {
+                        for (SqlServerChangeTable ct : connection.getChangeTables(TEST_DATABASE)) {
                             final String ctTableName = ct.getChangeTableId().table();
                             if (ctTableName.endsWith("dbo_" + connection.getNameOfChangeTable(tableName))) {
                                 try {
@@ -491,7 +516,7 @@ public class TestHelper {
                             return false;
                         }
 
-                        for (SqlServerChangeTable ct : connection.listOfChangeTables(TEST_DATABASE)) {
+                        for (SqlServerChangeTable ct : connection.getChangeTables(TEST_DATABASE)) {
                             final String ctTableName = ct.getChangeTableId().table();
                             if (ctTableName.endsWith(connection.getNameOfChangeTable(captureInstanceName))) {
                                 try {

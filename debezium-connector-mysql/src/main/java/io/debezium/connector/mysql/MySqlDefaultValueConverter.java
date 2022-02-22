@@ -17,16 +17,22 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.debezium.annotation.Immutable;
 import io.debezium.relational.Column;
-import io.debezium.relational.ColumnEditor;
+import io.debezium.relational.DefaultValueConverter;
 import io.debezium.relational.ValueConverter;
+import io.debezium.util.Collect;
 
 /**
  * This class is used by a DDL parser to convert the string default value to a Java type
@@ -37,7 +43,9 @@ import io.debezium.relational.ValueConverter;
  * @see com.github.shyiko.mysql.binlog.event.deserialization.AbstractRowsEventDataDeserializer
  */
 @Immutable
-public class MySqlDefaultValueConverter {
+public class MySqlDefaultValueConverter implements DefaultValueConverter {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(MySqlDefaultValueConverter.class);
 
     private static final Pattern EPOCH_EQUIVALENT_TIMESTAMP = Pattern.compile("(\\d{4}-\\d{2}-00|\\d{4}-00-\\d{2}|0000-\\d{2}-\\d{2}) (00:00:00(\\.\\d{1,6})?)");
 
@@ -46,6 +54,13 @@ public class MySqlDefaultValueConverter {
     private static final String EPOCH_TIMESTAMP = "1970-01-01 00:00:00";
 
     private static final String EPOCH_DATE = "1970-01-01";
+
+    private static final Pattern TIMESTAMP_PATTERN = Pattern.compile("([0-9]*-[0-9]*-[0-9]*) ([0-9]*:[0-9]*:[0-9]*(\\.([0-9]*))?)");
+
+    @Immutable
+    private static final Set<Integer> TRIM_DATA_TYPES = Collect.unmodifiableSet(Types.TINYINT, Types.INTEGER,
+            Types.DATE, Types.TIMESTAMP, Types.TIMESTAMP_WITH_TIMEZONE, Types.TIME, Types.BOOLEAN, Types.BIT,
+            Types.NUMERIC, Types.DECIMAL, Types.FLOAT, Types.DOUBLE, Types.REAL);
 
     private static final DateTimeFormatter ISO_LOCAL_DATE_WITH_OPTIONAL_TIME = new DateTimeFormatterBuilder()
             .append(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -62,6 +77,36 @@ public class MySqlDefaultValueConverter {
     }
 
     /**
+     * This interface is used by a DDL parser to convert the string default value to a Java type
+     * recognized by value converters for a subset of types.
+     *
+     * @param column       the column definition describing the {@code data} value; never null
+     * @param defaultValueExpression the default value literal; may be null
+     * @return value converted to a Java type; optional
+     */
+    @Override
+    public Optional<Object> parseDefaultValue(Column column, String defaultValueExpression) {
+        Object logicalDefaultValue = convert(column, defaultValueExpression);
+        if (logicalDefaultValue == null) {
+            return Optional.empty();
+        }
+
+        final SchemaBuilder schemaBuilder = converters.schemaBuilder(column);
+        if (schemaBuilder == null) {
+            return Optional.of(logicalDefaultValue);
+        }
+        final Schema schema = schemaBuilder.build();
+
+        // In order to get the valueConverter for this column, we have to create a field;
+        // The index value -1 in the field will never used when converting default value;
+        // So we can set any number here;
+        final Field field = new Field(column.name(), -1, schema);
+        final ValueConverter valueConverter = converters.converter(column, field);
+
+        return Optional.ofNullable(valueConverter.convert(logicalDefaultValue));
+    }
+
+    /**
      * Converts a default value from the expected format to a logical object acceptable by the main JDBC
      * converter.
      *
@@ -72,6 +117,11 @@ public class MySqlDefaultValueConverter {
     public Object convert(Column column, String value) {
         if (value == null) {
             return value;
+        }
+
+        // trim non varchar data types before converting
+        if (TRIM_DATA_TYPES.contains(column.jdbcType())) {
+            value = value.trim();
         }
 
         // boolean is also INT(1) or TINYINT(1)
@@ -124,7 +174,19 @@ public class MySqlDefaultValueConverter {
         if (zero) {
             value = EPOCH_DATE;
         }
-        return LocalDate.from(ISO_LOCAL_DATE_WITH_OPTIONAL_TIME.parse(value));
+
+        try {
+            return LocalDate.from(ISO_LOCAL_DATE_WITH_OPTIONAL_TIME.parse(value));
+        }
+        catch (Exception e) {
+            LOGGER.warn("Invalid default value '{}' for date column '{}'; {}", value, column.name(), e.getMessage());
+            if (column.isOptional()) {
+                return null;
+            }
+            else {
+                return LocalDate.from(ISO_LOCAL_DATE_WITH_OPTIONAL_TIME.parse(EPOCH_DATE));
+            }
+        }
     }
 
     /**
@@ -146,7 +208,18 @@ public class MySqlDefaultValueConverter {
             value = EPOCH_TIMESTAMP;
         }
 
-        return LocalDateTime.from(timestampFormat(column.length()).parse(value));
+        try {
+            return LocalDateTime.from(timestampFormat(column.length()).parse(value));
+        }
+        catch (Exception e) {
+            LOGGER.warn("Invalid default value '{}' for datetime column '{}'; {}", value, column.name(), e.getMessage());
+            if (column.isOptional()) {
+                return null;
+            }
+            else {
+                return LocalDateTime.from(timestampFormat(column.length()).parse(EPOCH_TIMESTAMP));
+            }
+        }
     }
 
     /**
@@ -179,6 +252,10 @@ public class MySqlDefaultValueConverter {
      * @return the converted value;
      */
     private Object convertToDuration(Column column, String value) {
+        Matcher matcher = TIMESTAMP_PATTERN.matcher(value);
+        if (matcher.matches()) {
+            value = matcher.group(2);
+        }
         return MySqlValueConverters.stringToDuration(value);
     }
 
@@ -392,28 +469,4 @@ public class MySqlDefaultValueConverter {
         return sb.toString();
     }
 
-    public ColumnEditor setColumnDefaultValue(ColumnEditor columnEditor) {
-        final Column column = columnEditor.create();
-
-        // if converters is not null and the default value is not null, we need to convert default value
-        if (converters != null && columnEditor.defaultValue() != null) {
-            Object defaultValue = columnEditor.defaultValue();
-            final SchemaBuilder schemaBuilder = converters.schemaBuilder(column);
-            if (schemaBuilder == null) {
-                return columnEditor;
-            }
-            final Schema schema = schemaBuilder.build();
-            // In order to get the valueConverter for this column, we have to create a field;
-            // The index value -1 in the field will never used when converting default value;
-            // So we can set any number here;
-            final Field field = new Field(columnEditor.name(), -1, schema);
-            final ValueConverter valueConverter = converters.converter(columnEditor.create(), field);
-            if (defaultValue instanceof String) {
-                defaultValue = convert(column, (String) defaultValue);
-            }
-            defaultValue = valueConverter.convert(defaultValue);
-            columnEditor.defaultValue(defaultValue);
-        }
-        return columnEditor;
-    }
 }

@@ -10,7 +10,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -96,7 +95,9 @@ public class SnapshotReader extends AbstractReader {
         recorder = this::recordRowAsRead;
         metrics = new SnapshotReaderMetrics(context, context.dbSchema(), changeEventQueueMetrics);
         this.useGlobalLock = useGlobalLock;
-        this.mysqlFieldReader = context.getConnectorConfig().useCursorFetch() ? new MysqlBinaryProtocolFieldReader() : new MysqlTextProtocolFieldReader();
+        this.mysqlFieldReader = context.getConnectorConfig().useCursorFetch()
+                ? new MysqlBinaryProtocolFieldReader(context.getConnectorConfig())
+                : new MysqlTextProtocolFieldReader(context.getConnectorConfig());
     }
 
     /**
@@ -112,12 +113,12 @@ public class SnapshotReader extends AbstractReader {
 
     @Override
     protected void doInitialize() {
-        metrics.register(logger);
+        metrics.register();
     }
 
     @Override
     public void doDestroy() {
-        metrics.unregister(logger);
+        metrics.unregister();
     }
 
     /**
@@ -165,7 +166,7 @@ public class SnapshotReader extends AbstractReader {
         final List<TableId> tablesToSnapshotSchemaAfterUnlock = new ArrayList<>();
         Set<TableId> lockedTables = Collections.emptySet();
 
-        final Set<String> snapshotAllowedTables = context.getConnectorConfig().getDataCollectionsToBeSnapshotted();
+        final Set<String> snapshotAllowedTables = context.getConnectorConfig().legacyGetDataCollectionsToBeSnapshotted();
         final Predicate<TableId> isAllowedForSnapshot = tableId -> snapshotAllowedTables.size() == 0
                 || snapshotAllowedTables.stream().anyMatch(s -> tableId.identifier().matches(s));
         try {
@@ -317,14 +318,14 @@ public class SnapshotReader extends AbstractReader {
                                     logger.info("\t including '{}' among known tables", id);
                                 }
                                 else {
-                                    logger.info("\t '{}' is not added among known tables", id);
+                                    logger.debug("\t '{}' is not added among known tables", id);
                                 }
                                 if (filters.tableFilter().and(isAllowedForSnapshot).test(id)) {
                                     capturedTableIds.add(id);
                                     logger.info("\t including '{}' for further processing", id);
                                 }
                                 else {
-                                    logger.info("\t '{}' is filtered out of capturing", id);
+                                    logger.debug("\t '{}' is filtered out of capturing", id);
                                 }
                             }
                         });
@@ -737,7 +738,7 @@ public class SnapshotReader extends AbstractReader {
                     source.completeSnapshot();
                     Heartbeat
                             .create(
-                                    configuration.getDuration(Heartbeat.HEARTBEAT_INTERVAL, ChronoUnit.MILLIS),
+                                    context.getConnectorConfig().getHeartbeatInterval(),
                                     context.topicSelector().getHeartbeatTopic(),
                                     context.getConnectorConfig().getLogicalName())
                             .forcedBeat(source.partition(), source.offset(), this::enqueueRecord);

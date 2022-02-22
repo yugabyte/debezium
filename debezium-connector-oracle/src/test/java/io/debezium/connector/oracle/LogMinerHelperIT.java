@@ -51,6 +51,8 @@ public class LogMinerHelperIT extends AbstractConnectorTest {
 
         conn = TestHelper.defaultConnection();
         conn.resetSessionToCdb();
+
+        TestHelper.forceFlushOfRedoLogsToArchiveLogs();
     }
 
     @AfterClass
@@ -90,7 +92,7 @@ public class LogMinerHelperIT extends AbstractConnectorTest {
     public void shouldSetCorrectLogFiles() throws Exception {
         List<Scn> oneDayArchivedNextScn = getOneDayArchivedLogNextScn(conn);
         Scn oldestArchivedScn = getOldestArchivedScn(oneDayArchivedNextScn);
-        LogMinerHelper.setLogFilesForMining(conn, oldestArchivedScn, Duration.ofHours(0L), false, null);
+        LogMinerHelper.setLogFilesForMining(conn, oldestArchivedScn, Duration.ofHours(0L), false, null, 0);
 
         List<LogFile> files = LogMinerHelper.getLogFilesForOffsetScn(conn, oldestArchivedScn, Duration.ofHours(0L), false, null);
         assertThat(files.size()).isEqualTo(getNumberOfAddedLogFiles(conn));

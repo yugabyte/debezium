@@ -7,10 +7,9 @@ package io.debezium.pipeline.signal;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
-import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Struct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,14 +90,12 @@ public class Signal {
     private static final Logger LOGGER = LoggerFactory.getLogger(Signal.class);
 
     private final CommonConnectorConfig connectorConfig;
-    private final String signalDataCollectionId;
     private final EventDispatcher<? extends DataCollectionId> dispatcher;
 
     private final Map<String, Action> signalActions = new HashMap<>();
 
     public Signal(CommonConnectorConfig connectorConfig, EventDispatcher<? extends DataCollectionId> eventDispatcher) {
         this.connectorConfig = connectorConfig;
-        this.signalDataCollectionId = connectorConfig.getSignalingDataCollectionId();
         this.dispatcher = eventDispatcher;
         registerSignalAction(Log.NAME, new Log());
         if (connectorConfig instanceof HistorizedRelationalDatabaseConnectorConfig) {
@@ -119,7 +116,7 @@ public class Signal {
     }
 
     public boolean isSignal(DataCollectionId dataCollectionId) {
-        return signalDataCollectionId != null && signalDataCollectionId.equals(dataCollectionId.identifier());
+        return connectorConfig.isSignalDataCollection(dataCollectionId);
     }
 
     public void registerSignalAction(String id, Action signal) {
@@ -128,10 +125,10 @@ public class Signal {
     }
 
     public boolean process(Partition partition, String id, String type, String data, OffsetContext offset, Struct source) throws InterruptedException {
-        LOGGER.debug("Arrived signal id = '{}', type = '{}', data = '{}'", id, type, data);
+        LOGGER.debug("Received signal id = '{}', type = '{}', data = '{}'", id, type, data);
         final Action action = signalActions.get(type);
         if (action == null) {
-            LOGGER.warn("Signal '{}' has arrived but the type '{}' is not recognized", id, type);
+            LOGGER.warn("Signal '{}' has been received but the type '{}' is not recognized", id, type);
             return false;
         }
         try {
@@ -140,7 +137,7 @@ public class Signal {
             return action.arrived(new Payload(partition, id, type, jsonData, offset, source));
         }
         catch (IOException e) {
-            LOGGER.warn("Signal '{}' has arrived but the data '{}' cannot be parsed", id, data, e);
+            LOGGER.warn("Signal '{}' has been received but the data '{}' cannot be parsed", id, data, e);
             return false;
         }
     }
@@ -150,7 +147,7 @@ public class Signal {
     }
 
     /**
-     * 
+     *
      * @param value Envelope with change from signaling table
      * @param offset offset of the incoming signal
      * @return true if the signal was processed
@@ -161,22 +158,16 @@ public class Signal {
         String data = null;
         Struct source = null;
         try {
-            final Struct after = value.getStruct(Envelope.FieldName.AFTER);
-            if (after == null) {
-                LOGGER.warn("After part of signal '{}' is missing", value);
-                return false;
-            }
+            final Optional<String[]> parseSignal = connectorConfig.parseSignallingMessage(value);
             if (value.schema().field(Envelope.FieldName.SOURCE) != null) {
                 source = value.getStruct(Envelope.FieldName.SOURCE);
             }
-            List<Field> fields = after.schema().fields();
-            if (fields.size() != 3) {
-                LOGGER.warn("The signal event '{}' should have 3 fields but has {}", after, fields.size());
+            if (!parseSignal.isPresent()) {
                 return false;
             }
-            id = after.getString(fields.get(0).name());
-            type = after.getString(fields.get(1).name());
-            data = after.getString(fields.get(2).name());
+            id = parseSignal.get()[0];
+            type = parseSignal.get()[1];
+            data = parseSignal.get()[2];
         }
         catch (Exception e) {
             LOGGER.warn("Exception while preparing to process the signal '{}'", value, e);

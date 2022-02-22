@@ -11,7 +11,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Types;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -33,11 +34,13 @@ import io.debezium.config.Field;
 import io.debezium.connector.oracle.OracleConnectorConfig.ConnectorAdapter;
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.relational.Column;
-import io.debezium.relational.TableEditor;
+import io.debezium.relational.ColumnEditor;
 import io.debezium.relational.TableId;
 import io.debezium.relational.Tables;
 import io.debezium.relational.Tables.ColumnNameFilter;
-import io.debezium.relational.Tables.TableFilter;
+import io.debezium.util.Clock;
+import io.debezium.util.Metronome;
+import io.debezium.util.Strings;
 
 import oracle.jdbc.OracleTypes;
 
@@ -256,33 +259,12 @@ public class OracleConnection extends JdbcConnection {
             tableIdsBefore.removeAll(columnsByTable.keySet());
             tableIdsBefore.forEach(tables::removeTable);
         }
-
-        for (TableId tableId : capturedTables) {
-            overrideOracleSpecificColumnTypes(tables, tableId, tableId);
-        }
-
     }
 
     @Override
-    public void readSchema(Tables tables, String databaseCatalog, String schemaNamePattern, TableFilter tableFilter,
-                           ColumnNameFilter columnFilter, boolean removeTablesNotFoundInJdbc)
-            throws SQLException {
-
-        super.readSchema(tables, null, schemaNamePattern, tableFilter, columnFilter, removeTablesNotFoundInJdbc);
-
-        Set<TableId> tableIds = tables.tableIds().stream().filter(x -> schemaNamePattern.equals(x.schema())).collect(Collectors.toSet());
-
-        for (TableId tableId : tableIds) {
-            // super.readSchema() populates ids without the catalog; hence we apply the filtering only
-            // here and if a table is included, overwrite it with a new id including the catalog
-            TableId tableIdWithCatalog = new TableId(databaseCatalog, tableId.schema(), tableId.table());
-
-            if (tableFilter.isIncluded(tableIdWithCatalog)) {
-                overrideOracleSpecificColumnTypes(tables, tableId, tableIdWithCatalog);
-            }
-
-            tables.removeTable(tableId);
-        }
+    protected String resolveCatalogName(String catalogName) {
+        final String pdbName = config().getString("pdb.name");
+        return (!Strings.isNullOrEmpty(pdbName) ? pdbName : config().getString("dbname")).toUpperCase();
     }
 
     @Override
@@ -296,36 +278,6 @@ public class OracleConnection extends JdbcConnection {
             return !SYS_NC_PATTERN.matcher(columnName).matches();
         }
         return false;
-    }
-
-    private void overrideOracleSpecificColumnTypes(Tables tables, TableId tableId, TableId tableIdWithCatalog) {
-        TableEditor editor = tables.editTable(tableId);
-        editor.tableId(tableIdWithCatalog);
-
-        List<String> columnNames = new ArrayList<>(editor.columnNames());
-        for (String columnName : columnNames) {
-            Column column = editor.columnWithName(columnName);
-            if (column.jdbcType() == Types.TIMESTAMP) {
-                editor.addColumn(
-                        column.edit()
-                                .length(column.scale().orElse(Column.UNSET_INT_VALUE))
-                                .scale(null)
-                                .create());
-            }
-            // NUMBER columns without scale value have it set to -127 instead of null;
-            // let's rectify that
-            else if (column.jdbcType() == OracleTypes.NUMBER) {
-                column.scale()
-                        .filter(s -> s == ORACLE_UNSET_SCALE)
-                        .ifPresent(s -> {
-                            editor.addColumn(
-                                    column.edit()
-                                            .scale(null)
-                                            .create());
-                        });
-            }
-        }
-        tables.overwriteTable(editor.create());
     }
 
     /**
@@ -342,6 +294,63 @@ public class OracleConnection extends JdbcConnection {
             }
             throw new IllegalStateException("Could not get SCN");
         });
+    }
+
+    /**
+     * Get the maximum system change number in the archive logs.
+     *
+     * @param archiveLogDestinationName the archive log destination name to be queried, can be {@code null}.
+     * @return the maximum system change number in the archive logs
+     * @throws SQLException if a database exception occurred
+     * @throws DebeziumException if the maximum archive log system change number could not be found
+     */
+    public Scn getMaxArchiveLogScn(String archiveLogDestinationName) throws SQLException {
+        String query = "SELECT MAX(NEXT_CHANGE#) FROM V$ARCHIVED_LOG " +
+                "WHERE NAME IS NOT NULL " +
+                "AND ARCHIVED = 'YES' " +
+                "AND STATUS = 'A' " +
+                "AND DEST_ID IN (" +
+                "SELECT DEST_ID FROM V$ARCHIVE_DEST_STATUS " +
+                "WHERE STATUS = 'VALID' " +
+                "AND TYPE = 'LOCAL' ";
+
+        if (Strings.isNullOrEmpty(archiveLogDestinationName)) {
+            query += "AND ROWNUM = 1";
+        }
+        else {
+            query += "AND UPPER(DEST_NAME) = '" + archiveLogDestinationName + "'";
+        }
+
+        query += ")";
+
+        try {
+            Metronome sleeper = Metronome.sleeper(Duration.ofSeconds(1), Clock.SYSTEM);
+            int retries = 5;
+            while (retries-- > 0) {
+                Scn maxArchiveLogScn = queryAndMap(query, (rs) -> {
+                    if (rs.next()) {
+                        final String value = rs.getString(1);
+                        if (value != null) {
+                            return Scn.valueOf(value).subtract(Scn.valueOf(1));
+                        }
+                    }
+                    // if we failed to get a result or the value was null, returning Scn.NULL implies
+                    // that we should try again until we exhaust the retry attempts.
+                    return Scn.NULL;
+                });
+                if (!maxArchiveLogScn.isNull()) {
+                    // value was received, return it.
+                    return maxArchiveLogScn;
+                }
+                LOGGER.info("Query to get max archive log SCN returned no value, checking again in 1 second.");
+                sleeper.pause();
+            }
+            // retry attempts exhausted, throw exception
+            throw new DebeziumException("Could not obtain maximum archive log SCN.");
+        }
+        catch (InterruptedException e) {
+            throw new DebeziumException("Failed to obtain maximum archive log SCN.", e);
+        }
     }
 
     /**
@@ -405,7 +414,23 @@ public class OracleConnection extends JdbcConnection {
      * @throws SQLException if a database exception occurred
      */
     public boolean isTableEmpty(String tableName) throws SQLException {
-        return queryAndMap("SELECT COUNT(1) FROM " + tableName, rs -> rs.next() && rs.getLong(1) == 0);
+        return getRowCount(tableName) == 0L;
+    }
+
+    /**
+     * Returns the number of rows in a given table.
+     *
+     * @param tableName table name, should not be {@code null}
+     * @return the number of rows
+     * @throws SQLException if a database exception occurred
+     */
+    public long getRowCount(String tableName) throws SQLException {
+        return queryAndMap("SELECT COUNT(1) FROM " + tableName, rs -> {
+            if (rs.next()) {
+                return rs.getLong(1);
+            }
+            return 0L;
+        });
     }
 
     public <T> T singleOptionalValue(String query, ResultSetExtractor<T> extractor) throws SQLException {
@@ -429,12 +454,23 @@ public class OracleConnection extends JdbcConnection {
                     .append(" WHERE ")
                     .append(condition.get());
         }
-        sql
-                .append(" ORDER BY ")
-                .append(orderBy)
-                .append(" FETCH NEXT ")
-                .append(limit)
-                .append(" ROWS ONLY");
+        if (getOracleVersion().getMajor() < 12) {
+            sql
+                    .insert(0, " SELECT * FROM (")
+                    .append(" ORDER BY ")
+                    .append(orderBy)
+                    .append(")")
+                    .append(" WHERE ROWNUM <=")
+                    .append(limit);
+        }
+        else {
+            sql
+                    .append(" ORDER BY ")
+                    .append(orderBy)
+                    .append(" FETCH NEXT ")
+                    .append(limit)
+                    .append(" ROWS ONLY");
+        }
         return sql.toString();
     }
 
@@ -445,5 +481,65 @@ public class OracleConnection extends JdbcConnection {
 
     private static ConnectionFactory resolveConnectionFactory(Configuration config) {
         return JdbcConnection.patternBasedFactory(connectionString(config));
+    }
+
+    /**
+     * Determine whether the Oracle server has the archive log enabled.
+     *
+     * @return {@code true} if the server's {@code LOG_MODE} is set to {@code ARCHIVELOG}, or {@code false} otherwise
+     */
+    protected boolean isArchiveLogMode() {
+        try {
+            final String mode = queryAndMap("SELECT LOG_MODE FROM V$DATABASE", rs -> rs.next() ? rs.getString(1) : "");
+            LOGGER.debug("LOG_MODE={}", mode);
+            return "ARCHIVELOG".equalsIgnoreCase(mode);
+        }
+        catch (SQLException e) {
+            throw new DebeziumException("Unexpected error while connecting to Oracle and looking at LOG_MODE mode: ", e);
+        }
+    }
+
+    /**
+     * Resolve a system change number to a timestamp, return value is in database timezone.
+     *
+     * The SCN to TIMESTAMP mapping is only retained for the duration of the flashback query area.
+     * This means that eventually the mapping between these values are no longer kept by Oracle
+     * and making a call with a SCN value that has aged out will result in an ORA-08181 error.
+     * This function explicitly checks for this use case and if a ORA-08181 error is thrown, it is
+     * therefore treated as if a value does not exist returning an empty optional value.
+     *
+     * @param scn the system change number, must not be {@code null}
+     * @return an optional timestamp when the system change number occurred
+     * @throws SQLException if a database exception occurred
+     */
+    public Optional<OffsetDateTime> getScnToTimestamp(Scn scn) throws SQLException {
+        try {
+            return queryAndMap("SELECT scn_to_timestamp('" + scn + "') FROM DUAL", rs -> rs.next()
+                    ? Optional.of(rs.getObject(1, OffsetDateTime.class))
+                    : Optional.empty());
+        }
+        catch (SQLException e) {
+            if (e.getMessage().startsWith("ORA-08181")) {
+                // ORA-08181 specified number is not a valid system change number
+                // This happens when the SCN provided is outside the flashback area range
+                // This should be treated as a value is not available rather than an error
+                return Optional.empty();
+            }
+            // Any other SQLException should be thrown
+            throw e;
+        }
+    }
+
+    @Override
+    protected ColumnEditor overrideColumn(ColumnEditor column) {
+        // This allows the column state to be overridden before default-value resolution so that the
+        // output of the default value is within the same precision as that of the column values.
+        if (OracleTypes.TIMESTAMP == column.jdbcType()) {
+            column.length(column.scale().orElse(Column.UNSET_INT_VALUE)).scale(null);
+        }
+        else if (OracleTypes.NUMBER == column.jdbcType()) {
+            column.scale().filter(s -> s == ORACLE_UNSET_SCALE).ifPresent(s -> column.scale(null));
+        }
+        return column;
     }
 }

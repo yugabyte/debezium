@@ -13,10 +13,10 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.header.Header;
 import org.apache.kafka.connect.header.Headers;
@@ -661,7 +661,7 @@ public class EventRouterTest {
         assertThat(eventRouted.headers().lastWithName("payloadType").value()).isEqualTo("UserCreated");
     }
 
-    @Test(expected = ConnectException.class)
+    @Test(expected = ConfigException.class)
     public void shouldFailOnInvalidConfigurationForTopicRegex() {
         final EventRouter<SourceRecord> router = new EventRouter<>();
         final Map<String, String> config = new HashMap<>();
@@ -669,7 +669,7 @@ public class EventRouterTest {
         router.configure(config);
     }
 
-    @Test(expected = ConnectException.class)
+    @Test(expected = ConfigException.class)
     public void shouldFailOnInvalidConfigurationForAdditionalFields() {
         final EventRouter<SourceRecord> router = new EventRouter<>();
         final Map<String, String> config = new HashMap<>();
@@ -677,7 +677,7 @@ public class EventRouterTest {
         router.configure(config);
     }
 
-    @Test(expected = ConnectException.class)
+    @Test(expected = ConfigException.class)
     public void shouldFailOnInvalidConfigurationForAdditionalFieldsEmpty() {
         final EventRouter<SourceRecord> router = new EventRouter<>();
         final Map<String, String> config = new HashMap<>();
@@ -685,7 +685,7 @@ public class EventRouterTest {
         router.configure(config);
     }
 
-    @Test(expected = ConnectException.class)
+    @Test(expected = ConfigException.class)
     public void shouldFailOnInvalidConfigurationForOperationBehavior() {
         final EventRouter<SourceRecord> router = new EventRouter<>();
         final Map<String, String> config = new HashMap<>();
@@ -897,6 +897,67 @@ public class EventRouterTest {
         assertThat(eventRoutedTombstone.valueSchema()).isNotNull();
     }
 
+    @Test
+    public void canExpandJsonPayloadIfConfigured() {
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        final Map<String, String> config = new HashMap<>();
+        config.put(
+                EventRouterConfigDefinition.EXPAND_JSON_PAYLOAD.name(),
+                "true");
+        router.configure(config);
+
+        final SourceRecord eventRecord = createEventRecord(
+                "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
+                "UserCreated",
+                "10711fa5",
+                "User",
+                "{\"fullName\": \"John Doe\", \"enabled\": true, \"rating\": 4.9, \"age\": 42, \"pets\": [\"dog\", \"cat\"]}",
+                new HashMap<>(),
+                new HashMap<>());
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        assertThat(eventRouted).isNotNull();
+
+        Schema valueSchema = eventRouted.valueSchema();
+        assertThat(valueSchema.type()).isEqualTo(SchemaBuilder.struct().type());
+
+        assertThat(valueSchema.fields().size()).isEqualTo(5);
+        assertThat(valueSchema.field("fullName").schema().type().getName()).isEqualTo("string");
+        assertThat(valueSchema.field("enabled").schema().type().getName()).isEqualTo("boolean");
+        assertThat(valueSchema.field("rating").schema().type().getName()).isEqualTo("float64");
+        assertThat(valueSchema.field("age").schema().type().getName()).isEqualTo("int32");
+        assertThat(valueSchema.field("pets").schema().type().getName()).isEqualTo("array");
+
+        Struct valueStruct = (Struct) eventRouted.value();
+        assertThat(valueStruct.get("fullName")).isEqualTo("John Doe");
+        assertThat(valueStruct.get("enabled")).isEqualTo(true);
+        assertThat(valueStruct.get("rating")).isEqualTo(4.9);
+        assertThat(valueStruct.get("age")).isEqualTo(42);
+        assertThat(valueStruct.getArray("pets").size()).isEqualTo(2);
+        assertThat(valueStruct.getArray("pets").get(1)).isEqualTo("cat");
+    }
+
+    @Test
+    public void shouldNotExpandJSONPayloadIfNotConfigured() {
+        final EventRouter<SourceRecord> router = new EventRouter<>();
+        router.configure(new HashMap<>());
+
+        final SourceRecord eventRecord = createEventRecord(
+                "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
+                "UserCreated",
+                "10711fa5",
+                "User",
+                "{\"fullName\": \"John Doe\", \"rating\": 4.9, \"age\": 42}",
+                new HashMap<>(),
+                new HashMap<>());
+
+        final SourceRecord eventRouted = router.apply(eventRecord);
+
+        assertThat(eventRouted).isNotNull();
+        assertThat(eventRouted.valueSchema().type()).isEqualTo(SchemaBuilder.string().type());
+        assertThat(eventRouted.value()).isEqualTo("{\"fullName\": \"John Doe\", \"rating\": 4.9, \"age\": 42}");
+    }
+
     private SourceRecord createEventRecord() {
         return createEventRecord(
                 "da8d6de6-3b77-45ff-8f44-57db55a7a06c",
@@ -972,16 +1033,16 @@ public class EventRouterTest {
                 .withSource(SchemaBuilder.struct().build())
                 .build();
 
-        final Struct before = new Struct(recordSchema);
-        before.put("id", eventId);
-        before.put("aggregatetype", payloadType);
-        before.put("aggregateid", payloadId);
-        before.put("type", eventType);
-        before.put("payload", payload);
+        final Struct after = new Struct(recordSchema);
+        after.put("id", eventId);
+        after.put("aggregatetype", payloadType);
+        after.put("aggregateid", payloadId);
+        after.put("type", eventType);
+        after.put("payload", payload);
 
-        extraValues.forEach(before::put);
+        extraValues.forEach(after::put);
 
-        final Struct body = envelope.create(before, null, Instant.now());
+        final Struct body = envelope.create(after, null, Instant.now());
         return new SourceRecord(new HashMap<>(), new HashMap<>(), "db.outbox", envelope.schema(), body);
     }
 }

@@ -24,13 +24,13 @@ For streaming change events to Apache Kafka, it is recommended to deploy the {pr
 
 To install the server download and unpack the server distribution archive:
 
-ifeval::['{page-version}' == 'master']
+ifeval::['{page-version}' == 'main']
 * {link-server-snapshot}[{prodname} Server distribution]
 
-NOTE: The above links refers to the nightly snapshot build of the {prodname} master branch.
+NOTE: The above links refers to the nightly snapshot build of the {prodname} main branch.
 If you are looking for a non-snapshot version, please select the appropriate version of this documentation in the menu to the right.
 endif::[]
-ifeval::['{page-version}' != 'master']
+ifeval::['{page-version}' != 'main']
 * https://repo1.maven.org/maven2/io/debezium/debezium-server-dist/{debezium-version}/debezium-server-dist-{debezium-version}.tar.gz[{prodname} Server distribution]
 endif::[]
 
@@ -179,7 +179,7 @@ __  ____  __  _____   ___  __ ____  ______
 
 The source configuration uses the same configuration properties that are described on the specific connector documentation pages (just with `debezium.source` prefix), together with few more specific ones, necessary for running outside of Kafka Connect:
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Property
 |Default
@@ -218,7 +218,7 @@ There are also other options available
 The message output format can be configured for both key and value separately.
 By default the output is in JSON format but an arbitrary implementation of Kafka Connect's `Converter` can be used.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Property
 |Default
@@ -249,7 +249,7 @@ Before the messages are delivered to the sink, they can run through a sequence o
 The server supports https://cwiki.apache.org/confluence/display/KAFKA/KIP-66%3A+Single+Message+Transforms+for+Kafka+Connect[single message transformations] defined by Kafka Connect.
 The configuration will need to contain the list of transformations, implementation class for each transformation and configuration options for each of the transformations.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Property
 |Default
@@ -260,8 +260,8 @@ The configuration will need to contain the list of transformations, implementati
 |
 |The comma separated list of symbolic names of transformations.
 
-[id="debezium-transforms-name-class"]
-|`debezium.transforms.<name>.class`
+[id="debezium-transforms-name-type"]
+|`debezium.transforms.<name>.type`
 |
 |The name of Java class implementing the transformation with name `<name>`.
 
@@ -274,13 +274,13 @@ The configuration will need to contain the list of transformations, implementati
 
 
 [id="debezium-additional-configuration-options"]
-=== Addtional configuration
+=== Additional configuration
 
 Debezium Server runs on top Quarkus framework.
 All configuration options exposed by Quarkus are available in Debezium Server too.
 The most frequent used are:
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Property
 |Default
@@ -291,7 +291,19 @@ The most frequent used are:
 |8080
 |The port on which Debezim exposes Microprofile Health endpoint and other exposed status information.
 
+[id="debezium-quarkus-log-level"]
+|`quarkus.log.level`
+|INFO
+|The default log level for every log category.
+
+[id="debezium-quarkus-json-logging"]
+|`quarkus.log.console.json`
+|true
+|Determine whether to enable the JSON console formatting extension, which disables "normal" console formatting.
+
 |===
+
+JSON logging can be disabled by setting `quarkus.log.console.json=false` in the _conf/application.properties_ file, as demonstrated in the _conf/application.properties.example_ file. 
 
 
 === Sink configuration
@@ -306,7 +318,7 @@ The sink is selected by configuration property `debezium.sink.type`.
 Amazon Kinesis is an implementation of data streaming system with support for stream sharding and other techniques for high scalability.
 Kinesis exposes a set of REST APIs and provides a (not-only) Java SDK that is used to implement the sink.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Property
 |Default
@@ -341,7 +353,7 @@ So this string will be used as message key for messages from tables without prim
 The Kinesis sink behaviour can be modified by a custom logic providing alternative implementations for specific functionalities.
 When the alternative implementations are not available then the default ones are used.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Interface
 |CDI classifier
@@ -364,7 +376,7 @@ By default the same name is used.
 Google Cloud Pub/Sub is an implementation of messaging/eventing system designed for scalable batch and stream processing applications.
 Pub/Sub exposes a set of REST APIs and provides a (not-only) Java SDK that is used to implement the sink.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Property
 |Default
@@ -374,7 +386,7 @@ Pub/Sub exposes a set of REST APIs and provides a (not-only) Java SDK that is us
 |
 |Must be set to `pubsub`.
 
-|[[pubsub-project-id]]<<pubsub-project.id, `debezium.sink.pubsub.project.id`>>
+|[[pubsub-project-id]]<<pubsub-project-id, `debezium.sink.pubsub.project.id`>>
 |_system-wide default project id_
 |A project name in which the target topics are created.
 
@@ -388,6 +400,59 @@ This feature can be disabled.
 |Tables without primary key sends messages with `null` key.
 This is not supported by Pub/Sub so a surrogate key must be used.
 
+|[[batch-delay-threshold-ms]]<<pubsub-null-key, `debezium.sink.pubsub.batch.delay.threshold.ms`>>
+|`100`
+|The maximum amount of time to wait to reach element count or request bytes threshold before publishing outstanding messages to Pub/Sub.
+
+|[[batch-element-count-threshold]]<<batch-element-count-threshold, `debezium.sink.pubsub.batch.element.count.threshold`>>
+|`100L`
+|Once this many messages are queued, send all of the messages in a single call, even if the delay threshold hasn't elapsed yet.
+
+|[[batch-request-byte-threshold]]<<batch-request-byte-threshold, `debezium.sink.pubsub.batch.request.byte.threshold`>>
+|`10000000L`
+|Once the number of bytes in the batched request reaches this threshold, send all of the messages in a single call, even if neither the delay or message count thresholds have been exceeded yet.
+
+|[[flowControl-enabled]]<<flowControl-enabled, `debezium.sink.pubsub.flowControl.enabled`>>
+|`false`
+|When enabled, configures your publisher client with flow control to limit the rate of publish requests. 
+
+|[[flowControl-max-outstanding-messages]]<<flowControl-max-outstanding-messages, `debezium.sink.pubsub.flowControl.max.outstanding.messages`>>
+|`Long.MAX_VALUE`
+|(Optional) If flow control enabled, the maxmium number of messages before messages are blocked from being published
+
+|[[flowControl-max-outstanding-bytes]]<<flowControl-max-outstanding-bytes, `debezium.sink.pubsub.flowControl.max.outstanding.bytes`>>
+|`Long.MAX_VALUE`
+|(Optional) If flow control enabled, the maxmium number of bytes before messages are blocked from being published
+
+|[[retry-total-timeout-ms]]<<retry-total-timeout-ms, `debezium.sink.pubsub.retry.total.timeout.ms`>>
+|`60000`
+|The total timeout for a call to publish (including retries) to Pub/Sub.
+
+|[[retry-initial-delay-ms]]<<retry-initial-delay-ms, `debezium.sink.pubsub.retry.initial.delay.ms`>>
+|`5`
+|The initial amount of time to wait before retrying the request.
+
+|[[retry-delay-multiplier]]<<retry-delay-multiplier, `debezium.sink.pubsub.retry.delay.multiplier`>>
+|`2.0`
+|The previous wait time is multiplied by this multiplier to come up with the next wait time, until the max is reached.
+
+|[[retry-max-delay-ms]]<<retry-max-delay-ms, `debezium.sink.pubsub.retry.max.delay.ms`>>
+|`Long.MAX_VALUE`
+|The maximum amount of time to wait before retrying. 
+i.e. after this value is reached, the wait time will not increase further by the multiplier.
+
+|[[retry-initial-rpc-timeout-ms]]<<retry-initial-rpc-timeout-ms, `debezium.sink.pubsub.retry.initial.rpc.timeout.ms`>>
+|`10000`
+|Controls the timeout for the initial Remote Procedure Call
+
+|[[retry-rpc-timeout-multiplier]]<<retry-initial-rpc-timeout-ms, `debezium.sink.pubsub.retry.rpc.timeout.multiplier`>>
+|`2.0`
+|The previous RPC timeout is multiplied by this multipler to come up with the next RPC timeout value, until the max is reached
+
+|[[retry-max-rpc-timeout-ms]]<<retry-max-rpc-timeout-ms, `debezium.sink.pubsub.retry.max.rpc.timeout.ms`>>
+|`10000`
+|The max timeout for individual publish requests to Cloud Pub/Sub.
+
 |===
 
 
@@ -396,7 +461,7 @@ This is not supported by Pub/Sub so a surrogate key must be used.
 The Pub/Sub sink behaviour can be modified by a custom logic providing alternative implementations for specific functionalities.
 When the alternative implementations are not available then the default ones are used.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Interface
 |CDI classifier
@@ -451,7 +516,7 @@ This is not supported by Pulsar so a surrogate key must be used.
 The Pulsar sink behaviour can be modified by a custom logic providing alternative implementations for specific functionalities.
 When the alternative implementations are not available then the default ones are used.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Interface
 |CDI classifier
@@ -505,7 +570,7 @@ https://docs.microsoft.com/azure/event-hubs/event-hubs-about[Azure Event Hubs] i
 The default sink behaviour can be modified by a custom logic providing alternative implementations for specific functionalities.
 When the alternative implementations are not available then the default ones are used.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Interface
 |CDI classifier
@@ -522,7 +587,7 @@ When the alternative implementations are not available then the default ones are
 Redis is an open source (BSD licensed) in-memory data structure store, used as a database, cache and message broker.
 The Stream is a data type which models a _log data structure_ in a more abstract way. It implements powerful operations to overcome the limitations of a log file.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Property
 |Default
@@ -549,6 +614,11 @@ The Stream is a data type which models a _log data structure_ in a more abstract
 |Redis does not support the notion of data without key.
 So this string will be used as key for records without primary key.
 
+|[[redis-null-value]]<<redis-null-value, `debezium.sink.redis.null.value`>>
+|`default`
+|Redis does not support the notion of null payloads, as is the case with tombstone events.
+So this string will be used as value for records without a payload.
+
 |===
 
 
@@ -557,7 +627,7 @@ So this string will be used as key for records without primary key.
 The Redis sink behavior can be modified by a custom logic providing alternative implementations for specific functionalities.
 When the alternative implementations are not available then the default ones are used.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Interface
 |CDI classifier
@@ -578,7 +648,7 @@ By default the same name is used.
 
 https://docs.nats.io/nats-streaming-concepts/intro[NATS Streaming] is a data streaming system powered by NATS, and written in the Go programming language. 
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Property
 |Default
@@ -608,7 +678,7 @@ https://docs.nats.io/nats-streaming-concepts/intro[NATS Streaming] is a data str
 The NATS Streaming sink behavior can be modified by a custom logic providing alternative implementations for specific functionalities.
 When the alternative implementations are not available then the default ones are used.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Interface
 |CDI classifier
@@ -682,7 +752,7 @@ The Pravega sink expects destination scope and streams to already be created.
 Pravega sink behavior can be modified by custom logic providing alternative implementations for specific functionalities.
 When the alternative implementations are not available then the default ones are used.
 
-[cols="35%a,10%a,55%a"]
+[cols="35%a,10%a,55%a",options="header"]
 |===
 |Interface
 |CDI classifier
@@ -712,7 +782,7 @@ The name of the bean is used as the `debezium.sink.type` option.
 The sink needs to read the configuration using Microprofile Config API.
 The execution path must pass the messages into the target system and regularly commit the passed/processed messages.
 
-See the https://github.com/debezium/debezium/blob/master/debezium-server/debezium-server-kinesis/src/main/java/io/debezium/server/kinesis/KinesisChangeConsumer.java[Kinesis sink] implementation for further details.
+See the https://github.com/debezium/debezium/blob/main/debezium-server/debezium-server-kinesis/src/main/java/io/debezium/server/kinesis/KinesisChangeConsumer.java[Kinesis sink] implementation for further details.
 
 
 === Customization of an existing sink
@@ -720,4 +790,4 @@ See the https://github.com/debezium/debezium/blob/master/debezium-server/debeziu
 Some of the sinks exposes dependency injections points that enable users to provide its own bean that would modify the behaviour of the sink.
 Typical examples are fine tuning of the target client setup, the destination naming etc.
 
-See an example of a custom https://github.com/debezium/debezium-examples/tree/master/debezium-server-name-mapper[topic naming policy] implementation for further details.
+See an example of a custom https://github.com/debezium/debezium-examples/tree/main/debezium-server-name-mapper[topic naming policy] implementation for further details.

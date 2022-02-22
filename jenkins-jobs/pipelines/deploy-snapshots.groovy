@@ -12,7 +12,7 @@ if (
 GIT_CREDENTIALS_ID = 'debezium-github'
 
 DEBEZIUM_DIR = 'debezium'
-HOME_DIR = '/home/cloud-user'
+HOME_DIR = '/home/centos'
 
 ORACLE_ARTIFACT_DIR = "$HOME_DIR/oracle-libs/21.1.0.0.0"
 ORACLE_ARTIFACT_VERSION = '21.1.0.0'
@@ -64,6 +64,6 @@ node('Slave') {
             }
         }
     } finally {
-        mail to: 'jpechane@redhat.com', subject: "${JOB_NAME} run #${BUILD_NUMBER} finished", body: "Run ${BUILD_URL} finished with result: ${currentBuild.currentResult}"
+        mail to: MAIL_TO, subject: "${JOB_NAME} run #${BUILD_NUMBER} finished", body: "Run ${BUILD_URL} finished with result: ${currentBuild.currentResult}"
     }
 }

@@ -51,7 +51,10 @@ import io.debezium.data.VerifyRecord;
 import io.debezium.doc.FixFor;
 import io.debezium.embedded.AbstractConnectorTest;
 import io.debezium.junit.logging.LogInterceptor;
+import io.debezium.pipeline.spi.Offsets;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
+import io.debezium.relational.RelationalDatabaseSchema;
+import io.debezium.relational.RelationalSnapshotChangeEventSource;
 import io.debezium.relational.Tables;
 import io.debezium.relational.ddl.DdlParser;
 import io.debezium.relational.history.DatabaseHistory;
@@ -174,7 +177,7 @@ public class SqlServerConnectorIT extends AbstractConnectorTest {
     @Test
     @FixFor("DBZ-1642")
     public void readOnlyApplicationIntent() throws Exception {
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(SqlServerSnapshotChangeEventSource.class);
         final String appId = "readOnlyApplicationIntent-" + UUID.randomUUID();
 
         final int RECORDS_PER_TABLE = 5;
@@ -761,7 +764,7 @@ public class SqlServerConnectorIT extends AbstractConnectorTest {
 
             // verify pre-snapshot inserts have succeeded
             Map<String, Boolean> resultMap = new HashMap<>();
-            connection.listOfChangeTables(TestHelper.TEST_DATABASE).forEach(ct -> {
+            connection.getChangeTables(TestHelper.TEST_DATABASE).forEach(ct -> {
                 final String tableName = ct.getChangeTableId().table();
                 if (tableName.endsWith("dbo_" + tableaCT) || tableName.endsWith("dbo_" + tablebCT)) {
                     try {
@@ -1232,7 +1235,7 @@ public class SqlServerConnectorIT extends AbstractConnectorTest {
         final Configuration config = TestHelper.defaultConfig()
                 .with(SqlServerConnectorConfig.COLUMN_INCLUDE_LIST, ".^")
                 .build();
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(RelationalSnapshotChangeEventSource.class);
 
         start(SqlServerConnector.class, config);
         assertConnectorIsRunning();
@@ -1900,7 +1903,7 @@ public class SqlServerConnectorIT extends AbstractConnectorTest {
     @FixFor("DBZ-1242")
     public void testEmptySchemaWarningAfterApplyingFilters() throws Exception {
         // This captures all logged messages, allowing us to verify log message was written.
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(RelationalDatabaseSchema.class);
 
         Configuration config = TestHelper.defaultConfig()
                 .with(SqlServerConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL)
@@ -1918,7 +1921,7 @@ public class SqlServerConnectorIT extends AbstractConnectorTest {
     @FixFor("DBZ-1242")
     public void testNoEmptySchemaWarningAfterApplyingFilters() throws Exception {
         // This captures all logged messages, allowing us to verify log message was written.
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(RelationalDatabaseSchema.class);
 
         Configuration config = TestHelper.defaultConfig()
                 .with(SqlServerConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL)
@@ -2111,7 +2114,7 @@ public class SqlServerConnectorIT extends AbstractConnectorTest {
 
         Testing.Files.delete(TestHelper.DB_HISTORY_PATH);
 
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(SqlServerConnectorIT.class);
         start(SqlServerConnector.class, config);
         assertConnectorNotRunning();
         assertThat(logInterceptor.containsStacktraceElement(
@@ -2396,7 +2399,7 @@ public class SqlServerConnectorIT extends AbstractConnectorTest {
                 .with(SqlServerConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL_ONLY)
                 .build();
 
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(SqlServerStreamingChangeEventSource.class);
         start(SqlServerConnector.class, config);
         assertConnectorIsRunning();
 
@@ -2515,6 +2518,27 @@ public class SqlServerConnectorIT extends AbstractConnectorTest {
 
     }
 
+    @Test
+    @FixFor("DBZ-2975")
+    public void shouldIncludeDatabaseNameIntoTopicAndSchemaNamesInMultiPartitionMode() throws Exception {
+        final Configuration config = TestHelper.defaultMultiPartitionConfig()
+                .with(SqlServerConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL)
+                .build();
+
+        start(SqlServerConnector.class, config);
+        assertConnectorIsRunning();
+
+        TestHelper.waitForSnapshotToBeCompleted();
+
+        final SourceRecords records = consumeRecordsByTopic(1);
+        final List<SourceRecord> tableA = records.recordsForTopic("server1.testDB.dbo.tablea");
+        Assertions.assertThat(tableA).hasSize(1);
+
+        final SourceRecord record = tableA.get(0);
+        assertThat(record.keySchema().name()).isEqualTo("server1.testDB.dbo.tablea.Key");
+        assertThat(record.valueSchema().name()).isEqualTo("server1.testDB.dbo.tablea.Envelope");
+    }
+
     private void assertRecord(Struct record, List<SchemaAndValueField> expected) {
         expected.forEach(schemaAndValueField -> schemaAndValueField.assertFor(record));
     }
@@ -2558,8 +2582,13 @@ public class SqlServerConnectorIT extends AbstractConnectorTest {
         }
 
         @Override
-        public void recover(Map<String, ?> source, Map<String, ?> position, Tables schema, DdlParser ddlParser) {
-            delegate.recover(source, position, schema, ddlParser);
+        public void recover(Offsets<?, ?> offsets, Tables schema, DdlParser ddlParser) {
+            delegate.recover(offsets, schema, ddlParser);
+        }
+
+        @Override
+        public void recover(Map<Map<String, ?>, Map<String, ?>> offsets, Tables schema, DdlParser ddlParser) {
+            delegate.recover(offsets, schema, ddlParser);
         }
 
         @Override

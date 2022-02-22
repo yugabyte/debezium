@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import io.debezium.connector.oracle.StreamingAdapter.TableNameCaseSensitivity;
 import io.debezium.connector.oracle.antlr.OracleDdlParser;
+import io.debezium.relational.DefaultValueConverter;
 import io.debezium.relational.HistorizedRelationalDatabaseSchema;
 import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
@@ -29,32 +30,34 @@ public class OracleDatabaseSchema extends HistorizedRelationalDatabaseSchema {
     private static final Logger LOGGER = LoggerFactory.getLogger(OracleDatabaseSchema.class);
 
     private final OracleDdlParser ddlParser;
-    private final OracleValueConverters valueConverters;
+    private boolean storageInitializationExecuted = false;
 
     public OracleDatabaseSchema(OracleConnectorConfig connectorConfig, OracleValueConverters valueConverters,
-                                SchemaNameAdjuster schemaNameAdjuster, TopicSelector<TableId> topicSelector,
-                                TableNameCaseSensitivity tableNameCaseSensitivity) {
+                                DefaultValueConverter defaultValueConverter, SchemaNameAdjuster schemaNameAdjuster,
+                                TopicSelector<TableId> topicSelector, TableNameCaseSensitivity tableNameCaseSensitivity) {
         super(connectorConfig, topicSelector, connectorConfig.getTableFilters().dataCollectionFilter(),
                 connectorConfig.getColumnFilter(),
                 new TableSchemaBuilder(
                         valueConverters,
+                        defaultValueConverter,
                         schemaNameAdjuster,
                         connectorConfig.customConverterRegistry(),
                         connectorConfig.getSourceInfoStructMaker().schema(),
-                        connectorConfig.getSanitizeFieldNames()),
+                        connectorConfig.getSanitizeFieldNames(),
+                        false),
                 TableNameCaseSensitivity.INSENSITIVE.equals(tableNameCaseSensitivity),
                 connectorConfig.getKeyMapper());
 
-        this.ddlParser = new OracleDdlParser(valueConverters, connectorConfig.getTableFilters().dataCollectionFilter());
-        this.valueConverters = valueConverters;
+        this.ddlParser = new OracleDdlParser(
+                true,
+                false,
+                connectorConfig.isSchemaCommentsHistoryEnabled(),
+                valueConverters,
+                connectorConfig.getTableFilters().dataCollectionFilter());
     }
 
     public Tables getTables() {
         return tables();
-    }
-
-    public OracleValueConverters getValueConverters() {
-        return valueConverters;
     }
 
     @Override
@@ -84,5 +87,22 @@ public class OracleDatabaseSchema extends HistorizedRelationalDatabaseSchema {
             LOGGER.debug("Recorded DDL statements for database '{}': {}", schemaChange.getDatabase(), schemaChange.getDdl());
             record(schemaChange, schemaChange.getTableChanges());
         }
+    }
+
+    @Override
+    public void initializeStorage() {
+        super.initializeStorage();
+        storageInitializationExecuted = true;
+    }
+
+    public boolean isStorageInitializationExecuted() {
+        return storageInitializationExecuted;
+    }
+
+    /**
+     * Return true if the database history entity exists
+     */
+    public boolean historyExists() {
+        return databaseHistory.exists();
     }
 }

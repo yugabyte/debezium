@@ -6,6 +6,7 @@
 package io.debezium.relational.history;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -45,6 +46,7 @@ public class JsonTableChangeSerializer implements TableChanges.TableChangesSeria
         document.setString("type", tableChange.getType().name());
         document.setString("id", tableChange.getId().toDoubleQuotedString());
         document.setDocument("table", toDocument(tableChange.getTable()));
+        document.setString("comment", tableChange.getTable().comment());
         return document;
     }
 
@@ -88,6 +90,14 @@ public class JsonTableChangeSerializer implements TableChanges.TableChangesSeria
         document.setBoolean("optional", column.isOptional());
         document.setBoolean("autoIncremented", column.isAutoIncremented());
         document.setBoolean("generated", column.isGenerated());
+        document.setString("comment", column.comment());
+        document.setBoolean("hasDefaultValue", column.hasDefaultValue());
+
+        column.defaultValueExpression().ifPresent(d -> document.setString("defaultValueExpression", d));
+
+        Optional.ofNullable(column.enumValues())
+                .map(List::toArray)
+                .ifPresent(enums -> document.setArray("enumValues", enums));
 
         return document;
     }
@@ -117,6 +127,9 @@ public class JsonTableChangeSerializer implements TableChanges.TableChangesSeria
         TableEditor editor = Table.editor()
                 .tableId(id)
                 .setDefaultCharsetName(document.getString("defaultCharsetName"));
+        if (document.getString("comment") != null) {
+            editor.setComment(document.getString("comment"));
+        }
 
         document.getArray("columns")
                 .streamValues()
@@ -142,6 +155,28 @@ public class JsonTableChangeSerializer implements TableChanges.TableChangesSeria
                     Integer scale = v.getInteger("scale");
                     if (scale != null) {
                         columnEditor.scale(scale);
+                    }
+
+                    String columnComment = v.getString("comment");
+                    if (columnComment != null) {
+                        columnEditor.comment(columnComment);
+                    }
+
+                    Boolean hasDefaultValue = v.getBoolean("hasDefaultValue");
+                    String defaultValueExpression = v.getString("defaultValueExpression");
+                    if (defaultValueExpression != null) {
+                        columnEditor.defaultValueExpression(defaultValueExpression);
+                    }
+                    else if (Boolean.TRUE.equals(hasDefaultValue)) {
+                        columnEditor.defaultValueExpression(null);
+                    }
+
+                    Array enumValues = v.getArray("enumValues");
+                    if (enumValues != null && !enumValues.isEmpty()) {
+                        List<String> enumValueList = enumValues.streamValues()
+                                .map(Value::asString)
+                                .collect(Collectors.toList());
+                        columnEditor.enumValues(enumValueList);
                     }
 
                     columnEditor.position(v.getInteger("position"))

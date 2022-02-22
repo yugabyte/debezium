@@ -26,9 +26,16 @@ else if (DRY_RUN instanceof String) {
 }
 echo "Dry run: ${DRY_RUN}"
 
+if (CHECK_BACKPORTS == null) {
+    CHECK_BACKPORTS = false
+}
+else if (CHECK_BACKPORTS instanceof String) {
+    CHECK_BACKPORTS = Boolean.valueOf(CHECK_BACKPORTS)
+}
+
 GIT_CREDENTIALS_ID = 'debezium-github'
-JIRA_CREDENTIALS_ID = 'debezium-jira'
-HOME_DIR = '/home/cloud-user'
+JIRA_CREDENTIALS_ID = 'debezium-jira-pat'
+HOME_DIR = '/home/centos'
 GPG_DIR = 'gpg'
 
 DEBEZIUM_DIR = 'debezium'
@@ -45,7 +52,7 @@ IMAGE_TAG = VERSION_MAJOR_MINOR
 PRODUCT_RELEASE = "${VERSION_MAJOR_MINOR}.GA"
 CANDIDATE_BRANCH = "candidate-$RELEASE_VERSION"
 
-POSTGRES_TAGS = ['9.6', '9.6-alpine', '10', '10-alpine', '11', '11-alpine', '12', '12-alpine', '13', '13-alpine']
+POSTGRES_TAGS = ['9.6', '9.6-alpine', '10', '10-alpine', '11', '11-alpine', '12', '12-alpine', '13', '13-alpine', '14', '14-alpine']
 CONNECTORS_PER_VERSION = [
     '0.8' : ['mongodb', 'mysql', 'postgres', 'oracle'],
     '0.9' : ['mongodb', 'mysql', 'postgres', 'sqlserver', 'oracle'],
@@ -57,7 +64,9 @@ CONNECTORS_PER_VERSION = [
     '1.4' : ['mongodb', 'mysql', 'postgres', 'sqlserver', 'oracle', 'cassandra', 'db2', 'vitess'],
     '1.5' : ['mongodb', 'mysql', 'postgres', 'sqlserver', 'oracle', 'cassandra', 'db2', 'vitess'],
     '1.6' : ['mongodb', 'mysql', 'postgres', 'sqlserver', 'oracle', 'cassandra', 'db2', 'vitess'],
-    '1.7' : ['mongodb', 'mysql', 'postgres', 'sqlserver', 'oracle', 'cassandra', 'db2', 'vitess']
+    '1.7' : ['mongodb', 'mysql', 'postgres', 'sqlserver', 'oracle', 'cassandra', 'db2', 'vitess'],
+    '1.8' : ['mongodb', 'mysql', 'postgres', 'sqlserver', 'oracle', 'cassandra', 'db2', 'vitess'],
+    '1.9' : ['mongodb', 'mysql', 'postgres', 'sqlserver', 'oracle', 'cassandra', 'db2', 'vitess']
 ]
 
 CONNECTORS = CONNECTORS_PER_VERSION[VERSION_MAJOR_MINOR]
@@ -80,9 +89,8 @@ STAGING_REPO_ID = null
 ADDITIONAL_STAGING_REPO_ID = [:]
 LOCAL_MAVEN_REPO = "$HOME_DIR/.m2/repository"
 
-withCredentials([usernamePassword(credentialsId: JIRA_CREDENTIALS_ID, passwordVariable: 'PASSWORD', usernameVariable: 'USERNAME')]) {
-    JIRA_USERNAME = USERNAME
-    JIRA_PASSWORD = PASSWORD
+withCredentials([string(credentialsId: JIRA_CREDENTIALS_ID, variable: 'PAT')]) {
+    JIRA_PAT = PAT
     JIRA_BASE_URL = "https://issues.redhat.com/rest/api/2"
 }
 
@@ -154,7 +162,7 @@ def jiraGET(path, params = [:]) {
         doOutput = true
         requestMethod = 'GET'
         setRequestProperty('Content-Type', 'application/json')
-        setRequestProperty('Authorization', 'Basic ' + "$JIRA_USERNAME:$JIRA_PASSWORD".bytes.encodeBase64().toString())
+        setRequestProperty('Authorization', "Bearer $JIRA_PAT")
         new JsonSlurper().parse(new StringReader(content.text))
     }
 }
@@ -165,7 +173,7 @@ def jiraUpdate(path, payload, method = 'POST') {
         doOutput = true
         requestMethod = method
         setRequestProperty('Content-Type', 'application/json')
-        setRequestProperty('Authorization', 'Basic ' + "$JIRA_USERNAME:$JIRA_PASSWORD".bytes.encodeBase64().toString())
+        setRequestProperty('Authorization', "Bearer $JIRA_PAT")
         outputStream.withWriter { writer ->
             writer << payload
         }
@@ -203,8 +211,13 @@ def closeJiraIssues() {
 }
 
 @NonCPS
+def findVersion(jiraVersion) {
+    jiraGET('project/DBZ/versions').find { it.name == jiraVersion }
+}
+
+@NonCPS
 def closeJiraRelease() {
-    jiraUpdate(jiraGET('project/DBZ/versions').find { it.name == JIRA_VERSION }.self, JIRA_CLOSE_RELEASE, 'PUT')
+    jiraUpdate(findVersion(JIRA_VERSION).self, JIRA_CLOSE_RELEASE, 'PUT')
 }
 
 @NonCPS
@@ -332,8 +345,29 @@ node('Slave') {
             }
         }
 
+        stage('Check missing backports') {
+            if (!DRY_RUN && CHECK_BACKPORTS) {
+                if (!BACKPORT_FROM_TAG || !BACKPORT_TO_TAG) {
+                    error "Backport from/to tags must be provided to perform backport checks"
+                }
+                dir(DEBEZIUM_DIR) {
+                    def rc = sh(script: "github-support/list-missing-commits-by-issue-key.sh $JIRA_VERSION $BACKPORT_FROM_TAG $BACKPORT_TO_TAG $JIRA_PAT", returnStatus: true)
+                    if (rc != 0) {
+                        error "Error, there are some missing backport commits."
+                    }
+                }
+            }
+        }
+
         stage('Check Jira') {
             if (!DRY_RUN) {
+                if (findVersion(JIRA_VERSION) == null) {
+                    error "Requested release does not exist"
+                }
+                if (findVersion(PRODUCT_RELEASE) == null) {
+                    error "Requested product release does not exist"
+                }
+
                 unresolvedIssues = unresolvedIssuesFromJira()
                 issuesWithoutComponents = issuesWithoutComponentsFromJira()
                 if (!resolvedIssuesFromJira()) {
@@ -681,6 +715,6 @@ node('Slave') {
         }
 
     } finally {
-        mail to: 'jpechane@redhat.com', subject: "${JOB_NAME} run #${BUILD_NUMBER} finished", body: "Run ${BUILD_URL} finished with result: ${currentBuild.currentResult}"
+        mail to: MAIL_TO, subject: "${JOB_NAME} run #${BUILD_NUMBER} finished", body: "Run ${BUILD_URL} finished with result: ${currentBuild.currentResult}"
     }
 }

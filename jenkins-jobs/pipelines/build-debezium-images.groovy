@@ -7,6 +7,7 @@ STREAMS_TO_BUILD_COUNT = STREAMS_TO_BUILD_COUNT.toInteger()
 TAGS_PER_STREAM_COUNT = TAGS_PER_STREAM_COUNT.toInteger()
 GIT_CREDENTIALS_ID = 'debezium-github'
 DOCKER_CREDENTIALS_ID = 'debezium-dockerhub'
+QUAYIO_CREDENTIALS_ID = 'debezium-quay'
 
 class Version implements Comparable {
     int major
@@ -99,10 +100,11 @@ streamsToBuild = null
 stableStream = null
 
 @NonCPS
-def initVersions() {
+def initVersions(username, password) {
     TAG_REST_ENDPOINT.toURL().openConnection().with {
         doOutput = true
         setRequestProperty('Content-Type', 'application/json')
+        setRequestProperty('Authorization', 'Basic ' + Base64.encoder.encodeToString("$username:$password".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
         def json = new JsonSlurper().parse(new StringReader(content.text))
         json.each {
             def current = new Version(it.name.substring(1))
@@ -148,10 +150,19 @@ node('Slave') {
                       userRemoteConfigs                : [[url: "https://$IMAGES_REPOSITORY", credentialsId: GIT_CREDENTIALS_ID]]
             ]
             )
-            initVersions()
+            withCredentials([usernamePassword(credentialsId: GIT_CREDENTIALS_ID, passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+                initVersions(GIT_USERNAME, GIT_PASSWORD)
+            }
             withCredentials([usernamePassword(credentialsId: DOCKER_CREDENTIALS_ID, passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
                 sh """
                     docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+                """
+            }
+            withCredentials([string(credentialsId: QUAYIO_CREDENTIALS_ID, variable: 'USERNAME_PASSWORD')]) {
+                def credentials = USERNAME_PASSWORD.split(':')
+                sh """
+                    set +x
+                    docker login -u ${credentials[0]} -p ${credentials[1]} quay.io
                 """
             }
         }
@@ -178,6 +189,6 @@ node('Slave') {
             }
         }
     } finally {
-        mail to: 'jpechane@redhat.com', subject: "${JOB_NAME} run #${BUILD_NUMBER} finished", body: "Run ${BUILD_URL} finished with result: ${currentBuild.currentResult}"
+        mail to: MAIL_TO, subject: "${JOB_NAME} run #${BUILD_NUMBER} finished", body: "Run ${BUILD_URL} finished with result: ${currentBuild.currentResult}"
     }
 }

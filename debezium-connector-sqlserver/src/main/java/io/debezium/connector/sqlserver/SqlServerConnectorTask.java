@@ -73,11 +73,11 @@ public class SqlServerConnectorTask extends BaseSourceTask<SqlServerPartition, S
                 x -> !(x.startsWith(DatabaseHistory.CONFIGURATION_FIELD_PREFIX_STRING) || x.equals(HistorizedRelationalDatabaseConnectorConfig.DATABASE_HISTORY.name())))
                 .subset("database.", true);
         dataConnection = new SqlServerConnection(jdbcConfig, connectorConfig.getSourceTimestampMode(), valueConverters, () -> getClass().getClassLoader(),
-                connectorConfig.getSkippedOperations(), connectorConfig.isMultiPartitionModeEnabled());
+                connectorConfig.getSkippedOperations(), connectorConfig.isMultiPartitionModeEnabled(), connectorConfig.getOptionRecompile());
         metadataConnection = new SqlServerConnection(jdbcConfig, connectorConfig.getSourceTimestampMode(), valueConverters, () -> getClass().getClassLoader(),
                 connectorConfig.getSkippedOperations(), connectorConfig.isMultiPartitionModeEnabled());
 
-        this.schema = new SqlServerDatabaseSchema(connectorConfig, valueConverters, topicSelector, schemaNameAdjuster);
+        this.schema = new SqlServerDatabaseSchema(connectorConfig, metadataConnection.getDefaultValueConverter(), valueConverters, topicSelector, schemaNameAdjuster);
         this.schema.initializeStorage();
 
         Offsets<SqlServerPartition, SqlServerOffsetContext> offsets = getPreviousOffsets(
@@ -101,7 +101,7 @@ public class SqlServerConnectorTask extends BaseSourceTask<SqlServerPartition, S
                 .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
                 .build();
 
-        errorHandler = new SqlServerErrorHandler(connectorConfig.getLogicalName(), queue);
+        errorHandler = new SqlServerErrorHandler(connectorConfig, queue);
 
         final SqlServerEventMetadataProvider metadataProvider = new SqlServerEventMetadataProvider();
 
@@ -115,7 +115,7 @@ public class SqlServerConnectorTask extends BaseSourceTask<SqlServerPartition, S
                 metadataProvider,
                 schemaNameAdjuster);
 
-        ChangeEventSourceCoordinator<SqlServerPartition, SqlServerOffsetContext> coordinator = new ChangeEventSourceCoordinator<>(
+        ChangeEventSourceCoordinator<SqlServerPartition, SqlServerOffsetContext> coordinator = new SqlServerChangeEventSourceCoordinator(
                 offsets,
                 errorHandler,
                 SqlServerConnector.class,
@@ -123,7 +123,8 @@ public class SqlServerConnectorTask extends BaseSourceTask<SqlServerPartition, S
                 new SqlServerChangeEventSourceFactory(connectorConfig, dataConnection, metadataConnection, errorHandler, dispatcher, clock, schema),
                 new DefaultChangeEventSourceMetricsFactory(),
                 dispatcher,
-                schema);
+                schema,
+                clock);
 
         coordinator.start(taskContext, this.queue, metadataProvider);
 

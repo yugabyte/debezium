@@ -24,9 +24,10 @@ final class ColumnEditorImpl implements ColumnEditor {
     private boolean optional = true;
     private boolean autoIncremented = false;
     private boolean generated = false;
-    private Object defaultValue = null;
+    private String defaultValueExpression = null;
     private boolean hasDefaultValue = false;
     private List<String> enumValues;
+    private String comment;
 
     protected ColumnEditorImpl() {
     }
@@ -97,13 +98,18 @@ final class ColumnEditorImpl implements ColumnEditor {
     }
 
     @Override
-    public Object defaultValue() {
-        return defaultValue;
+    public Optional<String> defaultValueExpression() {
+        return Optional.ofNullable(defaultValueExpression);
     }
 
     @Override
     public boolean hasDefaultValue() {
         return hasDefaultValue;
+    }
+
+    @Override
+    public String comment() {
+        return comment;
     }
 
     @Override
@@ -173,7 +179,7 @@ final class ColumnEditorImpl implements ColumnEditor {
         this.optional = optional;
         if (optional && !hasDefaultValue()) {
             // Optional columns have implicit NULL default value
-            defaultValue(null);
+            defaultValueExpression(null);
         }
         return this;
     }
@@ -197,16 +203,16 @@ final class ColumnEditorImpl implements ColumnEditor {
     }
 
     @Override
-    public ColumnEditor defaultValue(final Object defaultValue) {
+    public ColumnEditor defaultValueExpression(String defaultValueExpression) {
         this.hasDefaultValue = true;
-        this.defaultValue = defaultValue;
+        this.defaultValueExpression = defaultValueExpression;
         return this;
     }
 
     @Override
-    public ColumnEditor unsetDefaultValue() {
+    public ColumnEditor unsetDefaultValueExpression() {
         this.hasDefaultValue = false;
-        this.defaultValue = null;
+        this.defaultValueExpression = null;
         return this;
     }
 
@@ -217,9 +223,15 @@ final class ColumnEditorImpl implements ColumnEditor {
     }
 
     @Override
+    public ColumnEditor comment(String comment) {
+        this.comment = comment;
+        return this;
+    }
+
+    @Override
     public Column create() {
         return new ColumnImpl(name, position, jdbcType, nativeType, typeName, typeExpression, charsetName, tableCharsetName,
-                length, scale, enumValues, optional, autoIncremented, generated, defaultValue, hasDefaultValue);
+                length, scale, enumValues, optional, autoIncremented, generated, defaultValueExpression, hasDefaultValue, comment);
     }
 
     @Override

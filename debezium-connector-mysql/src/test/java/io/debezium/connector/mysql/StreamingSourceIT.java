@@ -48,6 +48,8 @@ import io.debezium.data.SchemaChangeHistory;
 import io.debezium.data.VerifyRecord;
 import io.debezium.doc.FixFor;
 import io.debezium.embedded.AbstractConnectorTest;
+import io.debezium.heartbeat.DatabaseHeartbeatImpl;
+import io.debezium.heartbeat.Heartbeat;
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.junit.SkipTestRule;
 import io.debezium.junit.SkipWhenDatabaseVersion;
@@ -526,8 +528,52 @@ public class StreamingSourceIT extends AbstractConnectorTest {
         assertThat(exception.get()).isNull();
     }
 
+    @Test()
+    @FixFor("DBZ-4029")
+    public void testHeartbeatActionQueryExecuted() throws Exception {
+        final String HEARTBEAT_TOPIC_PREFIX_VALUE = "myheartbeat";
+
+        config = simpleConfig()
+                .with(MySqlConnectorConfig.USER, "snapper")
+                .with(MySqlConnectorConfig.PASSWORD, "snapperpass")
+                .with(Heartbeat.HEARTBEAT_TOPICS_PREFIX, HEARTBEAT_TOPIC_PREFIX_VALUE)
+                .with(Heartbeat.HEARTBEAT_INTERVAL, "100")
+                .with(DatabaseHeartbeatImpl.HEARTBEAT_ACTION_QUERY_PROPERTY_NAME,
+                        String.format("INSERT INTO %s.test_heartbeat_table (text) VALUES ('test_heartbeat');",
+                                DATABASE.getDatabaseName()))
+                .build();
+
+        // Create the heartbeat table
+        try (MySqlTestConnection connection = MySqlTestConnection.forTestDatabase(DATABASE.getDatabaseName())) {
+            connection.execute("CREATE TABLE test_heartbeat_table (text TEXT);");
+        }
+        // Start the connector ...
+        AtomicReference<Throwable> exception = new AtomicReference<>();
+        start(MySqlConnector.class, config, (success, message, error) -> exception.set(error));
+
+        waitForStreamingRunning("mysql", DATABASE.getServerName(), "streaming");
+
+        // Confirm that the heartbeat.action.query was executed with the heartbeat
+        final String slotQuery = String.format("SELECT COUNT(*) FROM %s.test_heartbeat_table;", DATABASE.getDatabaseName());
+        final JdbcConnection.ResultSetMapper<Integer> slotQueryMapper = rs -> {
+            rs.next();
+            return rs.getInt(1);
+        };
+
+        Awaitility.await()
+                .alias("Awaiting heartbeat action query insert")
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .atMost(waitTimeForRecords() * 30, TimeUnit.SECONDS)
+                .until(() -> {
+                    try (MySqlTestConnection connection = MySqlTestConnection.forTestDatabase(DATABASE.getDatabaseName())) {
+                        int numOfHeartbeatActions = connection.queryAndMap(slotQuery, slotQueryMapper);
+                        return numOfHeartbeatActions > 0;
+                    }
+                });
+    }
+
     private void inconsistentSchema(EventProcessingFailureHandlingMode mode) throws InterruptedException, SQLException {
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(MySqlStreamingChangeEventSource.class);
         Configuration.Builder builder = simpleConfig()
                 .with(DatabaseHistory.STORE_ONLY_CAPTURED_TABLES_DDL, true)
                 .with(MySqlConnectorConfig.TABLE_INCLUDE_LIST, DATABASE.qualifiedTableName("orders"));

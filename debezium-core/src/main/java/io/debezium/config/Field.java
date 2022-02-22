@@ -7,12 +7,25 @@ package io.debezium.config;
 
 import java.time.DateTimeException;
 import java.time.ZoneOffset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -161,6 +174,18 @@ public final class Field {
 
         public java.util.Set<String> allFieldNames() {
             return this.fieldsByName.keySet();
+        }
+
+        public Set filtered(Predicate<Field> filter) {
+            LinkedHashSet<Field> filtered = new LinkedHashSet<>();
+
+            for (Entry<String, Field> field : fieldsByName.entrySet()) {
+                if (filter.test(field.getValue())) {
+                    filtered.add(field.getValue());
+                }
+            }
+
+            return new Set(filtered);
         }
     }
 
@@ -743,6 +768,11 @@ public final class Field {
         return new Field(name(), displayName(), type(), width(), description(), importance, dependents,
                 defaultValueGenerator, validator, recommender, true, group, allowedValues)
                         .withValidation(Field::isRequired);
+    }
+
+    public Field optional() {
+        return new Field(name(), displayName(), type(), width(), description(), importance, dependents,
+                defaultValueGenerator, validator, recommender, false, group, allowedValues);
     }
 
     public Field withGroup(GroupEntry group) {

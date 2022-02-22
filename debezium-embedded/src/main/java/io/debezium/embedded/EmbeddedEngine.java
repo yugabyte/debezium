@@ -843,7 +843,7 @@ public final class EmbeddedEngine implements DebeziumEngine<SourceRecord> {
                         }
                         try {
                             // First stop the task ...
-                            LOGGER.debug("Stopping the task and engine");
+                            LOGGER.info("Stopping the task and engine");
                             task.stop();
                             connectorCallback.ifPresent(DebeziumEngine.ConnectorCallback::taskStopped);
                             // Always commit offsets that were captured from the source records we actually processed ...
@@ -908,8 +908,7 @@ public final class EmbeddedEngine implements DebeziumEngine<SourceRecord> {
             public synchronized void markProcessed(SourceRecord record) throws InterruptedException {
                 task.commitRecord(record);
                 recordsSinceLastCommit += 1;
-                LOGGER.info("The markProcessed " + record);
-                offsetWriter.offset(record.sourcePartition(), record.sourceOffset());
+                offsetWriter.offset((Map<String, Object>) record.sourcePartition(), (Map<String, Object>) record.sourceOffset());
             }
 
             @Override

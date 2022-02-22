@@ -22,6 +22,7 @@ import io.debezium.config.Configuration;
 import io.debezium.connector.mysql.MySqlConnector;
 import io.debezium.connector.mysql.MySqlConnectorConfig;
 import io.debezium.connector.mysql.MySqlConnectorConfig.BigIntUnsignedHandlingMode;
+import io.debezium.connector.mysql.MySqlDefaultValueConverter;
 import io.debezium.connector.mysql.MySqlSystemVariables.MySqlScope;
 import io.debezium.connector.mysql.MySqlValueConverters;
 import io.debezium.connector.mysql.antlr.MySqlAntlrDdlParser;
@@ -102,10 +103,13 @@ public class MySqlSchema extends RelationalDatabaseSchema {
                 TableFilter.fromPredicate(tableFilters.tableFilter()),
                 tableFilters.columnFilter(),
                 new TableSchemaBuilder(
-                        getValueConverters(configuration), SchemaNameAdjuster.create(),
+                        getValueConverters(configuration),
+                        new MySqlDefaultValueConverter(getValueConverters(configuration)),
+                        SchemaNameAdjuster.create(),
                         configuration.customConverterRegistry(),
                         configuration.getSourceInfoStructMaker().schema(),
-                        configuration.getSanitizeFieldNames()),
+                        configuration.getSanitizeFieldNames(),
+                        false),
                 tableIdCaseInsensitive,
                 configuration.getKeyMapper());
 
@@ -125,7 +129,12 @@ public class MySqlSchema extends RelationalDatabaseSchema {
         this.storeOnlyCapturedTablesDdl = Boolean.valueOf(
                 dbHistoryConfig.getFallbackStringPropertyWithWarning(DatabaseHistory.STORE_ONLY_CAPTURED_TABLES_DDL, DatabaseHistory.STORE_ONLY_MONITORED_TABLES_DDL));
 
-        this.ddlParser = new MySqlAntlrDdlParser(getValueConverters(configuration), getTableFilter());
+        this.ddlParser = new MySqlAntlrDdlParser(
+                true,
+                false,
+                configuration.isSchemaCommentsHistoryEnabled(),
+                getValueConverters(configuration),
+                getTableFilter());
         this.ddlChanges = this.ddlParser.getDdlChanges();
 
         // Create and configure the database history ...
