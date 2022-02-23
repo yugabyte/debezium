@@ -471,9 +471,11 @@ public class YugabyteDBConnection extends JdbcConnection {
                 column.scale(nativeType.getDefaultScale());
             }
 
-            final String defaultValue = columnMetadata.getString(13);
-            if (defaultValue != null) {
-                getDefaultValue(column.create(), defaultValue).ifPresent(column::defaultValue);
+//            final String defaultValue = columnMetadata.getString(13);
+            final String defaultValueExpression = columnMetadata.getString(13);
+            if (defaultValueExpression != null) {
+                getDefaultValue(column.create(), defaultValueExpression);
+//                column.defaultValueExpression(defaultValueExpression);
             }
 
             return Optional.of(column);
@@ -482,7 +484,7 @@ public class YugabyteDBConnection extends JdbcConnection {
         return Optional.empty();
     }
 
-    @Override
+//    @Override
     protected Optional<Object> getDefaultValue(Column column, String defaultValue) {
         return defaultValueConverter.parseDefaultValue(column, defaultValue);
     }

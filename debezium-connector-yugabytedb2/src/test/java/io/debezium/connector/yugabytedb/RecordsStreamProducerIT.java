@@ -1306,7 +1306,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
     @Test
     @FixFor("DBZ-1565")
     public void shouldWarnOnMissingHeartbeatForFilteredEvents() throws Exception {
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(YugabyteDBStreamingChangeEventSource.class);
         startConnector(config -> config
                 .with(YugabyteDBConnectorConfig.POLL_INTERVAL_MS, "50")
                 .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "s1\\.b")

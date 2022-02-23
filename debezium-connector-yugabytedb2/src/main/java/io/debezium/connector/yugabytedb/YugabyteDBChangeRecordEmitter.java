@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+//import com.sun.org.slf4j.internal.Logger;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.header.ConnectHeaders;
@@ -91,7 +92,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
     }
 
     @Override
-    protected Operation getOperation() {
+    public Operation getOperation() {
         switch (message.getOperation()) {
             case INSERT:
                 return Operation.CREATE;
@@ -225,14 +226,14 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         final Column tableColumn = table.columnWithName(columnName);
 
         if (tableColumn == null) {
-            logger.warn(
+            LOGGER.warn(
                     "Internal schema is out-of-sync with incoming decoder events; column {} will be omitted from the change event.",
                     columnName);
             return -1;
         }
         int position = tableColumn.position() - 1;
         if (position < 0 || position >= values.length) {
-            logger.warn(
+            LOGGER.warn(
                     "Internal schema is out-of-sync with incoming decoder events; column {} will be omitted from the change event.",
                     columnName);
             return -1;
@@ -241,16 +242,16 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
     }
 
     private Optional<DataCollectionSchema> newTable(TableId tableId) {
-        logger.info("Schema for table '{}' is missing", tableId);
+        LOGGER.info("Schema for table '{}' is missing", tableId);
         refreshTableFromDatabase(tableId);
         final TableSchema tableSchema = schema.schemaFor(tableId);
 
         if (tableSchema == null) {
-            logger.warn("cannot load schema for table '{}'", tableId);
+            LOGGER.warn("cannot load schema for table '{}'", tableId);
             return Optional.empty();
         }
         else {
-            logger.debug("refreshed DB schema to include table '{}'", tableId);
+            LOGGER.debug("refreshed DB schema to include table '{}'", tableId);
             return Optional.of(tableSchema);
         }
     }
@@ -291,7 +292,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         if (msgHasMissingColumns || msgHasAdditionalColumns) {
             // the table metadata has less or more columns than the event, which means the table structure has changed,
             // so we need to trigger a refresh...
-            logger.info("Different column count {} present in the server message as schema in memory contains {}; refreshing table schema",
+            LOGGER.info("Different column count {} present in the server message as schema in memory contains {}; refreshing table schema",
                     replicationColumnCount,
                     tableColumnCount);
             return true;
@@ -303,7 +304,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
             String columnName = message.getName();
             Column column = table.columnWithName(columnName);
             if (column == null) {
-                logger.info("found new column '{}' present in the server message which is not part of the table metadata; refreshing table schema", columnName);
+                LOGGER.info("found new column '{}' present in the server message which is not part of the table metadata; refreshing table schema", columnName);
                 return true;
             }
             else {
@@ -312,7 +313,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                 if (localType != incomingType) {
                     final int incomingRootType = message.getType().getRootType().getOid();
                     if (localType != incomingRootType) {
-                        logger.info("detected new type for column '{}', old type was {} ({}), new type is {} ({}); refreshing table schema", columnName, localType,
+                        LOGGER.info("detected new type for column '{}', old type was {} ({}), new type is {} ({}); refreshing table schema", columnName, localType,
                                 column.typeName(),
                                 incomingType, message.getType().getName());
                         return true;
@@ -322,21 +323,21 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                     final int localLength = column.length();
                     final int incomingLength = message.getTypeMetadata().getLength();
                     if (localLength != incomingLength) {
-                        logger.info("detected new length for column '{}', old length was {}, new length is {}; refreshing table schema", columnName, localLength,
+                        LOGGER.info("detected new length for column '{}', old length was {}, new length is {}; refreshing table schema", columnName, localLength,
                                 incomingLength);
                         return true;
                     }
                     final int localScale = column.scale().orElseGet(() -> 0);
                     final int incomingScale = message.getTypeMetadata().getScale();
                     if (localScale != incomingScale) {
-                        logger.info("detected new scale for column '{}', old scale was {}, new scale is {}; refreshing table schema", columnName, localScale,
+                        LOGGER.info("detected new scale for column '{}', old scale was {}, new scale is {}; refreshing table schema", columnName, localScale,
                                 incomingScale);
                         return true;
                     }
                     final boolean localOptional = column.isOptional();
                     final boolean incomingOptional = message.isOptional();
                     if (localOptional != incomingOptional) {
-                        logger.info("detected new optional status for column '{}', old value was {}, new value is {}; refreshing table schema", columnName, localOptional,
+                        LOGGER.info("detected new optional status for column '{}', old value was {}, new value is {}; refreshing table schema", columnName, localOptional,
                                 incomingOptional);
                         return true;
                     }
@@ -360,8 +361,8 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
 
         List<String> toastableColumns = schema.getToastableColumnsForTableId(table.id());
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("msg columns: '{}' --- missing columns: '{}' --- toastableColumns: '{}",
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("msg columns: '{}' --- missing columns: '{}' --- toastableColumns: '{}",
                     String.join(",", msgColumnNames),
                     String.join(",", missingColumnNames),
                     String.join(",", toastableColumns));
@@ -388,8 +389,8 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                             // as long as default value is not added to the decoded message metadata, we must apply
                             // the current default read from the database
                             Optional.ofNullable(table.columnWithName(column.getName()))
-                                    .map(Column::defaultValue)
-                                    .ifPresent(columnEditor::defaultValue);
+                                    .map(Column::defaultValueExpression);
+//                                    .ifPresent(columnEditor::defaultValue);
 
                             return columnEditor.create();
                         })
@@ -399,7 +400,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         while (itPkCandidates.hasNext()) {
             final String candidateName = itPkCandidates.next();
             if (!combinedTable.hasUniqueValues() && combinedTable.columnWithName(candidateName) == null) {
-                logger.error("Potentional inconsistency in key for message {}", columns);
+                LOGGER.error("Potentional inconsistency in key for message {}", columns);
                 itPkCandidates.remove();
             }
         }
@@ -427,7 +428,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);
 
         if (skipEmptyMessages() && (newColumnValues == null || newColumnValues.length == 0)) {
-            logger.warn("no new values found for table '{}' from update message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
+            LOGGER.warn("no new values found for table '{}' from update message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
             return;
         }
         // some configurations does not provide old values in case of updates
@@ -459,7 +460,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);
 
         if (skipEmptyMessages() && (oldColumnValues == null || oldColumnValues.length == 0)) {
-            logger.warn("no old values found for table '{}' from delete message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
+            LOGGER.warn("no old values found for table '{}' from delete message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
             return;
         }
 

@@ -75,7 +75,7 @@ public class ReplicationConnectionIT {
 
     @Test(expected = DebeziumException.class)
     public void shouldNotAllowMultipleReplicationSlotsOnTheSameDBSlotAndPlugin() throws Exception {
-        LogInterceptor interceptor = new LogInterceptor();
+        LogInterceptor interceptor = new LogInterceptor(YugabyteDBReplicationConnection.class);
         // create a replication connection which should be dropped once it's closed
         try (ReplicationConnection conn1 = TestHelper.createForReplication("test1", true)) {
             conn1.startStreaming(new WalPositionLocator());

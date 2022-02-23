@@ -9,6 +9,7 @@ package io.debezium.connector.yugabytedb;
 import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
 
+import io.debezium.pipeline.signal.Signal;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.fest.assertions.Assertions;
@@ -47,7 +48,7 @@ public class SignalsIT extends AbstractConnectorTest {
     @Test
     public void signalLog() throws InterruptedException {
         // Testing.Print.enable();
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(Signal.class);
 
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.execute(SETUP_TABLES_STMT);
@@ -78,7 +79,7 @@ public class SignalsIT extends AbstractConnectorTest {
     @Test
     public void signalingDisabled() throws InterruptedException {
         // Testing.Print.enable();
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(Signal.class);
 
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.execute(SETUP_TABLES_STMT);

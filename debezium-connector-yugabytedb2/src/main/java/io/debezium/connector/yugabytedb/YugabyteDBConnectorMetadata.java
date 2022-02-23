@@ -5,25 +5,29 @@
  */
 package io.debezium.connector.yugabytedb;
 
+import io.debezium.metadata.ConnectorDescriptor;
 import org.apache.kafka.connect.connector.Connector;
 
 import io.debezium.config.Field;
-import io.debezium.metadata.AbstractConnectorMetadata;
-import io.debezium.metadata.ConnectorDescriptor;
+import io.debezium.metadata.ConnectorMetadata;
 
-public class YugabyteDBConnectorMetadata extends AbstractConnectorMetadata {
+public class YugabyteDBConnectorMetadata implements ConnectorMetadata {
 
-    @Override
-    public ConnectorDescriptor getConnectorDescriptor() {
-        return new ConnectorDescriptor("postgres", "Debezium PostgreSQL Connector", getConnector().version());
+    @Override public Field.Set getConnectorFields() {
+//        return null;
+        return getAllConnectorFields();
     }
 
-    @Override
+    @Override public ConnectorDescriptor getConnectorDescriptor() {
+        return new ConnectorDescriptor("", "yugabytedb", "Debezium YugabyteDB connector", getConnector().version());
+    }
+
+//    @Override
     public Connector getConnector() {
         return new YugabyteDBConnector();
     }
 
-    @Override
+//    @Override
     public Field.Set getAllConnectorFields() {
         return YugabyteDBConnectorConfig.ALL_FIELDS;
     }

@@ -19,6 +19,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.postgresql.core.Encoding;
+import org.postgresql.core.Provider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -177,8 +178,7 @@ public class YugabyteDBConnectorTask
                     .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
                     .build();
 
-            ErrorHandler errorHandler = new YugabyteDBErrorHandler(connectorConfig.getLogicalName(),
-                    queue);
+            ErrorHandler errorHandler = new YugabyteDBErrorHandler(connectorConfig, queue);
 
             final YugabyteDBEventMetadataProvider metadataProvider = new YugabyteDBEventMetadataProvider();
 
@@ -218,9 +218,12 @@ public class YugabyteDBConnectorTask
                     schemaNameAdjuster,
                     jdbcConnection);
 
+
             YugabyteDBChangeEventSourceCoordinator coordinator = new YugabyteDBChangeEventSourceCoordinator(
-                    new Offsets<>(Collections.singletonMap(new YugabyteDBPartition(),
-                            context)), // previousOffsets,
+                    Offsets.of(Collections.singletonMap(new YugabyteDBPartition(),
+                            context)),
+//                    new Offsets<>(Collections.singletonMap(new YugabyteDBPartition(),
+//                            context)), // previousOffsets,
                     errorHandler,
                     YugabyteDBConnector.class,
                     connectorConfig,
