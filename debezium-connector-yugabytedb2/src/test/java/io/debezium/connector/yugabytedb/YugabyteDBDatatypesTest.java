@@ -48,7 +48,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
     }
 
     private CompletableFuture<Void> insertRecordsInSchema(long numOfRowsToBeInserted) {
-        String formatInsertString = "INSERT INTO test_schema.t1 VALUES (%d, 'Vaibhav', " +
+        String formatInsertString = "INSERT INTO test_schema.table_in_schema VALUES (%d, 'Vaibhav', " +
                 "'Kushwaha', 30);";
         return CompletableFuture.runAsync(() -> {
             for (int i = 0; i < numOfRowsToBeInserted; i++) {
@@ -70,14 +70,14 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
         });
     }
 
-    protected Configuration.Builder getConfigBuilder() throws Exception {
+    protected Configuration.Builder getConfigBuilder(String fullTablenameWithSchema) throws Exception {
         return TestHelper.defaultConfig()
                 .with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1") // this field is required as of now
                 .with(YugabyteDBConnectorConfig.PORT, 5433)
                 .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
                 .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
                 .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
-                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1")
+                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, fullTablenameWithSchema)
                 .with(YugabyteDBConnectorConfig.AUTO_CREATE_STREAM, true);
     }
 
@@ -172,7 +172,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
         TestHelper.dropAllSchemas();
         TestHelper.executeDDL("postgres_create_tables.ddl");
         Thread.sleep(1000); // todo vaibhav: find why this (sleep) is called
-        Configuration.Builder configBuilder = getConfigBuilder();
+        Configuration.Builder configBuilder = getConfigBuilder("public.t1");
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         final long recordsCount = 2;
@@ -191,7 +191,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
         TestHelper.dropAllSchemas();
         TestHelper.executeDDL("postgres_create_tables.ddl");
         Thread.sleep(1000); // todo vaibhav: find why this (sleep) is called
-        Configuration.Builder configBuilder = getConfigBuilder();
+        Configuration.Builder configBuilder = getConfigBuilder("public.t1");
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         final long recordsCount = 1;
@@ -209,7 +209,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
         TestHelper.dropAllSchemas();
         TestHelper.executeDDL("postgres_create_tables.ddl");
         Thread.sleep(1000); // todo vaibhav: find why this is called
-        Configuration.Builder configBuilder = getConfigBuilder();
+        Configuration.Builder configBuilder = getConfigBuilder("public.t1");
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         final long recordsCount = 1000;
@@ -227,7 +227,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
         TestHelper.dropAllSchemas();
         TestHelper.executeDDL("postgres_create_tables.ddl");
         Thread.sleep(1000);
-        Configuration.Builder configBuilder = getConfigBuilder();
+        Configuration.Builder configBuilder = getConfigBuilder("public.t1");
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         final long recordsCount = 1;
@@ -246,7 +246,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
         TestHelper.dropAllSchemas();
         TestHelper.executeDDL("tables_in_non_public_schema.ddl");
         Thread.sleep(1000);
-        Configuration.Builder configBuilder = getConfigBuilderWithSchema();
+        Configuration.Builder configBuilder = getConfigBuilder("test_schema.table_in_schema");
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         final long recordsCount = 1;
