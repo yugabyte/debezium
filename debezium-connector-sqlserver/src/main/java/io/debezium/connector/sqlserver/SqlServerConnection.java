@@ -13,15 +13,16 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -59,7 +60,7 @@ public class SqlServerConnection extends JdbcConnection {
     private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerConnection.class);
 
     private static final String STATEMENTS_PLACEHOLDER = "#";
-    private static final String DATABASE_NAME_PLACEHOLDER = "[#db]";
+    private static final String DATABASE_NAME_PLACEHOLDER = "#db";
     private static final String GET_MAX_LSN = "SELECT [#db].sys.fn_cdc_get_max_lsn()";
     private static final String GET_MAX_TRANSACTION_LSN = "SELECT MAX(start_lsn) FROM [#db].cdc.lsn_time_mapping WHERE tran_id <> 0x00";
     private static final String GET_NTH_TRANSACTION_LSN_FROM_BEGINNING = "SELECT MAX(start_lsn) FROM (SELECT TOP (?) start_lsn FROM [#db].cdc.lsn_time_mapping WHERE tran_id <> 0x00 ORDER BY start_lsn) as next_lsns";
@@ -71,9 +72,36 @@ public class SqlServerConnection extends JdbcConnection {
     private static final String GET_ALL_CHANGES_FOR_TABLE = "SELECT *# FROM [#db].cdc.[fn_cdc_get_all_changes_#](?, ?, N'all update old') order by [__$start_lsn] ASC, [__$seqval] ASC, [__$operation] ASC";
     private final String get_all_changes_for_table;
     protected static final String LSN_TIMESTAMP_SELECT_STATEMENT = "TODATETIMEOFFSET([#db].sys.fn_cdc_map_lsn_to_time([__$start_lsn]), DATEPART(TZOFFSET, SYSDATETIMEOFFSET()))";
-    private static final String GET_LIST_OF_CDC_ENABLED_TABLES = "EXEC [#db].sys.sp_cdc_help_change_data_capture";
-    private static final String GET_LIST_OF_NEW_CDC_ENABLED_TABLES = "SELECT * FROM [#db].cdc.change_tables WHERE start_lsn BETWEEN ? AND ?";
-    private static final Pattern BRACKET_PATTERN = Pattern.compile("[\\[\\]]");
+
+    /**
+     * Queries the list of captured column names and their change table identifiers in the given database.
+     */
+    private static final String GET_CAPTURED_COLUMNS = "SELECT object_id, column_name" +
+            " FROM [#db].cdc.captured_columns" +
+            " ORDER BY object_id, column_id";
+
+    /**
+     * Queries the list of capture instances in the given database.
+     *
+     * If two or more capture instances with the same start LSN are available for a given source table,
+     * only the newest one will be returned.
+     *
+     * We use a query instead of {@code sys.sp_cdc_help_change_data_capture} because:
+     *   1. The stored procedure doesn't allow filtering capture instances by start LSN.
+     *   2. There is no way to use the result returned by a stored procedure in a query.
+     */
+    private static final String GET_CHANGE_TABLES = "WITH ordered_change_tables" +
+            " AS (SELECT ROW_NUMBER() OVER (PARTITION BY ct.source_object_id, ct.start_lsn ORDER BY ct.create_date DESC) AS ct_sequence," +
+            " ct.*" +
+            " FROM [#db].cdc.change_tables AS ct#)" +
+            " SELECT OBJECT_SCHEMA_NAME(source_object_id, DB_ID(?))," +
+            " OBJECT_NAME(source_object_id, DB_ID(?))," +
+            " capture_instance," +
+            " object_id," +
+            " start_lsn" +
+            " FROM ordered_change_tables WHERE ct_sequence = 1";
+
+    private static final String GET_NEW_CHANGE_TABLES = "SELECT * FROM [#db].cdc.change_tables WHERE start_lsn BETWEEN ? AND ?";
     private static final String OPENING_QUOTING_CHARACTER = "[";
     private static final String CLOSING_QUOTING_CHARACTER = "]";
 
@@ -85,18 +113,7 @@ public class SqlServerConnection extends JdbcConnection {
 
     private final SqlServerDefaultValueConverter defaultValueConverter;
 
-    /**
-     * Creates a new connection using the supplied configuration.
-     *
-     * @param config {@link Configuration} instance, may not be null.
-     * @param sourceTimestampMode strategy for populating {@code source.ts_ms}.
-     * @param valueConverters {@link SqlServerValueConverters} instance
-     */
-    public SqlServerConnection(Configuration config, SourceTimestampMode sourceTimestampMode,
-                               SqlServerValueConverters valueConverters, boolean multiPartitionMode) {
-        this(config, sourceTimestampMode, valueConverters, null, Collections.emptySet(),
-                multiPartitionMode);
-    }
+    private boolean optionRecompile;
 
     /**
      * Creates a new connection using the supplied configuration.
@@ -151,6 +168,26 @@ public class SqlServerConnection extends JdbcConnection {
         getAllChangesForTable = get_all_changes_for_table.replaceFirst(STATEMENTS_PLACEHOLDER,
                 Matcher.quoteReplacement(sourceTimestampMode.lsnTimestampSelectStatement()));
         this.multiPartitionMode = multiPartitionMode;
+
+        this.optionRecompile = false;
+    }
+
+    /**
+     * Creates a new connection using the supplied configuration.
+     *
+     * @param config {@link Configuration} instance, may not be null.
+     * @param sourceTimestampMode strategy for populating {@code source.ts_ms}.
+     * @param valueConverters {@link SqlServerValueConverters} instance
+     * @param classLoaderSupplier class loader supplier
+     * @param skippedOperations a set of {@link Envelope.Operation} to skip in streaming
+     * @param optionRecompile Includes query option RECOMPILE on incremental snapshots
+     */
+    public SqlServerConnection(Configuration config, SourceTimestampMode sourceTimestampMode,
+                               SqlServerValueConverters valueConverters, Supplier<ClassLoader> classLoaderSupplier,
+                               Set<Envelope.Operation> skippedOperations, boolean multiPartitionMode, boolean optionRecompile) {
+        this(config, sourceTimestampMode, valueConverters, classLoaderSupplier, skippedOperations, multiPartitionMode);
+
+        this.optionRecompile = optionRecompile;
     }
 
     private static String createUrlPattern(boolean multiPartitionMode) {
@@ -354,26 +391,63 @@ public class SqlServerConnection extends JdbcConnection {
         }
     }
 
-    public Set<SqlServerChangeTable> listOfChangeTables(String databaseName) throws SQLException {
-        return queryAndMap(replaceDatabaseNamePlaceholder(GET_LIST_OF_CDC_ENABLED_TABLES, databaseName), rs -> {
-            final Set<SqlServerChangeTable> changeTables = new HashSet<>();
+    public List<SqlServerChangeTable> getChangeTables(String databaseName) throws SQLException {
+        return getChangeTables(databaseName, Lsn.NULL);
+    }
+
+    public List<SqlServerChangeTable> getChangeTables(String databaseName, Lsn toLsn) throws SQLException {
+        Map<Integer, List<String>> columns = queryAndMap(
+                replaceDatabaseNamePlaceholder(GET_CAPTURED_COLUMNS, databaseName),
+                rs -> {
+                    Map<Integer, List<String>> result = new HashMap<>();
+                    while (rs.next()) {
+                        int changeTableObjectId = rs.getInt(1);
+                        if (!result.containsKey(changeTableObjectId)) {
+                            result.put(changeTableObjectId, new LinkedList<>());
+                        }
+
+                        result.get(changeTableObjectId).add(rs.getString(2));
+                    }
+                    return result;
+                });
+        final ResultSetMapper<List<SqlServerChangeTable>> mapper = rs -> {
+            final List<SqlServerChangeTable> changeTables = new ArrayList<>();
             while (rs.next()) {
+                int changeTableObjectId = rs.getInt(4);
                 changeTables.add(
                         new SqlServerChangeTable(
                                 new TableId(databaseName, rs.getString(1), rs.getString(2)),
                                 rs.getString(3),
-                                rs.getInt(4),
-                                Lsn.valueOf(rs.getBytes(6)),
-                                Lsn.valueOf(rs.getBytes(7)),
-                                Arrays.asList(BRACKET_PATTERN.matcher(Optional.ofNullable(rs.getString(15)).orElse(""))
-                                        .replaceAll("").split(", "))));
+                                changeTableObjectId,
+                                Lsn.valueOf(rs.getBytes(5)),
+                                columns.get(changeTableObjectId)));
             }
             return changeTables;
-        });
+        };
+
+        String query = replaceDatabaseNamePlaceholder(GET_CHANGE_TABLES, databaseName);
+
+        if (toLsn.isAvailable()) {
+            return prepareQueryAndMap(query.replace(STATEMENTS_PLACEHOLDER, " WHERE ct.start_lsn <= ?"),
+                    ps -> {
+                        ps.setBytes(1, toLsn.getBinary());
+                        ps.setString(2, databaseName);
+                        ps.setString(3, databaseName);
+                    },
+                    mapper);
+        }
+        else {
+            return prepareQueryAndMap(query.replace(STATEMENTS_PLACEHOLDER, ""),
+                    ps -> {
+                        ps.setString(1, databaseName);
+                        ps.setString(2, databaseName);
+                    },
+                    mapper);
+        }
     }
 
-    public Set<SqlServerChangeTable> listOfNewChangeTables(String databaseName, Lsn fromLsn, Lsn toLsn) throws SQLException {
-        final String query = replaceDatabaseNamePlaceholder(GET_LIST_OF_NEW_CDC_ENABLED_TABLES, databaseName);
+    public List<SqlServerChangeTable> getNewChangeTables(String databaseName, Lsn fromLsn, Lsn toLsn) throws SQLException {
+        final String query = replaceDatabaseNamePlaceholder(GET_NEW_CHANGE_TABLES, databaseName);
 
         return prepareQueryAndMap(query,
                 ps -> {
@@ -381,13 +455,12 @@ public class SqlServerConnection extends JdbcConnection {
                     ps.setBytes(2, toLsn.getBinary());
                 },
                 rs -> {
-                    final Set<SqlServerChangeTable> changeTables = new HashSet<>();
+                    final List<SqlServerChangeTable> changeTables = new ArrayList<>();
                     while (rs.next()) {
                         changeTables.add(new SqlServerChangeTable(
                                 rs.getString(4),
                                 rs.getInt(1),
-                                Lsn.valueOf(rs.getBytes(5)),
-                                Lsn.valueOf(rs.getBytes(6))));
+                                Lsn.valueOf(rs.getBytes(5))));
                     }
                     return changeTables;
                 });
@@ -447,12 +520,6 @@ public class SqlServerConnection extends JdbcConnection {
     }
 
     @Override
-    protected Optional<Object> getDefaultValue(Column column, String defaultValue) {
-        return defaultValueConverter
-                .parseDefaultValue(column, defaultValue);
-    }
-
-    @Override
     protected boolean isTableUniqueIndexIncluded(String indexName, String columnName) {
         // SQL Server provides indices also without index name
         // so we need to ignore them
@@ -492,6 +559,10 @@ public class SqlServerConnection extends JdbcConnection {
         sql
                 .append(" ORDER BY ")
                 .append(orderBy);
+        if (this.optionRecompile) {
+            sql
+                    .append(" OPTION(RECOMPILE)");
+        }
         return sql.toString();
     }
 
@@ -502,5 +573,9 @@ public class SqlServerConnection extends JdbcConnection {
 
     private String replaceDatabaseNamePlaceholder(String sql, String databaseName) {
         return sql.replace(DATABASE_NAME_PLACEHOLDER, databaseName);
+    }
+
+    public SqlServerDefaultValueConverter getDefaultValueConverter() {
+        return defaultValueConverter;
     }
 }

@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.connector.oracle.antlr.OracleDdlParser;
+import io.debezium.connector.oracle.logminer.processor.TruncateReceiver;
 import io.debezium.pipeline.spi.SchemaChangeEventEmitter;
 import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
@@ -24,7 +25,6 @@ import io.debezium.relational.ddl.DdlParserListener;
 import io.debezium.relational.ddl.DdlParserListener.TableAlteredEvent;
 import io.debezium.relational.ddl.DdlParserListener.TableCreatedEvent;
 import io.debezium.relational.ddl.DdlParserListener.TableDroppedEvent;
-import io.debezium.relational.history.DatabaseHistory;
 import io.debezium.schema.SchemaChangeEvent;
 import io.debezium.schema.SchemaChangeEvent.SchemaChangeEventType;
 import io.debezium.text.MultipleParsingExceptions;
@@ -43,18 +43,19 @@ public class OracleSchemaChangeEventEmitter implements SchemaChangeEventEmitter 
     private final OracleOffsetContext offsetContext;
     private final TableId tableId;
     private final OracleDatabaseSchema schema;
-    private final DatabaseHistory databaseHistory;
     private final Instant changeTime;
     private final String sourceDatabaseName;
     private final String objectOwner;
     private final String ddlText;
     private final TableFilter filters;
     private final OracleStreamingChangeEventSourceMetrics streamingMetrics;
+    private final TruncateReceiver truncateReceiver;
 
     public OracleSchemaChangeEventEmitter(OracleConnectorConfig connectorConfig, OraclePartition partition,
                                           OracleOffsetContext offsetContext, TableId tableId, String sourceDatabaseName,
                                           String objectOwner, String ddlText, OracleDatabaseSchema schema,
-                                          Instant changeTime, OracleStreamingChangeEventSourceMetrics streamingMetrics) {
+                                          Instant changeTime, OracleStreamingChangeEventSourceMetrics streamingMetrics,
+                                          TruncateReceiver truncateReceiver) {
         this.partition = partition;
         this.offsetContext = offsetContext;
         this.tableId = tableId;
@@ -62,10 +63,10 @@ public class OracleSchemaChangeEventEmitter implements SchemaChangeEventEmitter 
         this.objectOwner = objectOwner;
         this.ddlText = ddlText;
         this.schema = schema;
-        this.databaseHistory = connectorConfig.getDatabaseHistory();
         this.changeTime = changeTime;
         this.streamingMetrics = streamingMetrics;
         this.filters = connectorConfig.getTableFilters().dataCollectionFilter();
+        this.truncateReceiver = truncateReceiver;
     }
 
     @Override
@@ -84,7 +85,7 @@ public class OracleSchemaChangeEventEmitter implements SchemaChangeEventEmitter 
             parser.parse(ddlText, schema.getTables());
         }
         catch (ParsingException | MultipleParsingExceptions e) {
-            if (databaseHistory.skipUnparseableDdlStatements()) {
+            if (schema.skipUnparseableDdlStatements()) {
                 LOGGER.warn("Ignoring unparsable DDL statement '{}': {}", ddlText, e);
                 streamingMetrics.incrementWarningCount();
                 streamingMetrics.incrementUnparsableDdlCount();
@@ -107,6 +108,9 @@ public class OracleSchemaChangeEventEmitter implements SchemaChangeEventEmitter 
                             break;
                         case DROP_TABLE:
                             changeEvents.add(dropTableEvent(partition, tableBefore, (TableDroppedEvent) event));
+                            break;
+                        case TRUNCATE_TABLE:
+                            truncateReceiver.processTruncateEvent();
                             break;
                         default:
                             LOGGER.info("Skipped DDL event type {}: {}", event.type(), ddlText);

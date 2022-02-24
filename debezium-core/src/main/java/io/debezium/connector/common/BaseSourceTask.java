@@ -86,9 +86,6 @@ public abstract class BaseSourceTask<P extends Partition, O extends OffsetContex
     private final Clock clock = Clock.system();
 
     @SingleThreadAccess("polling thread")
-    private long recordCounter = 0L;
-
-    @SingleThreadAccess("polling thread")
     private Instant previousOutputInstant;
 
     protected BaseSourceTask() {
@@ -175,16 +172,16 @@ public abstract class BaseSourceTask<P extends Partition, O extends OffsetContex
             return;
         }
         int batchSize = records.size();
-        recordCounter += batchSize;
+
         if (batchSize > 0) {
             SourceRecord lastRecord = records.get(batchSize - 1);
             lastOffset = lastRecord.sourceOffset();
             if (pollOutputDelay.hasElapsed()) {
                 // We want to record the status ...
                 final Instant currentTime = clock.currentTime();
-                LOGGER.info("{} records sent during previous {}, last recorded offset: {}", recordCounter,
+                LOGGER.info("{} records sent during previous {}, last recorded offset: {}", batchSize,
                         Strings.duration(Duration.between(previousOutputInstant, currentTime).toMillis()), lastOffset);
-                recordCounter = 0;
+
                 previousOutputInstant = currentTime;
             }
         }
@@ -313,7 +310,7 @@ public abstract class BaseSourceTask<P extends Partition, O extends OffsetContex
 
             if (offset != null) {
                 found = true;
-                LOGGER.info("Found previous partition offset {}: {}", partition, offset);
+                LOGGER.info("Found previous partition offset {}: {}", partition, offset.getOffset());
             }
         }
 
@@ -321,6 +318,6 @@ public abstract class BaseSourceTask<P extends Partition, O extends OffsetContex
             LOGGER.info("No previous offsets found");
         }
 
-        return new Offsets<>(offsets);
+        return Offsets.of(offsets);
     }
 }

@@ -5,14 +5,22 @@
  */
 package io.debezium.connector.oracle.util;
 
+import java.math.BigInteger;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import org.infinispan.client.hotrod.impl.ConfigurationProperties;
+
 import io.debezium.config.Configuration;
+import io.debezium.config.Field;
 import io.debezium.connector.oracle.OracleConnection;
 import io.debezium.connector.oracle.OracleConnectorConfig;
 import io.debezium.connector.oracle.OracleConnectorConfig.LogMiningBufferType;
+import io.debezium.connector.oracle.logminer.processor.infinispan.CacheProvider;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.relational.history.FileDatabaseHistory;
 import io.debezium.util.Strings;
@@ -37,6 +45,12 @@ public class TestHelper {
     public static final String DATABASE_CDB = "ORCLCDB";
     public static final int PORT = 1521;
 
+    public static final int INFINISPAN_HOTROD_PORT = ConfigurationProperties.DEFAULT_HOTROD_PORT;
+    public static final String INFINISPAN_USER = "admin";
+    public static final String INFINISPAN_PASS = "admin";
+    public static final String INFINISPAN_HOST = "0.0.0.0";
+    public static final String INFINISPAN_SERVER_LIST = INFINISPAN_HOST + ":" + INFINISPAN_HOTROD_PORT;
+
     /**
      * Key for schema parameter used to store a source column's type name.
      */
@@ -51,6 +65,15 @@ public class TestHelper {
      * Key for schema parameter used to store a source column's type scale.
      */
     public static final String TYPE_SCALE_PARAMETER_KEY = "__debezium.source.column.scale";
+
+    private static Map<String, Field> cacheMappings = new HashMap<>();
+
+    static {
+        cacheMappings.put(CacheProvider.TRANSACTIONS_CACHE_NAME, OracleConnectorConfig.LOG_MINING_BUFFER_INFINISPAN_CACHE_TRANSACTIONS);
+        cacheMappings.put(CacheProvider.PROCESSED_TRANSACTIONS_CACHE_NAME, OracleConnectorConfig.LOG_MINING_BUFFER_INFINISPAN_CACHE_PROCESSED_TRANSACTIONS);
+        cacheMappings.put(CacheProvider.SCHEMA_CHANGES_CACHE_NAME, OracleConnectorConfig.LOG_MINING_BUFFER_INFINISPAN_CACHE_SCHEMA_CHANGES);
+        cacheMappings.put(CacheProvider.EVENTS_CACHE_NAME, OracleConnectorConfig.LOG_MINING_BUFFER_INFINISPAN_CACHE_EVENTS);
+    }
 
     /**
      * Get the name of the connector user, the default is {@link TestHelper#CONNECTOR_USER}.
@@ -112,10 +135,16 @@ public class TestHelper {
             // Tests will always use the online catalog strategy due to speed.
             builder.withDefault(OracleConnectorConfig.LOG_MINING_STRATEGY, "online_catalog");
 
-            final String bufferType = System.getProperty(OracleConnectorConfig.LOG_MINING_BUFFER_TYPE.name());
-            if (LogMiningBufferType.parse(bufferType).equals(LogMiningBufferType.INFINISPAN)) {
-                builder.withDefault(OracleConnectorConfig.LOG_MINING_BUFFER_TYPE, "infinispan");
-                builder.withDefault(OracleConnectorConfig.LOG_MINING_BUFFER_LOCATION, "./target/data");
+            final String bufferTypeName = System.getProperty(OracleConnectorConfig.LOG_MINING_BUFFER_TYPE.name());
+            final LogMiningBufferType bufferType = LogMiningBufferType.parse(bufferTypeName);
+            if (bufferType.isInfinispan()) {
+                builder.with(OracleConnectorConfig.LOG_MINING_BUFFER_TYPE, bufferType);
+                withDefaultInfinispanCacheConfigurations(bufferType, builder);
+                if (!bufferType.isInfinispanEmbedded()) {
+                    builder.with("log.mining.buffer." + ConfigurationProperties.SERVER_LIST, INFINISPAN_SERVER_LIST);
+                    builder.with("log.mining.buffer." + ConfigurationProperties.AUTH_USERNAME, INFINISPAN_USER);
+                    builder.with("log.mining.buffer." + ConfigurationProperties.AUTH_PASSWORD, INFINISPAN_PASS);
+                }
             }
             builder.withDefault(OracleConnectorConfig.LOG_MINING_BUFFER_DROP_ON_STOP, true);
         }
@@ -180,6 +209,7 @@ public class TestHelper {
         jdbcConfiguration.forEach(
                 (field, value) -> builder.with(OracleConnectorConfig.DATABASE_CONFIG_PREFIX + field, value));
 
+        builder.with(OracleConnectorConfig.SERVER_NAME, SERVER_NAME);
         return builder;
     }
 
@@ -193,6 +223,7 @@ public class TestHelper {
         jdbcConfiguration.forEach(
                 (field, value) -> builder.with(OracleConnectorConfig.DATABASE_CONFIG_PREFIX + field, value));
 
+        builder.with(OracleConnectorConfig.SERVER_NAME, SERVER_NAME);
         return builder;
     }
 
@@ -319,6 +350,19 @@ public class TestHelper {
         }
     }
 
+    public static void dropSequence(OracleConnection connection, String sequence) {
+        try {
+            connection.execute("DROP SEQUENCE " + sequence);
+        }
+        catch (SQLException e) {
+            // ORA-02289 - sequence does not exist
+            // Since Oracle does not support "IF EXISTS", only throw exceptions that aren't ORA-02289
+            if (!e.getMessage().contains("ORA-02289") || 2289 != e.getErrorCode()) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
     /**
      * Enables a given table to be streamed by Oracle.
      *
@@ -414,5 +458,56 @@ public class TestHelper {
         catch (SQLException e) {
             throw new RuntimeException("Failed to clean database");
         }
+    }
+
+    public static List<BigInteger> getCurrentRedoLogSequences() throws SQLException {
+        try (OracleConnection connection = adminConnection()) {
+            return connection.queryAndMap("SELECT SEQUENCE# FROM V$LOG WHERE STATUS = 'CURRENT'", rs -> {
+                List<BigInteger> sequences = new ArrayList<>();
+                while (rs.next()) {
+                    sequences.add(new BigInteger(rs.getString(1)));
+                }
+                return sequences;
+            });
+        }
+    }
+
+    public static String getDefaultInfinispanEmbeddedCacheConfig(String cacheName) {
+        final String result = new org.infinispan.configuration.cache.ConfigurationBuilder()
+                .persistence()
+                .passivation(false)
+                .addSingleFileStore()
+                .segmented(false)
+                .preload(true)
+                .shared(false)
+                .fetchPersistentState(true)
+                .ignoreModifications(false)
+                .location("./target/data")
+                .build()
+                .toXMLString(cacheName);
+        return result;
+    }
+
+    public static String getDefaultInfinispanRemoteCacheConfig(String cacheName) {
+        return "<distributed-cache name=\"" + cacheName + "\" statistics=\"true\">\n" +
+                "\t<encoding media-type=\"application/x-protostream\"/>\n" +
+                "\t<persistence passivation=\"false\">\n" +
+                "\t\t<file-store fetch-state=\"true\" read-only=\"false\" preload=\"true\" shared=\"false\" segmented=\"false\"/>\n" +
+                "\t</persistence>\n" +
+                "</distributed-cache>";
+    }
+
+    public static Configuration.Builder withDefaultInfinispanCacheConfigurations(LogMiningBufferType bufferType, Configuration.Builder builder) {
+        for (Map.Entry<String, Field> cacheMapping : cacheMappings.entrySet()) {
+            final Field field = cacheMapping.getValue();
+            final String cacheName = cacheMapping.getKey();
+
+            final String config = bufferType.isInfinispanEmbedded()
+                    ? getDefaultInfinispanEmbeddedCacheConfig(cacheName)
+                    : getDefaultInfinispanRemoteCacheConfig(cacheName);
+
+            builder.with(field, config);
+        }
+        return builder;
     }
 }

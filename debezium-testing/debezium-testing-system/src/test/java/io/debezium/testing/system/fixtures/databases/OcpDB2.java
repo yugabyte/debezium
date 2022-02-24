@@ -5,6 +5,8 @@
  */
 package io.debezium.testing.system.fixtures.databases;
 
+import static io.debezium.testing.system.tools.ConfigProperties.OCP_PULL_SECRET_PATH;
+
 import io.debezium.testing.system.fixtures.OcpClient;
 import io.debezium.testing.system.fixtures.TestSetupFixture;
 import io.debezium.testing.system.tools.ConfigProperties;
@@ -19,11 +21,12 @@ public interface OcpDB2 extends TestSetupFixture, SqlDatabaseFixture, OcpClient 
 
     default void setupDatabase() throws Exception {
         Class.forName("com.ibm.db2.jcc.DB2Driver");
-        OcpDB2Deployer deployer = new OcpDB2Deployer.Deployer()
+        OcpDB2Deployer deployer = new OcpDB2Deployer.Builder()
                 .withOcpClient(getOcpClient())
                 .withProject(ConfigProperties.OCP_PROJECT_DB2)
                 .withDeployment(DB_DEPLOYMENT_PATH)
                 .withServices(DB_SERVICE_PATH, DB_SERVICE_PATH_LB)
+                .withPullSecrets(OCP_PULL_SECRET_PATH.get())
                 .build();
         SqlDatabaseController controller = deployer.deploy();
         controller.initialize();

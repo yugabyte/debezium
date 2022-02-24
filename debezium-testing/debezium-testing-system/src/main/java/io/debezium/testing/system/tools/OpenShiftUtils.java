@@ -25,6 +25,7 @@ import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.LocalObjectReference;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.ServiceAccount;
 import io.fabric8.kubernetes.api.model.ServiceAccountBuilder;
@@ -131,15 +132,23 @@ public class OpenShiftUtils {
      * @return {@link} Service account object to which this secret was linked
      */
     public ServiceAccount linkPullSecret(String project, String account, String secret) {
-        ServiceAccount serviceAccount = client.serviceAccounts().inNamespace(project).withName(account).get();
-        boolean linked = serviceAccount.getImagePullSecrets().stream().anyMatch(r -> r.getName().equals(secret));
-        if (!linked) {
-            return client.serviceAccounts().inNamespace(project).withName(account).edit(sa -> new ServiceAccountBuilder(sa)
-                    .addNewImagePullSecret().withName(secret).endImagePullSecret()
-                    .addNewSecret().withName(secret).endSecret()
-                    .build());
-        }
-        return serviceAccount;
+        return client.serviceAccounts().inNamespace(project).withName(account).edit(sa -> new ServiceAccountBuilder(sa)
+                .removeFromImagePullSecrets(new LocalObjectReference(secret))
+                .addNewImagePullSecret(secret)
+                .removeMatchingFromSecrets(r -> r.getName().equals(secret))
+                .addNewSecret().withName(secret).endSecret()
+                .build());
+    }
+
+    /**
+     * Links pull secret to service account
+     * @param project project where this operation happens
+     * @param account service account name
+     * @param secret secret object
+     * @return {@link} Service account object to which this secret was linked
+     */
+    public ServiceAccount linkPullSecret(String project, String account, Secret secret) {
+        return linkPullSecret(project, account, secret.getMetadata().getName());
     }
 
     /**
@@ -152,7 +161,16 @@ public class OpenShiftUtils {
     }
 
     /**
-     * Ensures container has a environment variable
+     * Ensures each container of given deployment has a environment variable
+     * @param deployment deployment
+     * @param envVar environment variable
+     */
+    public void ensureNoEnv(Deployment deployment, String envVar) {
+        deployment.getSpec().getTemplate().getSpec().getContainers().forEach(c -> this.ensureNoEnv(c, envVar));
+    }
+
+    /**
+     * Ensures container has environment variable
      * @param container container
      * @param envVar environment variable
      */
@@ -166,7 +184,22 @@ public class OpenShiftUtils {
         env.add(envVar);
     }
 
+    /**
+     * Ensures container does not have environment variable
+     * @param container container
+     * @param envVar environment variable
+     */
+    public void ensureNoEnv(Container container, String envVar) {
+        List<EnvVar> env = container.getEnv();
+        if (env == null) {
+            return;
+        }
+        env.removeIf(var -> Objects.equals(var.getName(), envVar));
+    }
+
     public void ensureHasPullSecret(Deployment deployment, String secret) {
+        LOGGER.info("Using " + secret + " as image pull secret for deployment '" + deployment.getMetadata().getName() + "'");
+
         List<LocalObjectReference> secrets = deployment.getSpec().getTemplate().getSpec().getImagePullSecrets();
         if (secrets == null) {
             secrets = new ArrayList<>();

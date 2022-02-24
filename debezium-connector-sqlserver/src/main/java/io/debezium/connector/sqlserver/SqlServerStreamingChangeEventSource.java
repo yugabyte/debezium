@@ -10,11 +10,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -28,12 +28,12 @@ import io.debezium.connector.sqlserver.SqlServerConnectorConfig.SnapshotMode;
 import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.source.spi.StreamingChangeEventSource;
+import io.debezium.relational.ChangeTable;
 import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 import io.debezium.schema.SchemaChangeEvent.SchemaChangeEventType;
 import io.debezium.util.Clock;
 import io.debezium.util.ElapsedTimeStrategy;
-import io.debezium.util.Metronome;
 
 /**
  * <p>A {@link StreamingChangeEventSource} based on SQL Server change data capture functionality.
@@ -85,6 +85,7 @@ public class SqlServerStreamingChangeEventSource implements StreamingChangeEvent
     private final SqlServerConnectorConfig connectorConfig;
 
     private final ElapsedTimeStrategy pauseBetweenCommits;
+    private final Map<SqlServerPartition, SqlServerStreamingExecutionContext> streamingExecutionContexts;
 
     public SqlServerStreamingChangeEventSource(SqlServerConnectorConfig connectorConfig, SqlServerConnection dataConnection,
                                                SqlServerConnection metadataConnection, EventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
@@ -103,61 +104,76 @@ public class SqlServerStreamingChangeEventSource implements StreamingChangeEvent
                         ? DEFAULT_INTERVAL_BETWEEN_COMMITS.toMillis()
                         : intervalBetweenCommitsBasedOnPoll.toMillis());
         this.pauseBetweenCommits.hasElapsed();
+        this.streamingExecutionContexts = new HashMap<>();
     }
 
     @Override
     public void execute(ChangeEventSourceContext context, SqlServerPartition partition, SqlServerOffsetContext offsetContext) throws InterruptedException {
+        throw new UnsupportedOperationException("Currently unsupported by the SQL Server connector");
+    }
+
+    @Override
+    public boolean executeIteration(ChangeEventSourceContext context, SqlServerPartition partition, SqlServerOffsetContext offsetContext)
+            throws InterruptedException {
         if (connectorConfig.getSnapshotMode().equals(SnapshotMode.INITIAL_ONLY)) {
             LOGGER.info("Streaming is not enabled in current configuration");
-            return;
+            return false;
         }
 
         final String databaseName = partition.getDatabaseName();
-        final Metronome metronome = Metronome.sleeper(pollInterval, clock);
-        final Queue<SqlServerChangeTable> schemaChangeCheckpoints = new PriorityQueue<>((x, y) -> x.getStopLsn().compareTo(y.getStopLsn()));
-        try {
-            final AtomicReference<SqlServerChangeTable[]> tablesSlot = new AtomicReference<>(getCdcTablesToQuery(partition, offsetContext));
 
+        try {
+            final SqlServerStreamingExecutionContext streamingExecutionContext = streamingExecutionContexts.getOrDefault(partition,
+                    new SqlServerStreamingExecutionContext(
+                            new PriorityQueue<>((x, y) -> x.getStopLsn().compareTo(y.getStopLsn())),
+                            new AtomicReference<>(),
+                            offsetContext.getChangePosition(),
+                            new AtomicBoolean(false),
+                            // LSN should be increased for the first run only immediately after snapshot completion
+                            // otherwise we might skip an incomplete transaction after restart
+                            offsetContext.isSnapshotCompleted()));
+
+            if (!streamingExecutionContexts.containsKey(partition)) {
+                streamingExecutionContexts.put(partition, streamingExecutionContext);
+                LOGGER.info("Last position recorded in offsets is {}[{}]", offsetContext.getChangePosition(), offsetContext.getEventSerialNo());
+            }
+
+            final Queue<SqlServerChangeTable> schemaChangeCheckpoints = streamingExecutionContext.getSchemaChangeCheckpoints();
+            final AtomicReference<SqlServerChangeTable[]> tablesSlot = streamingExecutionContext.getTablesSlot();
             final TxLogPosition lastProcessedPositionOnStart = offsetContext.getChangePosition();
             final long lastProcessedEventSerialNoOnStart = offsetContext.getEventSerialNo();
-            LOGGER.info("Last position recorded in offsets is {}[{}]", lastProcessedPositionOnStart, lastProcessedEventSerialNoOnStart);
-            final AtomicBoolean changesStoppedBeingMonotonic = new AtomicBoolean(false);
+            final AtomicBoolean changesStoppedBeingMonotonic = streamingExecutionContext.getChangesStoppedBeingMonotonic();
             final int maxTransactionsPerIteration = connectorConfig.getMaxTransactionsPerIteration();
 
-            TxLogPosition lastProcessedPosition = lastProcessedPositionOnStart;
+            TxLogPosition lastProcessedPosition = streamingExecutionContext.getLastProcessedPosition();
 
-            // LSN should be increased for the first run only immediately after snapshot completion
-            // otherwise we might skip an incomplete transaction after restart
-            boolean shouldIncreaseFromLsn = offsetContext.isSnapshotCompleted();
-            while (context.isRunning()) {
+            if (context.isRunning()) {
                 commitTransaction();
                 final Lsn toLsn = getToLsn(dataConnection, databaseName, lastProcessedPosition, maxTransactionsPerIteration);
 
                 // Shouldn't happen if the agent is running, but it is better to guard against such situation
                 if (!toLsn.isAvailable()) {
                     LOGGER.warn("No maximum LSN recorded in the database; please ensure that the SQL Server Agent is running");
-                    metronome.pause();
-                    continue;
+                    return false;
                 }
                 // There is no change in the database
-                if (toLsn.compareTo(lastProcessedPosition.getCommitLsn()) <= 0 && shouldIncreaseFromLsn) {
+                if (toLsn.compareTo(lastProcessedPosition.getCommitLsn()) <= 0 && streamingExecutionContext.getShouldIncreaseFromLsn()) {
                     LOGGER.debug("No change in the database");
-                    metronome.pause();
-                    continue;
+                    return false;
                 }
 
                 // Reading interval is inclusive so we need to move LSN forward but not for first
                 // run as TX might not be streamed completely
-                final Lsn fromLsn = lastProcessedPosition.getCommitLsn().isAvailable() && shouldIncreaseFromLsn
+                final Lsn fromLsn = lastProcessedPosition.getCommitLsn().isAvailable() && streamingExecutionContext.getShouldIncreaseFromLsn()
                         ? dataConnection.incrementLsn(databaseName, lastProcessedPosition.getCommitLsn())
                         : lastProcessedPosition.getCommitLsn();
-                shouldIncreaseFromLsn = true;
+                streamingExecutionContext.setShouldIncreaseFromLsn(true);
 
                 while (!schemaChangeCheckpoints.isEmpty()) {
                     migrateTable(partition, schemaChangeCheckpoints, offsetContext);
                 }
-                if (!dataConnection.listOfNewChangeTables(databaseName, fromLsn, toLsn).isEmpty()) {
-                    final SqlServerChangeTable[] tables = getCdcTablesToQuery(partition, offsetContext);
+                if (!dataConnection.getNewChangeTables(databaseName, fromLsn, toLsn).isEmpty()) {
+                    final SqlServerChangeTable[] tables = getChangeTablesToQuery(partition, offsetContext, toLsn);
                     tablesSlot.set(tables);
                     for (SqlServerChangeTable table : tables) {
                         if (table.getStartLsn().isBetween(fromLsn, toLsn)) {
@@ -165,6 +181,9 @@ public class SqlServerStreamingChangeEventSource implements StreamingChangeEvent
                             schemaChangeCheckpoints.add(table);
                         }
                     }
+                }
+                if (tablesSlot.get() == null) {
+                    tablesSlot.set(getChangeTablesToQuery(partition, offsetContext, toLsn));
                 }
                 try {
                     dataConnection.getChangesForTables(databaseName, tablesSlot.get(), fromLsn, toLsn, resultSets -> {
@@ -279,7 +298,7 @@ public class SqlServerStreamingChangeEventSource implements StreamingChangeEvent
                             tableWithSmallestLsn.next();
                         }
                     });
-                    lastProcessedPosition = TxLogPosition.valueOf(toLsn);
+                    streamingExecutionContext.setLastProcessedPosition(TxLogPosition.valueOf(toLsn));
                     // Terminate the transaction otherwise CDC could not be disabled for tables
                     dataConnection.rollback();
                 }
@@ -291,6 +310,8 @@ public class SqlServerStreamingChangeEventSource implements StreamingChangeEvent
         catch (Exception e) {
             errorHandler.setProducerThrowable(e);
         }
+
+        return true;
     }
 
     private void commitTransaction() throws SQLException {
@@ -308,7 +329,12 @@ public class SqlServerStreamingChangeEventSource implements StreamingChangeEvent
             throws InterruptedException, SQLException {
         final SqlServerChangeTable newTable = schemaChangeCheckpoints.poll();
         LOGGER.info("Migrating schema to {}", newTable);
+        Table oldTableSchema = schema.tableFor(newTable.getSourceTableId());
         Table tableSchema = metadataConnection.getTableSchemaFromTable(partition.getDatabaseName(), newTable);
+        if (oldTableSchema.equals(tableSchema)) {
+            LOGGER.info("Migration skipped, no table schema changes detected.");
+            return;
+        }
         dispatcher.dispatchSchemaChangeEvent(newTable.getSourceTableId(),
                 new SqlServerSchemaChangeEventEmitter(partition, offsetContext, newTable, tableSchema,
                         SchemaChangeEventType.ALTER));
@@ -322,21 +348,23 @@ public class SqlServerStreamingChangeEventSource implements StreamingChangeEvent
         if (m.matches() && m.group(1).equals(databaseName)) {
             final String captureName = m.group(2);
             LOGGER.info("Table is no longer captured with capture instance {}", captureName);
-            return Arrays.asList(currentChangeTables).stream()
+            return Arrays.stream(currentChangeTables)
                     .filter(x -> !x.getCaptureInstance().equals(captureName))
-                    .collect(Collectors.toList()).toArray(new SqlServerChangeTable[0]);
+                    .toArray(SqlServerChangeTable[]::new);
         }
         throw exception;
     }
 
-    private SqlServerChangeTable[] getCdcTablesToQuery(SqlServerPartition partition, SqlServerOffsetContext offsetContext) throws SQLException, InterruptedException {
+    private SqlServerChangeTable[] getChangeTablesToQuery(SqlServerPartition partition, SqlServerOffsetContext offsetContext,
+                                                          Lsn toLsn)
+            throws SQLException, InterruptedException {
         final String databaseName = partition.getDatabaseName();
-        final Set<SqlServerChangeTable> cdcEnabledTables = dataConnection.listOfChangeTables(databaseName);
-        if (cdcEnabledTables.isEmpty()) {
+        final List<SqlServerChangeTable> changeTables = dataConnection.getChangeTables(databaseName, toLsn);
+        if (changeTables.isEmpty()) {
             LOGGER.warn("No table has enabled CDC or security constraints prevents getting the list of change tables");
         }
 
-        final Map<TableId, List<SqlServerChangeTable>> includeListCdcEnabledTables = cdcEnabledTables.stream()
+        final Map<TableId, List<SqlServerChangeTable>> includeListChangeTables = changeTables.stream()
                 .filter(changeTable -> {
                     if (connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(changeTable.getSourceTableId())) {
                         return true;
@@ -346,15 +374,15 @@ public class SqlServerStreamingChangeEventSource implements StreamingChangeEvent
                         return false;
                     }
                 })
-                .collect(Collectors.groupingBy(x -> x.getSourceTableId()));
+                .collect(Collectors.groupingBy(ChangeTable::getSourceTableId));
 
-        if (includeListCdcEnabledTables.isEmpty()) {
+        if (includeListChangeTables.isEmpty()) {
             LOGGER.warn(
                     "No whitelisted table has enabled CDC, whitelisted table list does not contain any table with CDC enabled or no table match the white/blacklist filter(s)");
         }
 
         final List<SqlServerChangeTable> tables = new ArrayList<>();
-        for (List<SqlServerChangeTable> captures : includeListCdcEnabledTables.values()) {
+        for (List<SqlServerChangeTable> captures : includeListChangeTables.values()) {
             SqlServerChangeTable currentTable = captures.get(0);
             if (captures.size() > 1) {
                 SqlServerChangeTable futureTable;

@@ -8,6 +8,7 @@ package io.debezium.pipeline.source;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.slf4j.Logger;
@@ -35,6 +36,11 @@ import io.debezium.util.Threads;
 public abstract class AbstractSnapshotChangeEventSource<P extends Partition, O extends OffsetContext> implements SnapshotChangeEventSource<P, O> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AbstractSnapshotChangeEventSource.class);
+
+    /**
+     * Interval for showing a log statement with the progress while scanning a single table.
+     */
+    public static final Duration LOG_INTERVAL = Duration.ofMillis(10_000);
 
     private final CommonConnectorConfig connectorConfig;
     private final SnapshotProgressListener snapshotProgressListener;
@@ -92,13 +98,14 @@ public abstract class AbstractSnapshotChangeEventSource<P extends Partition, O e
     }
 
     protected <T extends DataCollectionId> Stream<T> determineDataCollectionsToBeSnapshotted(final Collection<T> allDataCollections) {
-        final Set<String> snapshotAllowedDataCollections = connectorConfig.getDataCollectionsToBeSnapshotted();
+        final Set<Pattern> snapshotAllowedDataCollections = connectorConfig.getDataCollectionsToBeSnapshotted();
         if (snapshotAllowedDataCollections.size() == 0) {
             return allDataCollections.stream();
         }
         else {
             return allDataCollections.stream()
-                    .filter(dataCollectionId -> snapshotAllowedDataCollections.stream().anyMatch(s -> dataCollectionId.identifier().matches(s)));
+                    .filter(dataCollectionId -> snapshotAllowedDataCollections.stream()
+                            .anyMatch(s -> s.matcher(dataCollectionId.identifier()).matches()));
         }
     }
 

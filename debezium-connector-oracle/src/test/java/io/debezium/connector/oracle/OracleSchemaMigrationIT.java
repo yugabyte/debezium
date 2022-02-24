@@ -17,12 +17,14 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.awaitility.Awaitility;
-import org.awaitility.core.ConditionTimeoutException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import io.debezium.config.Configuration;
+import io.debezium.connector.oracle.OracleConnectorConfig.ConnectorAdapter;
+import io.debezium.connector.oracle.antlr.listener.AlterTableParserListener;
+import io.debezium.connector.oracle.antlr.listener.CreateTableParserListener;
 import io.debezium.connector.oracle.logminer.processor.AbstractLogMinerEventProcessor;
 import io.debezium.connector.oracle.util.TestHelper;
 import io.debezium.data.Envelope;
@@ -30,6 +32,7 @@ import io.debezium.data.VerifyRecord;
 import io.debezium.doc.FixFor;
 import io.debezium.embedded.AbstractConnectorTest;
 import io.debezium.junit.logging.LogInterceptor;
+import io.debezium.pipeline.ErrorHandler;
 import io.debezium.relational.TableId;
 import io.debezium.util.Testing;
 
@@ -1047,11 +1050,9 @@ public class OracleSchemaMigrationIT extends AbstractConnectorTest {
     @FixFor("DBZ-2916")
     public void shouldNotEmitDdlEventsForNonTableObjects() throws Exception {
         try {
-            final LogInterceptor logInterceptor = new LogInterceptor();
-
-            // AbstractLogMinerEventProcessor logs DDL events using TRACE logging level now
-            // This toggles TRACE logging for the Awaitility check below.
-            logInterceptor.setLoggerLevel(AbstractLogMinerEventProcessor.class, "TRACE");
+            final LogInterceptor logminerlogInterceptor = new LogInterceptor(AbstractLogMinerEventProcessor.class);
+            final LogInterceptor errorLogInterceptor = new LogInterceptor(ErrorHandler.class);
+            final LogInterceptor xstreamLogInterceptor = new LogInterceptor("io.debezium.connector.oracle.xstream.LcrEventHandler");
 
             // These roles are needed in order to perform certain DDL operations below.
             // Any roles granted here should be revoked in the finally block.
@@ -1074,33 +1075,125 @@ public class OracleSchemaMigrationIT extends AbstractConnectorTest {
             connection.execute("CREATE OR REPLACE PROCEDURE mytest() BEGIN select * from dual; END;");
             connection.execute("DROP PROCEDURE mytest");
             connection.execute("CREATE OR REPLACE PACKAGE pkgtest as function hire return number; END;");
-            connection.execute("CREATE OR REPLACE PACKAGE BODY pkgtest as function hire return number; begin return 0; end; END;");
+            connection.execute("CREATE OR REPLACE PACKAGE BODY pkgtest as function hire return number; begin return 0; end;");
             connection.execute("DROP PACKAGE pkgtest");
 
-            try {
-                Awaitility.await()
-                        .atMost(TestHelper.defaultMessageConsumerPollTimeout(), TimeUnit.SECONDS)
-                        .until(() -> {
-                            if (logInterceptor.countOccurrences("DDL: ") == expected) {
-                                return true;
-                            }
-                            return false;
-                        });
+            // Resolve what text to look for depending on connector implementation
+            final String logText = ConnectorAdapter.LOG_MINER.equals(TestHelper.adapter()) ? "DDL: " : "Processing DDL event ";
 
-                stopConnector();
-                waitForConnectorShutdown(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
-            }
-            catch (ConditionTimeoutException e) {
-                assertThat(logInterceptor.countOccurrences("Processing DDL event ")).as("Did not get all expected DDL events").isEqualTo(expected);
-            }
+            Awaitility.await()
+                    .atMost(TestHelper.defaultMessageConsumerPollTimeout(), TimeUnit.SECONDS)
+                    .until(() -> logminerlogInterceptor.countOccurrences(logText) == expected
+                            || xstreamLogInterceptor.countOccurrences(logText) == expected);
+
+            stopConnector();
+            waitForConnectorShutdown(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
 
             // Make sure there are no events to process and that no DDL exceptions were logged
-            assertThat(logInterceptor.containsMessage("Producer failure")).as("Connector failure").isFalse();
+            assertThat(errorLogInterceptor.containsMessage("Producer failure")).as("Connector failure").isFalse();
             assertNoRecordsToConsume();
         }
         finally {
             TestHelper.revokeRole("ALTER ANY PROCEDURE");
             TestHelper.revokeRole("CREATE PROCEDURE");
+        }
+    }
+
+    @Test
+    @FixFor("DBZ-4037")
+    public void shouldParseSchemaChangeWithoutErrorOnFilteredTableWithRawDataType() throws Exception {
+        LogInterceptor createTableinterceptor = new LogInterceptor(CreateTableParserListener.class);
+        LogInterceptor alterTableinterceptor = new LogInterceptor(AlterTableParserListener.class);
+        try {
+            TestHelper.dropTable(connection, "dbz4037a");
+            TestHelper.dropTable(connection, "dbz4037b");
+
+            connection.execute("CREATE TABLE dbz4037a (id number(9,0), data varchar2(50), primary key(id))");
+            TestHelper.streamTable(connection, "dbz4037a");
+
+            Configuration config = TestHelper.defaultConfig()
+                    .with(OracleConnectorConfig.TABLE_INCLUDE_LIST, "DEBEZIUM\\.DBZ4037A")
+                    .build();
+
+            start(OracleConnector.class, config);
+            assertConnectorIsRunning();
+
+            waitForStreamingRunning(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
+            assertNoRecordsToConsume();
+
+            // Verify Oracle DDL parser ignores CREATE TABLE with RAW data types
+            connection.execute("CREATE TABLE dbz4037b (id number(9,0), data raw(8), primary key(id))");
+            Awaitility.await()
+                    .atMost(TestHelper.defaultMessageConsumerPollTimeout(), TimeUnit.SECONDS)
+                    .until(() -> createTableinterceptor.containsMessage(getIgnoreCreateTable("ORCLPDB1.DEBEZIUM.DBZ4037B")));
+
+            // Verify Oracle DDL parser ignores ALTER TABLE with RAW data types
+            connection.execute("ALTER TABLE dbz4037b ADD data2 raw(10)");
+            Awaitility.await()
+                    .atMost(TestHelper.defaultMessageConsumerPollTimeout(), TimeUnit.SECONDS)
+                    .until(() -> alterTableinterceptor.containsMessage(getIgnoreAlterTable("ORCLPDB1.DEBEZIUM.DBZ4037B")));
+
+            // Capture a simple change on different table
+            connection.execute("INSERT INTO dbz4037a (id,data) values (1, 'Test')");
+            SourceRecords records = consumeRecordsByTopic(1);
+            assertThat(records.recordsForTopic(topicName("DEBEZIUM", "DBZ4037A"))).hasSize(1);
+            SourceRecord record = records.recordsForTopic(topicName("DEBEZIUM", "DBZ4037A")).get(0);
+            Struct after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("ID")).isEqualTo(1);
+            assertThat(after.get("DATA")).isEqualTo("Test");
+
+            // Check no records to consume
+            assertNoRecordsToConsume();
+        }
+        finally {
+            TestHelper.dropTable(connection, "dbz4037b");
+            TestHelper.dropTable(connection, "dbz4037a");
+        }
+    }
+
+    @Test
+    @FixFor("DBZ-4037")
+    public void shouldParseSchemaChangeOnTableWithRawDataType() throws Exception {
+        try {
+            TestHelper.dropTable(connection, "dbz4037");
+
+            Configuration config = TestHelper.defaultConfig()
+                    .with(OracleConnectorConfig.TABLE_INCLUDE_LIST, "DEBEZIUM\\.DBZ4037")
+                    .build();
+
+            start(OracleConnector.class, config);
+            assertConnectorIsRunning();
+
+            waitForStreamingRunning(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
+            assertNoRecordsToConsume();
+
+            // Verify that Oracle DDL parser allows RAW column types for CREATE TABLE (included)
+            connection.execute("CREATE TABLE dbz4037 (id number(9,0), data raw(8), name varchar(50), primary key(id))");
+            TestHelper.streamTable(connection, "dbz4037");
+
+            // Verify that Oracle DDL parser allows RAW column types for ALTER TABLE (included)
+            connection.execute("ALTER TABLE dbz4037 ADD data2 raw(10)");
+
+            connection.prepareUpdate("INSERT INTO dbz4037 (id,data,name,data2) values (1,?,'Acme 123',?)", preparer -> {
+                preparer.setBytes(1, "Test".getBytes());
+                preparer.setBytes(2, "T".getBytes());
+            });
+            connection.commit();
+
+            SourceRecords records = consumeRecordsByTopic(1);
+            assertThat(records.recordsForTopic(topicName("DEBEZIUM", "DBZ4037"))).hasSize(1);
+
+            SourceRecord record = records.recordsForTopic(topicName("DEBEZIUM", "DBZ4037")).get(0);
+            Struct after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("ID")).isEqualTo(1);
+            assertThat(after.get("DATA")).isNull();
+            assertThat(after.get("DATA2")).isNull();
+            assertThat(after.get("NAME")).isEqualTo("Acme 123");
+
+            assertNoRecordsToConsume();
+        }
+        finally {
+            TestHelper.dropTable(connection, "dbz4037");
         }
     }
 
@@ -1154,4 +1247,11 @@ public class OracleSchemaMigrationIT extends AbstractConnectorTest {
         return TestHelper.SERVER_NAME + "." + schema + "." + table;
     }
 
+    private static String getIgnoreCreateTable(String tableName) {
+        return "Ignoring CREATE TABLE statement for non-captured table " + tableName;
+    }
+
+    private static String getIgnoreAlterTable(String tableName) {
+        return "Ignoring ALTER TABLE statement for non-captured table " + tableName;
+    }
 }

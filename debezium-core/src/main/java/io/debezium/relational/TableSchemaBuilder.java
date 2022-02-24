@@ -7,6 +7,7 @@ package io.debezium.relational;
 
 import java.sql.Types;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -54,9 +55,11 @@ public class TableSchemaBuilder {
 
     private final SchemaNameAdjuster schemaNameAdjuster;
     private final ValueConverterProvider valueConverterProvider;
+    private final DefaultValueConverter defaultValueConverter;
     private final Schema sourceInfoSchema;
     private final FieldNamer<Column> fieldNamer;
     private final CustomConverterRegistry customConverterRegistry;
+    private final boolean multiPartitionMode;
 
     /**
      * Create a new instance of the builder.
@@ -65,13 +68,38 @@ public class TableSchemaBuilder {
      *            null
      * @param schemaNameAdjuster the adjuster for schema names; may not be null
      */
-    public TableSchemaBuilder(ValueConverterProvider valueConverterProvider, SchemaNameAdjuster schemaNameAdjuster, CustomConverterRegistry customConverterRegistry,
-                              Schema sourceInfoSchema, boolean sanitizeFieldNames) {
+    public TableSchemaBuilder(ValueConverterProvider valueConverterProvider,
+                              SchemaNameAdjuster schemaNameAdjuster,
+                              CustomConverterRegistry customConverterRegistry,
+                              Schema sourceInfoSchema,
+                              boolean sanitizeFieldNames, boolean multiPartitionMode) {
+        this(valueConverterProvider, null, schemaNameAdjuster,
+                customConverterRegistry, sourceInfoSchema, sanitizeFieldNames, multiPartitionMode);
+    }
+
+    /**
+     * Create a new instance of the builder.
+     *
+     * @param valueConverterProvider the provider for obtaining {@link ValueConverter}s and {@link SchemaBuilder}s; may not be
+     *            null
+     * @param defaultValueConverter is used to convert the default value literal to a Java type
+     *            recognized by value converters for a subset of types. may be null.
+     * @param schemaNameAdjuster the adjuster for schema names; may not be null
+     */
+    public TableSchemaBuilder(ValueConverterProvider valueConverterProvider,
+                              DefaultValueConverter defaultValueConverter,
+                              SchemaNameAdjuster schemaNameAdjuster,
+                              CustomConverterRegistry customConverterRegistry,
+                              Schema sourceInfoSchema,
+                              boolean sanitizeFieldNames, boolean multiPartitionMode) {
         this.schemaNameAdjuster = schemaNameAdjuster;
         this.valueConverterProvider = valueConverterProvider;
+        this.defaultValueConverter = Optional.ofNullable(defaultValueConverter)
+                .orElse(DefaultValueConverter.passthrough());
         this.sourceInfoSchema = sourceInfoSchema;
         this.fieldNamer = FieldNameSelector.defaultSelector(sanitizeFieldNames);
         this.customConverterRegistry = customConverterRegistry;
+        this.multiPartitionMode = multiPartitionMode;
     }
 
     /**
@@ -155,6 +183,9 @@ public class TableSchemaBuilder {
         }
         else if (Strings.isNullOrEmpty(tableId.schema())) {
             return tableId.catalog() + "." + tableId.table();
+        }
+        else if (multiPartitionMode) {
+            return tableId.catalog() + "." + tableId.schema() + "." + tableId.table();
         }
         // When both catalog and schema is present then only schema is used
         else {
@@ -356,7 +387,11 @@ public class TableSchemaBuilder {
      * @param mapper the mapping function for the column; may be null if the columns is not to be mapped to different values
      */
     protected void addField(SchemaBuilder builder, Table table, Column column, ColumnMapper mapper) {
-        final SchemaBuilder fieldBuilder = customConverterRegistry.registerConverterFor(table.id(), column)
+        final Object defaultValue = column.defaultValueExpression()
+                .flatMap(e -> defaultValueConverter.parseDefaultValue(column, e))
+                .orElse(null);
+
+        final SchemaBuilder fieldBuilder = customConverterRegistry.registerConverterFor(table.id(), column, defaultValue)
                 .orElse(valueConverterProvider.schemaBuilder(column));
 
         if (fieldBuilder != null) {
@@ -369,9 +404,13 @@ public class TableSchemaBuilder {
             }
 
             // if the default value is provided
-            if (column.hasDefaultValue()) {
+            if (column.hasDefaultValue() && defaultValue != null) {
+                // if the resolution of the default value resulted in null; there is no need to set it
+                // if the column isn't optional, the schema won't be set as such and therefore trying
+                // to set a null default value on a non-optional field schema will assert.
                 fieldBuilder
-                        .defaultValue(customConverterRegistry.getValueConverter(table.id(), column).orElse(ValueConverter.passthrough()).convert(column.defaultValue()));
+                        .defaultValue(customConverterRegistry.getValueConverter(table.id(), column)
+                                .orElse(ValueConverter.passthrough()).convert(defaultValue));
             }
 
             builder.field(fieldNamer.fieldNameFor(column), fieldBuilder.build());

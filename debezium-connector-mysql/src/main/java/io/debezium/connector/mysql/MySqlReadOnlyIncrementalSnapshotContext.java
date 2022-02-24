@@ -7,21 +7,31 @@ package io.debezium.connector.mysql;
 
 import static io.debezium.connector.mysql.GtidSet.GTID_DELIMITER;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.annotation.NotThreadSafe;
+import io.debezium.connector.mysql.signal.ExecuteSnapshotKafkaSignal;
 import io.debezium.pipeline.source.snapshot.incremental.AbstractIncrementalSnapshotContext;
+import io.debezium.pipeline.source.snapshot.incremental.IncrementalSnapshotContext;
 import io.debezium.pipeline.spi.OffsetContext;
 
 @NotThreadSafe
 public class MySqlReadOnlyIncrementalSnapshotContext<T> extends AbstractIncrementalSnapshotContext<T> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MySqlReadOnlyIncrementalSnapshotContext.class);
-    private GtidSet lowWatermark = null;
-    private GtidSet highWatermark = null;
+    private GtidSet previousLowWatermark;
+    private GtidSet previousHighWatermark;
+    private GtidSet lowWatermark;
+    private GtidSet highWatermark;
+    private Long signalOffset;
+    private final Queue<ExecuteSnapshotKafkaSignal> executeSnapshotSignals = new ConcurrentLinkedQueue<>();
+    public static final String SIGNAL_OFFSET = INCREMENTAL_SNAPSHOT_KEY + "_signal_offset";
 
     public MySqlReadOnlyIncrementalSnapshotContext() {
         this(true);
@@ -29,6 +39,13 @@ public class MySqlReadOnlyIncrementalSnapshotContext<T> extends AbstractIncremen
 
     public MySqlReadOnlyIncrementalSnapshotContext(boolean useCatalogBeforeSchema) {
         super(useCatalogBeforeSchema);
+    }
+
+    protected static <U> IncrementalSnapshotContext<U> init(MySqlReadOnlyIncrementalSnapshotContext<U> context, Map<String, ?> offsets) {
+        AbstractIncrementalSnapshotContext.init(context, offsets);
+        final Long signalOffset = (Long) offsets.get(SIGNAL_OFFSET);
+        context.setSignalOffset(signalOffset);
+        return context;
     }
 
     public static <U> MySqlReadOnlyIncrementalSnapshotContext<U> load(Map<String, ?> offsets) {
@@ -50,29 +67,26 @@ public class MySqlReadOnlyIncrementalSnapshotContext<T> extends AbstractIncremen
     }
 
     public boolean updateWindowState(OffsetContext offsetContext) {
-        String currentGtid = offsetContext.getSourceInfo().getString(SourceInfo.GTID_KEY);
+        String currentGtid = getCurrentGtid(offsetContext);
         if (!windowOpened && lowWatermark != null) {
             boolean pastLowWatermark = !lowWatermark.contains(currentGtid);
             if (pastLowWatermark) {
                 LOGGER.debug("Current gtid {}, low watermark {}", currentGtid, lowWatermark);
                 windowOpened = true;
-                lowWatermark = null;
             }
         }
         if (windowOpened && highWatermark != null) {
             boolean pastHighWatermark = !highWatermark.contains(currentGtid);
             if (pastHighWatermark) {
                 LOGGER.debug("Current gtid {}, high watermark {}", currentGtid, highWatermark);
-                windowOpened = false;
-                highWatermark = null;
+                closeWindow();
                 return true;
             }
         }
         return false;
     }
 
-    public boolean reachedHighWatermark(OffsetContext offsetContext) {
-        String currentGtid = offsetContext.getSourceInfo().getString(SourceInfo.GTID_KEY);
+    public boolean reachedHighWatermark(String currentGtid) {
         if (highWatermark == null) {
             return false;
         }
@@ -80,24 +94,67 @@ public class MySqlReadOnlyIncrementalSnapshotContext<T> extends AbstractIncremen
             return true;
         }
         String[] gtid = GTID_DELIMITER.split(currentGtid);
-        GtidSet.UUIDSet uuidSet = highWatermark.forServerWithId(gtid[0]);
+        GtidSet.UUIDSet uuidSet = getUuidSet(gtid[0]);
         if (uuidSet != null) {
             long maxTransactionId = uuidSet.getIntervals().stream()
                     .mapToLong(GtidSet.Interval::getEnd)
                     .max()
                     .getAsLong();
             if (maxTransactionId <= Long.parseLong(gtid[1])) {
-                LOGGER.debug("Heartbeat {} reached high watermark {}", currentGtid, highWatermark);
-                windowOpened = false;
-                highWatermark = null;
-                lowWatermark = null;
+                LOGGER.debug("Gtid {} reached high watermark {}", currentGtid, highWatermark);
                 return true;
             }
         }
         return false;
     }
 
+    public String getCurrentGtid(OffsetContext offsetContext) {
+        return offsetContext.getSourceInfo().getString(SourceInfo.GTID_KEY);
+    }
+
+    public void closeWindow() {
+        windowOpened = false;
+        previousHighWatermark = highWatermark;
+        highWatermark = null;
+        previousLowWatermark = lowWatermark;
+        lowWatermark = null;
+    }
+
+    private GtidSet.UUIDSet getUuidSet(String serverId) {
+        return highWatermark.getUUIDSets().isEmpty() ? lowWatermark.forServerWithId(serverId) : highWatermark.forServerWithId(serverId);
+    }
+
     public boolean serverUuidChanged() {
         return highWatermark.getUUIDSets().size() > 1;
+    }
+
+    public Long getSignalOffset() {
+        return signalOffset;
+    }
+
+    public void setSignalOffset(Long signalOffset) {
+        this.signalOffset = signalOffset;
+    }
+
+    public Map<String, Object> store(Map<String, Object> offset) {
+        Map<String, Object> snapshotOffset = super.store(offset);
+        snapshotOffset.put(SIGNAL_OFFSET, signalOffset);
+        return snapshotOffset;
+    }
+
+    public void enqueueDataCollectionsToSnapshot(List<String> dataCollectionIds, long signalOffset) {
+        executeSnapshotSignals.add(new ExecuteSnapshotKafkaSignal(dataCollectionIds, signalOffset));
+    }
+
+    public ExecuteSnapshotKafkaSignal getExecuteSnapshotSignals() {
+        return executeSnapshotSignals.poll();
+    }
+
+    public boolean hasExecuteSnapshotSignals() {
+        return !executeSnapshotSignals.isEmpty();
+    }
+
+    public boolean watermarksChanged() {
+        return !previousLowWatermark.equals(lowWatermark) || !previousHighWatermark.equals(highWatermark);
     }
 }

@@ -57,11 +57,12 @@ public class MySqlAntlrDdlParser extends AntlrDdlParser<MySqlLexer, MySqlParser>
     }
 
     public MySqlAntlrDdlParser(MySqlValueConverters converters, TableFilter tableFilter) {
-        this(true, false, converters, tableFilter);
+        this(true, false, false, converters, tableFilter);
     }
 
-    protected MySqlAntlrDdlParser(boolean throwErrorsFromTreeWalk, boolean includeViews, MySqlValueConverters converters, TableFilter tableFilter) {
-        super(throwErrorsFromTreeWalk, includeViews);
+    public MySqlAntlrDdlParser(boolean throwErrorsFromTreeWalk, boolean includeViews, boolean includeComments,
+                               MySqlValueConverters converters, TableFilter tableFilter) {
+        super(throwErrorsFromTreeWalk, includeViews, includeComments);
         systemVariables = new MySqlSystemVariables();
         this.converters = converters;
         this.tableFilter = tableFilter;
@@ -112,14 +113,14 @@ public class MySqlAntlrDdlParser extends AntlrDdlParser<MySqlLexer, MySqlParser>
                 new DataTypeEntry(Types.NCHAR, MySqlParser.NCHAR),
                 new DataTypeEntry(Types.NVARCHAR, MySqlParser.NCHAR, MySqlParser.VARYING),
                 new DataTypeEntry(Types.NVARCHAR, MySqlParser.NVARCHAR),
-                new DataTypeEntry(Types.BINARY, MySqlParser.CHAR, MySqlParser.BINARY),
-                new DataTypeEntry(Types.BINARY, MySqlParser.VARCHAR, MySqlParser.BINARY),
-                new DataTypeEntry(Types.BINARY, MySqlParser.TINYTEXT, MySqlParser.BINARY),
-                new DataTypeEntry(Types.BINARY, MySqlParser.TEXT, MySqlParser.BINARY),
-                new DataTypeEntry(Types.BINARY, MySqlParser.MEDIUMTEXT, MySqlParser.BINARY),
-                new DataTypeEntry(Types.BINARY, MySqlParser.LONGTEXT, MySqlParser.BINARY),
-                new DataTypeEntry(Types.BINARY, MySqlParser.NCHAR, MySqlParser.BINARY),
-                new DataTypeEntry(Types.BINARY, MySqlParser.NVARCHAR, MySqlParser.BINARY),
+                new DataTypeEntry(Types.CHAR, MySqlParser.CHAR, MySqlParser.BINARY),
+                new DataTypeEntry(Types.VARCHAR, MySqlParser.VARCHAR, MySqlParser.BINARY),
+                new DataTypeEntry(Types.VARCHAR, MySqlParser.TINYTEXT, MySqlParser.BINARY),
+                new DataTypeEntry(Types.VARCHAR, MySqlParser.TEXT, MySqlParser.BINARY),
+                new DataTypeEntry(Types.VARCHAR, MySqlParser.MEDIUMTEXT, MySqlParser.BINARY),
+                new DataTypeEntry(Types.VARCHAR, MySqlParser.LONGTEXT, MySqlParser.BINARY),
+                new DataTypeEntry(Types.NCHAR, MySqlParser.NCHAR, MySqlParser.BINARY),
+                new DataTypeEntry(Types.NVARCHAR, MySqlParser.NVARCHAR, MySqlParser.BINARY),
                 new DataTypeEntry(Types.CHAR, MySqlParser.CHARACTER),
                 new DataTypeEntry(Types.VARCHAR, MySqlParser.CHARACTER, MySqlParser.VARYING)));
         dataTypeResolverBuilder.registerDataTypes(MySqlParser.NationalStringDataTypeContext.class.getCanonicalName(), Arrays.asList(
@@ -307,12 +308,12 @@ public class MySqlAntlrDdlParser extends AntlrDdlParser<MySqlLexer, MySqlParser>
                     Column column = tableEditor.columnWithName(columnName);
                     if (column != null && column.isOptional()) {
                         final ColumnEditor ce = column.edit().optional(false);
-                        if (ce.hasDefaultValue() && ce.defaultValue() == null) {
-                            ce.unsetDefaultValue();
+                        if (ce.hasDefaultValue() && !ce.defaultValueExpression().isPresent()) {
+                            ce.unsetDefaultValueExpression();
                         }
                         tableEditor.addColumn(ce.create());
                     }
-                    return columnName;
+                    return column != null ? column.name() : columnName;
                 })
                 .collect(Collectors.toList());
 

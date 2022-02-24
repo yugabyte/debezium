@@ -115,11 +115,11 @@ public interface ColumnEditor {
     boolean isGenerated();
 
     /**
-     * Get the default value of the column.
+     * Get the database-specific complete expression defining the column's default value.
      *
-     * @return the default value
+     * @return the complete type expression
      */
-    Object defaultValue();
+    Optional<String> defaultValueExpression();
 
     /**
      * Determine whether this column's has a default value set
@@ -134,6 +134,12 @@ public interface ColumnEditor {
      * @return the list of enumeration values
      */
     List<String> enumValues();
+
+    /**
+     * Get the comment of the column.
+     * @return the column comment; may be null if not set
+     */
+    String comment();
 
     /**
      * Set the name of the column.
@@ -243,12 +249,12 @@ public interface ColumnEditor {
     ColumnEditor position(int position);
 
     /**
-     * Set the default value of the column;
+     * Set the default value expression of the column;
      *
-     * @param defaultValue the default value
+     * @param defaultValueExpression the default value expression
      * @return this editor so callers can chain methods together
      */
-    ColumnEditor defaultValue(Object defaultValue);
+    ColumnEditor defaultValueExpression(String defaultValueExpression);
 
     /**
      * Set the list of enumeration values.
@@ -259,12 +265,19 @@ public interface ColumnEditor {
     ColumnEditor enumValues(List<String> enumValues);
 
     /**
-     * Unsets the default value of the column, reverting the editor to the state where {@link #defaultValue(Object))}
+     * Set the comment of the column
+     * @param comment column comment
+     * @return this editor so callers can chain methods together
+     */
+    ColumnEditor comment(String comment);
+
+    /**
+     * Unsets the default value expression of the column, reverting the editor to the state where {@link #defaultValueExpression(String))}
      * has never been called
      *
      * @return this editor so callers can chain methods together
      */
-    ColumnEditor unsetDefaultValue();
+    ColumnEditor unsetDefaultValueExpression();
 
     /**
      * Obtain an immutable column definition representing the current state of this editor. Typically, an editor is created and

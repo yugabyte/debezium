@@ -23,6 +23,7 @@ import org.bson.types.ObjectId;
 import org.junit.Test;
 
 import io.debezium.config.Configuration;
+import io.debezium.connector.mongodb.FieldBlacklistIT.ExpectedUpdate;
 import io.debezium.junit.logging.LogInterceptor;
 
 /**
@@ -136,7 +137,13 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
         SourceRecord record = getUpdateRecord("*.c1.address.missing:new_missing", obj, updateObj);
 
         Struct value = (Struct) record.value();
-        assertThat(getDocumentFromPatch(value)).isEqualTo(updateObj);
+        if (TestHelper.isOplogCaptureMode()) {
+            assertThat(getDocumentFromUpdateRecord(value)).isEqualTo(updateObj);
+        }
+        else {
+            final Document fullObj = ((Document) updateObj.get("$set")).append(ID, objId);
+            assertThat(getDocumentFromUpdateRecord(value)).isEqualTo(fullObj);
+        }
     }
 
     @Test
@@ -329,7 +336,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("scores", Arrays.asList(1.2, 3.4, 5.6)));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +          "\"phone\": {\"$numberLong\": \"123\"},"
@@ -338,14 +345,24 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +          "\"new_active\": true"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"phone\": {\"$numberLong\": \"123\"}, "
+                +    "\"scores\": [1.2, 3.4, 5.6], "
+                +    "\"new_name\": \"Sally\", "
+                +    "\"new_active\": true"
+                + "}";
+        final String updated = "{"
+                +             "\"phone\": 123, "
+                +             "\"scores\": [1.2, 3.4, 5.6], "
+                +             "\"new_name\": \"Sally\", "
+                +             "\"new_active\": true"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name,*.c1.active:new_active", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -366,7 +383,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("scores", Arrays.asList(1.2, 3.4, 5.6)));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +          "\"active\": true,"
@@ -375,14 +392,24 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +          "\"scores\": [1.2,3.4,5.6]"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"phone\": {\"$numberLong\": \"123\"}, "
+                +    "\"scores\": [1.2, 3.4, 5.6], "
+                +    "\"name\": \"Sally\", "
+                +    "\"active\": true"
+                + "}";
+        final String updated = "{"
+                +             "\"active\": true, "
+                +             "\"name\": \"Sally\", "
+                +             "\"phone\": 123, "
+                +             "\"scores\": [1.2, 3.4, 5.6]"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.missing:new_missing", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -411,7 +438,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("scores", Arrays.asList(1.2, 3.4, 5.6)));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +          "\"address\": {"
@@ -425,14 +452,34 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +          "\"new_active\": true"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"phone\": {\"$numberLong\": \"123\"}, "
+                +    "\"address\": {"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"new_number\": {\"$numberLong\": \"34\"}"
+                +    "},"
+                +    "\"scores\": [1.2, 3.4, 5.6], "
+                +    "\"new_name\": \"Sally\", "
+                +    "\"new_active\": true"
+                + "}";
+        final String updated = "{"
+                +             "\"address\": {"
+                +                 "\"street\": \"Claude Debussylaan\", "
+                +                 "\"city\": \"Amsterdam\", "
+                +                 "\"new_number\": 34"
+                +             "}, "
+                +             "\"phone\": 123, "
+                +             "\"scores\": [1.2, 3.4, 5.6], "
+                +             "\"new_name\": \"Sally\", "
+                +             "\"new_active\": true"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name,*.c1.active:new_active,*.c1.address.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -498,7 +545,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("scores", Arrays.asList(1.2, 3.4, 5.6)));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +          "\"active\": true,"
@@ -519,14 +566,42 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +          "\"new_name\": \"Sally\""
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"phone\": {\"$numberLong\": \"123\"}, "
+                +    "\"addresses\": [{"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"new_number\": {\"$numberLong\": \"34\"}}, "
+                +    "{"
+                +          "\"street\": \"Fragkokklisias\", "
+                +          "\"city\": \"Athens\", "
+                +          "\"new_number\": {\"$numberLong\": \"7\"}"
+                +    "}],"
+                +    "\"active\": true, "
+                +    "\"scores\": [1.2, 3.4, 5.6], "
+                +    "\"new_name\": \"Sally\""
+                + "}";
+        final String updated = "{"
+                +             "\"active\": true, "
+                +             "\"addresses\": [{"
+                +                 "\"street\": \"Claude Debussylaan\", "
+                +                 "\"city\": \"Amsterdam\", "
+                +                 "\"new_number\": 34}, "
+                +             "{"
+                +                 "\"street\": \"Fragkokklisias\", "
+                +                 "\"city\": \"Athens\", "
+                +                 "\"new_number\": 7"
+                +             "}], "
+                +             "\"phone\": 123, "
+                +             "\"scores\": [1.2, 3.4, 5.6], "
+                +             "\"new_name\": \"Sally\""
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name,*.c1.addresses.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -566,7 +641,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
 
         // then
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +          "\"active\": true,"
@@ -591,14 +666,42 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +          "\"new_name\": \"Sally\""
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"phone\": {\"$numberLong\": \"123\"}, "
+                +    "\"addresses\": [[{"
+                +          "\"number\": {\"$numberLong\": \"34\"}, "
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\"}], "
+                +    "[{"
+                +          "\"number\": {\"$numberLong\": \"7\"}, "
+                +          "\"street\": \"Fragkokklisias\", "
+                +          "\"city\": \"Athens\""
+                +    "}]],"
+                +    "\"active\": true, "
+                +    "\"scores\": [1.2, 3.4, 5.6], "
+                +    "\"new_name\": \"Sally\""
+                + "}";
+        final String updated = "{"
+                +             "\"active\": true, "
+                +             "\"addresses\": [[{"
+                +                 "\"number\": 34, "
+                +                 "\"street\": \"Claude Debussylaan\", "
+                +                 "\"city\": \"Amsterdam\"}], "
+                +             "[{"
+                +                 "\"number\": 7, "
+                +                 "\"street\": \"Fragkokklisias\", "
+                +                 "\"city\": \"Athens\""
+                +             "}]], "
+                +             "\"phone\": 123, "
+                +             "\"scores\": [1.2, 3.4, 5.6], "
+                +             "\"new_name\": \"Sally\""
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name,*.c1.addresses.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -615,21 +718,27 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("phone", 123L));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +         "\"phone\": {\"$numberLong\": \"123\"},"
                 +         "\"new_name\": \"Sally\""
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"phone\": {\"$numberLong\": \"123\"}, "
+                +    "\"new_name\": \"Sally\""
+                + "}";
+        final String updated = "{"
+                +             "\"phone\": 123, "
+                +             "\"new_name\": \"Sally\""
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -661,21 +770,23 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("phone", ""));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$unset\": {"
                 +         "\"phone\": true,"
                 +         "\"new_name\": true"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}"
+                + "}";
+        final String updated = "{"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, Arrays.asList("new_name", "phone")));
     }
 
     @Test
@@ -715,7 +826,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                                 .append("city", "Amsterdam")));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +         "\"address\": {"
@@ -727,14 +838,30 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"new_name\": \"Sally\""
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"phone\": {\"$numberLong\": \"123\"}, "
+                +    "\"address\": {"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"new_number\": {\"$numberLong\": \"34\"}"
+                +    "},"
+                +    "\"new_name\": \"Sally\""
+                + "}";
+        final String updated = "{"
+                +              "\"address\": {"
+                +                  "\"street\": \"Claude Debussylaan\", "
+                +                  "\"city\": \"Amsterdam\", "
+                +                  "\"new_number\": 34"
+                +              "}, "
+                +              "\"phone\": 123, "
+                +              "\"new_name\": \"Sally\""
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name,*.c1.address.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -768,7 +895,8 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                                         .append("street", "Fragkokklisias")
                                         .append("city", "Athens"))));
 
-        String expected = "{"
+        // @formatter:off
+        String patch = "{"
                 + "\"$v\": 1,"
                 + "\"$set\": {"
                 + "\"addresses\": ["
@@ -787,14 +915,38 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 + "\"new_name\": \"Sally\""
                 + "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"phone\": {\"$numberLong\": \"123\"}, "
+                +    "\"addresses\": [{"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"new_number\": {\"$numberLong\": \"34\"}}, "
+                +    "{"
+                +          "\"street\": \"Fragkokklisias\", "
+                +          "\"city\": \"Athens\", "
+                +          "\"new_number\": {\"$numberLong\": \"7\"}"
+                +    "}],"
+                +    "\"new_name\": \"Sally\""
+                + "}";
+        final String updated = "{"
+                +             "\"addresses\": [{"
+                +                 "\"street\": \"Claude Debussylaan\", "
+                +                 "\"city\": \"Amsterdam\", "
+                +                 "\"new_number\": 34}, "
+                +             "{"
+                +                 "\"street\": \"Fragkokklisias\", "
+                +                 "\"city\": \"Athens\", "
+                +                 "\"new_number\": 7"
+                +             "}], "
+                +             "\"phone\": 123, "
+                +             "\"new_name\": \"Sally\""
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name,*.c1.addresses.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -829,7 +981,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                                         .append("city", "Athens")))));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +         "\"addresses\": ["
@@ -852,14 +1004,38 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"new_name\": \"Sally\""
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"phone\": {\"$numberLong\": \"123\"}, "
+                +    "\"addresses\": [[{"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"number\": {\"$numberLong\": \"34\"}}], "
+                +    "[{"
+                +          "\"street\": \"Fragkokklisias\", "
+                +          "\"city\": \"Athens\", "
+                +          "\"number\": {\"$numberLong\": \"7\"}"
+                +    "}]],"
+                +    "\"new_name\": \"Sally\""
+                + "}";
+        final String updated = "{"
+                +             "\"addresses\": [[{"
+                +                 "\"number\": 34, "
+                +                 "\"street\": \"Claude Debussylaan\", "
+                +                 "\"city\": \"Amsterdam\"}], "
+                +             "[{"
+                +                 "\"number\": 7, "
+                +                 "\"street\": \"Fragkokklisias\", "
+                +                 "\"city\": \"Athens\""
+                +             "}]], "
+                +             "\"phone\": 123, "
+                +             "\"new_name\": \"Sally\""
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name,*.c1.addresses.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -881,7 +1057,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("address.city", "Amsterdam"));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +         "\"address.city\": \"Amsterdam\","
@@ -890,14 +1066,26 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"address.new_number\": {\"$numberLong\": \"34\"}"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"address\": {"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"new_number\": {\"$numberLong\": \"34\"}"
+                +    "},"
+                +    "\"new_name\": \"Sally\""
+                + "}";
+        final String updated = "{"
+                +              "\"address.city\": \"Amsterdam\", "
+                +              "\"address.street\": \"Claude Debussylaan\", "
+                +              "\"new_name\": \"Sally\", "
+                +              "\"address.new_number\": 34"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name,*.c1.address.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -919,7 +1107,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("addresses.0.city", "Amsterdam"));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +         "\"addresses.0.city\": \"Amsterdam\","
@@ -928,14 +1116,26 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"addresses.0.new_number\": {\"$numberLong\": \"34\"}"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"name\": \"Sally\", "
+                +    "\"addresses\": [{"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"new_number\": {\"$numberLong\": \"34\"}"
+                +    "}]"
+                + "}";
+        final String updated = "{"
+                +              "\"addresses.0.city\": \"Amsterdam\", "
+                +              "\"addresses.0.street\": \"Claude Debussylaan\", "
+                +              "\"name\": \"Sally\", "
+                +              "\"addresses.0.new_number\": 34"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.addresses.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -955,7 +1155,8 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 .append("addresses.0.street", "Claude Debussylaan")
                 .append("addresses.0.city", "Amsterdam");
 
-        assertShouldNotRenameDuringUpdate("*.c1.addresses.street:city", obj, updateObj, false, "addresses.0.city");
+        assertShouldNotRenameDuringUpdate("*.c1.addresses.street:city", obj, updateObj, false,
+                TestHelper.isOplogCaptureMode() ? "addresses.0.city" : "city");
     }
 
     @Test
@@ -977,7 +1178,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("addresses.0.0.city", "Amsterdam"));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +         "\"addresses.0.0.city\": \"Amsterdam\","
@@ -986,14 +1187,26 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"name\": \"Sally\""
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"name\": \"Sally\", "
+                +    "\"addresses\": [[{"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"number\": {\"$numberLong\": \"34\"}"
+                +    "}]]"
+                + "}";
+        final String updated = "{"
+                +              "\"addresses.0.0.city\": \"Amsterdam\", "
+                +              "\"addresses.0.0.number\": 34, "
+                +              "\"addresses.0.0.street\": \"Claude Debussylaan\", "
+                +              "\"name\": \"Sally\""
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.addresses.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -1002,10 +1215,10 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
         Document obj = new Document()
                 .append("_id", objId)
                 .append("name", "Sally May")
-                .append("addresses", Arrays.asList(Collections.singletonMap("second", new Document()
+                .append("addresses", Arrays.asList(Collections.singletonMap("second", Arrays.asList(new Document()
                         .append("number", 45L)
                         .append("street", "Claude Debussylaann")
-                        .append("city", "Amsterdame"))));
+                        .append("city", "Amsterdame")))));
 
         Document updateObj = new Document()
                 .append("$set", new Document()
@@ -1015,7 +1228,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("addresses.0.second.0.city", "Amsterdam"));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +         "\"addresses.0.second.0.city\": \"Amsterdam\","
@@ -1024,14 +1237,26 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"addresses.0.second.0.new_number\": {\"$numberLong\": \"34\"}"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"name\": \"Sally\", "
+                +    "\"addresses\": [{\"second\": [{"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"new_number\": {\"$numberLong\": \"34\"}"
+                +    "}]}]"
+                + "}";
+        final String updated = "{"
+                +              "\"addresses.0.second.0.city\": \"Amsterdam\", "
+                +              "\"addresses.0.second.0.street\": \"Claude Debussylaan\", "
+                +              "\"name\": \"Sally\", "
+                +              "\"addresses.0.second.0.new_number\": 34"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.addresses.second.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -1053,7 +1278,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("addresses.0.city", "Amsterdam"));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +         "\"name\": \"Sally\","
@@ -1062,14 +1287,26 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"new_addresses.0.street\": \"Claude Debussylaan\""
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"name\": \"Sally\", "
+                +    "\"new_addresses\": [{"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"number\": {\"$numberLong\": \"34\"}"
+                +    "}]"
+                + "}";
+        final String updated = "{"
+                +              "\"name\": \"Sally\", "
+                +              "\"new_addresses.0.city\": \"Amsterdam\", "
+                +              "\"new_addresses.0.number\": 34, "
+                +              "\"new_addresses.0.street\": \"Claude Debussylaan\""
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.addresses:new_addresses", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -1092,7 +1329,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                                 .append("city", "Amsterdam")));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$set\": {"
                 +         "\"name\": \"Sally\","
@@ -1103,14 +1340,28 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "}"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"name\": \"Sally\", "
+                +    "\"new_addresses\": [{"
+                +          "\"street\": \"Claude Debussylaan\", "
+                +          "\"city\": \"Amsterdam\", "
+                +          "\"number\": {\"$numberLong\": \"34\"}"
+                +    "}]"
+                + "}";
+        final String updated = "{"
+                +              "\"name\": \"Sally\", "
+                +              "\"new_addresses.0\": {"
+                +                  "\"number\": 34, "
+                +                  "\"street\": \"Claude Debussylaan\", "
+                +                  "\"city\": \"Amsterdam\""
+                +              "}"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.addresses:new_addresses", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated, null));
     }
 
     @Test
@@ -1132,7 +1383,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("address.city", ""));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$unset\": {"
                 +         "\"address.city\": true,"
@@ -1141,14 +1392,19 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"address.new_number\": true"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"address\": {"
+                +    "}"
+                + "}";
+        final String updated = "{"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.name:new_name,*.c1.address.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated,
+                Arrays.asList("address.city", "address.new_number", "address.street", "new_name")));
     }
 
     @Test
@@ -1170,7 +1426,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("addresses.0.city", ""));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$unset\": {"
                 +         "\"addresses.0.city\": true,"
@@ -1179,14 +1435,19 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"addresses.0.new_number\": true"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"addresses\": [{"
+                +    "}]"
+                + "}";
+        final String updated = "{"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.addresses.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated,
+                Arrays.asList("addresses.0.city", "addresses.0.new_number", "addresses.0.street", "name")));
     }
 
     @Test
@@ -1206,7 +1467,11 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 .append("addresses.0.street", "")
                 .append("addresses.0.city", "");
 
-        assertShouldNotRenameDuringUpdate("*.c1.addresses.street:city", obj, updateObj, true, "addresses.0.city");
+        if (TestHelper.isOplogCaptureMode()) {
+            // Change Stream does not send unset fields in both full and change document
+            // so the error would not be thrown
+            assertShouldNotRenameDuringUpdate("*.c1.addresses.street:city", obj, updateObj, true, "addresses.0.city");
+        }
     }
 
     @Test
@@ -1228,7 +1493,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("addresses.0.0.city", ""));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$unset\": {"
                 +         "\"addresses.0.0.city\": true,"
@@ -1237,14 +1502,19 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"name\": true"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"addresses\": [[{}"
+                +    "]]"
+                + "}";
+        final String updated = "{"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.addresses.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated,
+                Arrays.asList("addresses.0.0.city", "addresses.0.0.number", "addresses.0.0.street", "name")));
     }
 
     @Test
@@ -1266,7 +1536,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("addresses.0.second.0.city", ""));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$unset\": {"
                 +         "\"addresses.0.second.0.city\": true,"
@@ -1275,14 +1545,19 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"addresses.0.second.0.new_number\": true"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"addresses\": [{\"second\": [{}"
+                +    "]}]"
+                + "}";
+        final String updated = "{"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.addresses.second.number:new_number", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated,
+                Arrays.asList("addresses.0.second.0.city", "addresses.0.second.0.new_number", "addresses.0.second.0.street", "name")));
     }
 
     @Test
@@ -1304,7 +1579,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                         .append("addresses.0.city", ""));
 
         // @formatter:off
-        String expected = "{"
+        String patch = "{"
                 +     "\"$v\": 1,"
                 +     "\"$unset\": {"
                 +         "\"name\": true,"
@@ -1313,14 +1588,19 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
                 +         "\"new_addresses.0.street\": true"
                 +     "}"
                 + "}";
+        String full = "{"
+                +    "\"_id\": {\"$oid\": \"<OID>\"}, "
+                +    "\"new_addresses\": [{"
+                +    "}]"
+                + "}";
+        final String updated = "{"
+                + "}";
         // @formatter:on
 
         SourceRecord record = getUpdateRecord("*.c1.addresses:new_addresses", obj, updateObj);
 
-        Struct value = (Struct) record.value();
-        final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
-        final Document expectedDoc = TestHelper.getDocumentWithoutLanguageVersion(expected);
-        assertThat(actualDoc).isEqualTo(expectedDoc);
+        assertUpdateRecord(objId, record, new ExpectedUpdate(patch, full, updated,
+                Arrays.asList("new_addresses.0.city", "new_addresses.0.number", "new_addresses.0.street", "name")));
     }
 
     @Test
@@ -1397,10 +1677,10 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
         return Document.parse("{\"" + ID + "\": {\"$oid\": \"" + id + "\"}}");
     }
 
-    private static Document getDocumentFromPatch(Struct value) {
+    private static Document getDocumentFromUpdateRecord(Struct value) {
         assertThat(value).isNotNull();
 
-        final String patch = value.getString(PATCH);
+        final String patch = value.getString(TestHelper.isOplogCaptureMode() ? PATCH : AFTER);
         assertThat(patch).isNotNull();
 
         // By parsing the patch string, we can remove the $v internal key added by the driver that specifies the
@@ -1440,7 +1720,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
 
         dropAndInsertDocuments(database, collection, document);
 
-        logInterceptor = new LogInterceptor();
+        logInterceptor = new LogInterceptor(FieldRenamesIT.class);
         start(MongoDbConnector.class, config);
 
         SourceRecords sourceRecords = consumeRecordsByTopic(1);
@@ -1461,7 +1741,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
 
         insertDocuments(database, collection, document);
 
-        logInterceptor = new LogInterceptor();
+        logInterceptor = new LogInterceptor(FieldRenamesIT.class);
         start(MongoDbConnector.class, config);
 
         SourceRecords sourceRecords = consumeRecordsByTopic(1);
@@ -1510,7 +1790,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
 
         dropAndInsertDocuments(DATABASE_NAME, COLLECTION_NAME, snapshot);
 
-        logInterceptor = new LogInterceptor();
+        logInterceptor = new LogInterceptor(FieldRenamesIT.class);
         start(MongoDbConnector.class, config);
         waitForStreamingRunning("mongodb", SERVER_NAME);
 
@@ -1524,7 +1804,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
 
         TestHelper.cleanDatabase(primary(), DATABASE_NAME);
 
-        logInterceptor = new LogInterceptor();
+        logInterceptor = new LogInterceptor(FieldRenamesIT.class);
         start(MongoDbConnector.class, config);
         waitForStreamingRunning("mongodb", SERVER_NAME);
 
@@ -1547,7 +1827,7 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
         config = getConfiguration(renamesList, DATABASE_NAME, COLLECTION_NAME);
         context = new MongoDbTaskContext(config);
 
-        logInterceptor = new LogInterceptor();
+        logInterceptor = new LogInterceptor(FieldRenamesIT.class);
         start(MongoDbConnector.class, config);
         waitForStreamingRunning("mongodb", SERVER_NAME);
 
@@ -1556,5 +1836,20 @@ public class FieldRenamesIT extends AbstractMongoConnectorIT {
 
         assertNoRecordsToConsume();
         assertDocumentContainsFieldError(fieldName);
+    }
+
+    private void assertUpdateRecord(ObjectId objectId, SourceRecord record, ExpectedUpdate expected) throws InterruptedException {
+        Struct value = (Struct) record.value();
+
+        if (TestHelper.isOplogCaptureMode()) {
+            final Document expectedDoc = TestHelper
+                    .getDocumentWithoutLanguageVersion(expected.patch);
+            final Document actualDoc = TestHelper.getDocumentWithoutLanguageVersion(value.getString(PATCH));
+            assertThat(actualDoc).isEqualTo(expectedDoc);
+        }
+        else {
+            TestHelper.assertChangeStreamUpdateAsDocs(objectId, value, expected.full, expected.removedFields,
+                    expected.updatedFields);
+        }
     }
 }

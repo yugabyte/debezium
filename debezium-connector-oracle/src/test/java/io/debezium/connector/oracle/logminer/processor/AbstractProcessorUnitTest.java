@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -29,6 +30,7 @@ import io.debezium.connector.base.ChangeEventQueue;
 import io.debezium.connector.oracle.OracleConnection;
 import io.debezium.connector.oracle.OracleConnectorConfig;
 import io.debezium.connector.oracle.OracleDatabaseSchema;
+import io.debezium.connector.oracle.OracleDefaultValueConverter;
 import io.debezium.connector.oracle.OracleOffsetContext;
 import io.debezium.connector.oracle.OraclePartition;
 import io.debezium.connector.oracle.OracleStreamingChangeEventSourceMetrics;
@@ -84,6 +86,18 @@ public abstract class AbstractProcessorUnitTest<T extends AbstractLogMinerEventP
         this.connection = createOracleConnection();
         this.schema = createOracleDatabaseSchema();
         this.metrics = createMetrics(schema);
+    }
+
+    @After
+    public void after() {
+        if (schema != null) {
+            try {
+                schema.close();
+            }
+            finally {
+                schema = null;
+            }
+        }
     }
 
     protected abstract Configuration.Builder getConfig();
@@ -255,10 +269,12 @@ public abstract class AbstractProcessorUnitTest<T extends AbstractLogMinerEventP
         final TopicSelector<TableId> topicSelector = OracleTopicSelector.defaultSelector(connectorConfig);
         final SchemaNameAdjuster schemaNameAdjuster = SchemaNameAdjuster.create();
         final OracleValueConverters converters = new OracleValueConverters(connectorConfig, connection);
+        final OracleDefaultValueConverter defaultValueConverter = new OracleDefaultValueConverter(converters, connection);
         final TableNameCaseSensitivity sensitivity = connectorConfig.getAdapter().getTableNameCaseSensitivity(connection);
 
         final OracleDatabaseSchema schema = new OracleDatabaseSchema(connectorConfig,
                 converters,
+                defaultValueConverter,
                 schemaNameAdjuster,
                 topicSelector,
                 sensitivity);
@@ -343,7 +359,6 @@ public abstract class AbstractProcessorUnitTest<T extends AbstractLogMinerEventP
         Mockito.when(row.getEventType()).thenReturn(EventType.INSERT);
         Mockito.when(row.getTransactionId()).thenReturn(transactionId);
         Mockito.when(row.getScn()).thenReturn(scn);
-        Mockito.when(row.getHash()).thenReturn(1L);
         Mockito.when(row.getChangeTime()).thenReturn(changeTime);
         Mockito.when(row.getRowId()).thenReturn("1234567890");
         Mockito.when(row.getOperation()).thenReturn("INSERT");

@@ -18,3 +18,14 @@ alter table dbz1211_child add constraint name unique (id) using index tablespace
 -- Alter table add primary key using index
 ALTER TABLE "IDENTITYDB"."CHANGE_NUMBERS" ADD CONSTRAINT "IDX_CHANGENUMBERS_PK" PRIMARY KEY ("CHANGE_NO", "EXPIRY_TIME") USING INDEX "IDENTITYDB"."IDX_CHANGENUMBERS_PK"  ENABLE NOVALIDATE;
 ALTER TABLE "MYSCHEMA"."MY_PLANT" DROP PRIMARY KEY DROP INDEX;
+-- Alter table truncate subpartition
+alter table tdo_001 truncate subpartition inbound_full_pwork update indexes;
+alter table tcd_abc_int truncate partition (p1);
+-- Alter table add/modify/drop columns
+ALTER TABLE SCOTT.T_DBZ_TEST1 ADD T_VARCHAR2 VARCHAR2(20);
+ALTER TABLE SCOTT.T_DBZ_TEST1 MODIFY T_VARCHAR2 VARCHAR2(20);
+ALTER TABLE SCOTT.T_DBZ_TEST1 DROP COLUMN T_VARCHAR2;
+ALTER TABLE debezium.test add location sdo_geometry;
+ALTER TABLE SYSTEM.LOGMNR_KOPM$ MODIFY PARTITION P137 REBUILD UNUSABLE LOCAL INDEXES;
+-- Virtual column support
+ALTER TABLE VIDEO ADD (sql_code_injection_check NUMBER GENERATED ALWAYS AS (sdd_avoid_sql_injection(SKRIPT)) VIRTUAL);

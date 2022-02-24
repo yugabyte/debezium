@@ -3,7 +3,7 @@
     <parent>
         <groupId>io.debezium</groupId>
         <artifactId>debezium-build-parent</artifactId>
-        <version>1.7.0-SNAPSHOT</version>
+        <version>1.9.0-SNAPSHOT</version>
 	<relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -13,28 +13,17 @@
 
     <properties>
         <!-- check new release version at https://github.com/confluentinc/schema-registry/releases -->
-        <version.confluent.platform>6.0.2</version.confluent.platform>
-        <version.apicurio>2.0.0.Final</version.apicurio>
-
-        <!-- Database drivers, should align with databases in debezium-build-parent -->
-        <version.postgresql.driver>42.2.14</version.postgresql.driver>
-        <version.mysql.driver>8.0.26</version.mysql.driver>
-        <version.mysql.binlog>0.25.1</version.mysql.binlog>
-        <version.mongo.driver>4.2.1</version.mongo.driver>
-        <version.sqlserver.driver>7.2.2.jre8</version.sqlserver.driver>
-        <version.oracle.driver>21.1.0.0</version.oracle.driver>
-        <version.db2.driver>11.5.0.0</version.db2.driver>
-        <version.cassandra.driver>3.11.0</version.cassandra.driver>
+        <version.confluent.platform>7.0.1</version.confluent.platform>
 
         <!-- Connectors -->
-        <version.com.google.protobuf>3.8.0</version.com.google.protobuf>
+        <version.com.google.protobuf>3.19.2</version.com.google.protobuf>
         <version.dropwizard>4.0.1</version.dropwizard>
         <version.guava>30.0-jre</version.guava>
         <version.jaxb>2.3.1</version.jaxb>
         <version.jetty>9.4.12.v20180830</version.jetty>
 
         <!-- Vitess dependencies -->
-        <version.vitess.grpc>9.0.0</version.vitess.grpc>
+        <version.vitess.grpc>12.0.0</version.vitess.grpc>
         <version.gson>2.7</version.gson>
         <version.grpc>1.33.0</version.grpc>
         <version.joda>2.10.1</version.joda>
@@ -60,11 +49,13 @@
         <version.jmh>1.21</version.jmh>
         <version.mockito>3.0.0</version.mockito>
         <version.awaitility>4.0.1</version.awaitility>
-        <version.testcontainers>1.15.1</version.testcontainers>
+        <version.testcontainers>1.16.1</version.testcontainers>
         <version.jsonpath>2.4.0</version.jsonpath>
         <version.jsonassert>1.5.0</version.jsonassert>
         <version.org.reflections>0.9.12</version.org.reflections>
         <version.cassandra.unit>3.5.0.1</version.cassandra.unit>
+        <version.rest-assured>4.3.3</version.rest-assured>
+        <version.logback>1.2.10</version.logback>
     </properties>
 
     <dependencyManagement>
@@ -158,9 +149,9 @@
                 <version>${version.confluent.platform}</version>
             </dependency>
             <dependency>
-            <groupId>io.apicurio</groupId>
-            <artifactId>apicurio-registry-utils-converter</artifactId>
-            <version>${version.apicurio}</version>
+                <groupId>io.apicurio</groupId>
+                <artifactId>apicurio-registry-utils-converter</artifactId>
+                <version>${version.apicurio}</version>
             </dependency>
 
             <dependency>
@@ -240,14 +231,9 @@
                 <version>${version.org.slf4j}</version>
             </dependency>
             <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-log4j12</artifactId>
-                <version>${version.org.slf4j}</version>
-            </dependency>
-            <dependency>
-                <groupId>log4j</groupId>
-                <artifactId>log4j</artifactId>
-                <version>${version.log4j}</version>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${version.logback}</version>
             </dependency>
 
             <!-- Scripting -->
@@ -439,6 +425,11 @@
                 <version>${version.infinispan}</version>
             </dependency>
             <dependency>
+                <groupId>org.infinispan</groupId>
+                <artifactId>infinispan-client-hotrod</artifactId>
+                <version>${version.infinispan}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.infinispan.protostream</groupId>
                 <artifactId>protostream-processor</artifactId>
                 <version>${version.infinispan.protostream}</version>
@@ -464,6 +455,11 @@
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
                 <version>${version.junit}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.rest-assured</groupId>
+                <artifactId>rest-assured</artifactId>
+                <version>${version.rest-assured}</version>
             </dependency>
             <dependency>
                 <groupId>org.easytesting</groupId>
@@ -516,6 +512,13 @@
               <groupId>com.squareup.okhttp3</groupId>
               <artifactId>logging-interceptor</artifactId>
               <version>${version.okhttp}</version>
+            </dependency>
+
+            <!-- Code generators -->
+            <dependency>
+              <groupId>io.smallrye</groupId>
+              <artifactId>smallrye-open-api-core</artifactId>
+              <version>2.1.2</version>
             </dependency>
 
             <!-- Debezium artifacts -->
@@ -602,6 +605,16 @@
             <dependency>
                 <groupId>io.debezium</groupId>
                 <artifactId>debezium-connector-cassandra</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.debezium</groupId>
+                <artifactId>debezium-testing-testcontainers</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.debezium</groupId>
+                <artifactId>debezium-schema-generator</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

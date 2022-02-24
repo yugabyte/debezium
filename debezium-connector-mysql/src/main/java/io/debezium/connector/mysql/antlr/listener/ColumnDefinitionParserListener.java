@@ -9,9 +9,12 @@ package io.debezium.connector.mysql.antlr.listener;
 import java.sql.Types;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.antlr.v4.runtime.tree.ParseTreeListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.debezium.antlr.AntlrDdlParser;
 import io.debezium.antlr.DataTypeResolver;
@@ -22,6 +25,7 @@ import io.debezium.relational.Column;
 import io.debezium.relational.ColumnEditor;
 import io.debezium.relational.TableEditor;
 import io.debezium.relational.ddl.DataType;
+import io.debezium.util.Strings;
 
 /**
  * Parser listener that is parsing column definition part of MySQL statements.
@@ -30,6 +34,9 @@ import io.debezium.relational.ddl.DataType;
  */
 public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(ColumnDefinitionParserListener.class);
+
+    private static final Pattern DOT = Pattern.compile("\\.");
     private final MySqlAntlrDdlParser parser;
     private final DataTypeResolver dataTypeResolver;
     private final TableEditor tableEditor;
@@ -40,27 +47,13 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
 
     private final List<ParseTreeListener> listeners;
 
-    /**
-     * Whether to convert the column's default value into the corresponding schema type or not. This is done for column
-     * definitions of ALTER TABLE statements but not for CREATE TABLE. In case of the latter, the default value
-     * conversion is handled by the CREATE TABLE statement listener itself, as a default character set given at the
-     * table level might have to be applied.
-     */
-    private final boolean convertDefault;
-
     public ColumnDefinitionParserListener(TableEditor tableEditor, ColumnEditor columnEditor, MySqlAntlrDdlParser parser,
-                                          List<ParseTreeListener> listeners, boolean convertDefault) {
+                                          List<ParseTreeListener> listeners) {
         this.tableEditor = tableEditor;
         this.columnEditor = columnEditor;
         this.parser = parser;
         this.dataTypeResolver = parser.dataTypeResolver();
         this.listeners = listeners;
-        this.convertDefault = convertDefault;
-    }
-
-    public ColumnDefinitionParserListener(TableEditor tableEditor, ColumnEditor columnEditor, MySqlAntlrDdlParser parser,
-                                          List<ParseTreeListener> listeners) {
-        this(tableEditor, columnEditor, parser, listeners, true);
     }
 
     public void setColumnEditor(ColumnEditor columnEditor) {
@@ -81,7 +74,7 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
         optionalColumn = new AtomicReference<>();
         resolveColumnDataType(ctx.dataType());
         parser.runIfNotNull(() -> {
-            defaultValueListener = new DefaultValueParserListener(columnEditor, parser.getConverters(), optionalColumn, convertDefault);
+            defaultValueListener = new DefaultValueParserListener(columnEditor, optionalColumn);
             listeners.add(defaultValueListener);
         }, tableEditor);
         super.enterColumnDefinition(ctx);
@@ -97,7 +90,7 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
             tableEditor.addColumn(columnEditor.create());
             tableEditor.setPrimaryKeyNames(columnEditor.name());
         }
-        defaultValueListener.convertDefaultValue(false);
+        defaultValueListener.exitDefaultValue(false);
         parser.runIfNotNull(() -> {
             listeners.remove(defaultValueListener);
         }, tableEditor);
@@ -118,6 +111,16 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
         tableEditor.addColumn(columnEditor.create());
         tableEditor.setPrimaryKeyNames(columnEditor.name());
         super.enterPrimaryKeyColumnConstraint(ctx);
+    }
+
+    @Override
+    public void enterCommentColumnConstraint(MySqlParser.CommentColumnConstraintContext ctx) {
+        if (!parser.skipComments()) {
+            if (ctx.STRING_LITERAL() != null) {
+                columnEditor.comment(parser.withoutQuotes(ctx.STRING_LITERAL().getText()));
+            }
+        }
+        super.enterCommentColumnConstraint(ctx);
     }
 
     @Override
@@ -148,7 +151,7 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
             MySqlParser.StringDataTypeContext stringDataTypeContext = (MySqlParser.StringDataTypeContext) dataTypeContext;
 
             if (stringDataTypeContext.lengthOneDimension() != null) {
-                Integer length = Integer.valueOf(stringDataTypeContext.lengthOneDimension().decimalLiteral().getText());
+                Integer length = parseLength(stringDataTypeContext.lengthOneDimension().decimalLiteral().getText());
                 columnEditor.length(length);
             }
 
@@ -164,7 +167,7 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
             MySqlParser.NationalStringDataTypeContext nationalStringDataTypeContext = (MySqlParser.NationalStringDataTypeContext) dataTypeContext;
 
             if (nationalStringDataTypeContext.lengthOneDimension() != null) {
-                Integer length = Integer.valueOf(nationalStringDataTypeContext.lengthOneDimension().decimalLiteral().getText());
+                Integer length = parseLength(nationalStringDataTypeContext.lengthOneDimension().decimalLiteral().getText());
                 columnEditor.length(length);
             }
         }
@@ -172,7 +175,7 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
             MySqlParser.NationalVaryingStringDataTypeContext nationalVaryingStringDataTypeContext = (MySqlParser.NationalVaryingStringDataTypeContext) dataTypeContext;
 
             if (nationalVaryingStringDataTypeContext.lengthOneDimension() != null) {
-                Integer length = Integer.valueOf(nationalVaryingStringDataTypeContext.lengthOneDimension().decimalLiteral().getText());
+                Integer length = parseLength(nationalVaryingStringDataTypeContext.lengthOneDimension().decimalLiteral().getText());
                 columnEditor.length(length);
             }
         }
@@ -182,18 +185,30 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
             Integer length = null;
             Integer scale = null;
             if (dimensionDataTypeContext.lengthOneDimension() != null) {
-                length = Integer.valueOf(dimensionDataTypeContext.lengthOneDimension().decimalLiteral().getText());
+                length = parseLength(dimensionDataTypeContext.lengthOneDimension().decimalLiteral().getText());
             }
 
             if (dimensionDataTypeContext.lengthTwoDimension() != null) {
                 List<MySqlParser.DecimalLiteralContext> decimalLiterals = dimensionDataTypeContext.lengthTwoDimension().decimalLiteral();
-                length = Integer.valueOf(decimalLiterals.get(0).getText());
+                length = parseLength(decimalLiterals.get(0).getText());
                 scale = Integer.valueOf(decimalLiterals.get(1).getText());
             }
 
             if (dimensionDataTypeContext.lengthTwoOptionalDimension() != null) {
                 List<MySqlParser.DecimalLiteralContext> decimalLiterals = dimensionDataTypeContext.lengthTwoOptionalDimension().decimalLiteral();
-                length = Integer.valueOf(decimalLiterals.get(0).getText());
+                if (decimalLiterals.get(0).REAL_LITERAL() != null) {
+                    String[] digits = DOT.split(decimalLiterals.get(0).getText());
+                    if (Strings.isNullOrEmpty(digits[0]) || Integer.valueOf(digits[0]) == 0) {
+                        // Set default value 10 according mysql engine
+                        length = 10;
+                    }
+                    else {
+                        length = parseLength(digits[0]);
+                    }
+                }
+                else {
+                    length = parseLength(decimalLiterals.get(0).getText());
+                }
 
                 if (decimalLiterals.size() > 1) {
                     scale = Integer.valueOf(decimalLiterals.get(1).getText());
@@ -260,6 +275,16 @@ public class ColumnDefinitionParserListener extends MySqlParserBaseListener {
         else {
             columnEditor.charsetName(charsetName);
         }
+    }
+
+    private Integer parseLength(String lengthStr) {
+        Long length = Long.parseLong(lengthStr);
+        if (length > Integer.MAX_VALUE) {
+            LOGGER.warn("The length '{}' of the column `{}`.`{}` is too large to be supported, truncating it to '{}'",
+                    length, tableEditor.tableId(), columnEditor.name(), Integer.MAX_VALUE);
+            length = (long) Integer.MAX_VALUE;
+        }
+        return length.intValue();
     }
 
     private void serialColumn() {

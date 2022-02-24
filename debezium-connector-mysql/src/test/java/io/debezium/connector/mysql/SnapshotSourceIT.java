@@ -128,7 +128,7 @@ public class SnapshotSourceIT extends AbstractConnectorTest {
     }
 
     private void snapshotOfSingleDatabase(boolean useGlobalLock, boolean storeOnlyCapturedTables, boolean data) throws Exception {
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(MySqlSnapshotChangeEventSource.class);
 
         final Builder builder = simpleConfig()
                 .with(MySqlConnectorConfig.TABLE_INCLUDE_LIST, DATABASE.qualifiedTableName("customers") + "," + DATABASE.qualifiedTableName("products"));
@@ -268,7 +268,7 @@ public class SnapshotSourceIT extends AbstractConnectorTest {
     public void shouldCreateSnapshotSelectively() throws Exception {
         config = simpleConfig()
                 .with(MySqlConnectorConfig.DATABASE_INCLUDE_LIST, "connector_(.*)_" + DATABASE.getIdentifier())
-                .with(CommonConnectorConfig.SNAPSHOT_MODE_TABLES, "connector_(.*).customers")
+                .with(CommonConnectorConfig.SNAPSHOT_MODE_TABLES, "connector_(.*).CUSTOMERS")
                 .build();
 
         // Start the connector ...

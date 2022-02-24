@@ -17,12 +17,16 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.debezium.config.Field.ValidationOutput;
 import io.debezium.connector.AbstractSourceInfo;
@@ -32,6 +36,7 @@ import io.debezium.data.Envelope.Operation;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.relational.CustomConverterRegistry;
 import io.debezium.relational.history.KafkaDatabaseHistory;
+import io.debezium.schema.DataCollectionId;
 import io.debezium.spi.converter.ConvertedField;
 import io.debezium.spi.converter.CustomConverter;
 import io.debezium.util.Strings;
@@ -42,6 +47,8 @@ import io.debezium.util.Strings;
  * @author Gunnar Morling
  */
 public abstract class CommonConnectorConfig {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CommonConnectorConfig.class);
 
     /**
      * The set of predefined versions e.g. for source struct maker version
@@ -340,6 +347,18 @@ public abstract class CommonConnectorConfig {
             .withDefault(1024)
             .withValidation(Field::isNonNegativeInteger);
 
+    public static final Field INCREMENTAL_SNAPSHOT_ALLOW_SCHEMA_CHANGES = Field.create("incremental.snapshot.allow.schema.changes")
+            .withDisplayName("Allow schema changes during incremental snapshot if supported.")
+            .withType(Type.BOOLEAN)
+            .withWidth(Width.SHORT)
+            .withImportance(Importance.LOW)
+            .withDescription("Detect schema change during an incremental snapshot and re-select a current chunk to avoid locking DDLs. " +
+                    "Note that changes to a primary key are not supported and can cause incorrect results if performed during an incremental snapshot. " +
+                    "Another limitation is that if a schema change affects only columns' default values, " +
+                    "then the change won't be detected until the DDL is processed from the binlog stream. " +
+                    "This doesn't affect the snapshot events' values, but the schema of snapshot events may have outdated defaults.")
+            .withDefault(Boolean.FALSE);
+
     public static final Field SNAPSHOT_MODE_TABLES = Field.create("snapshot.include.collection.list")
             .withDisplayName("Snapshot mode include data collection")
             .withType(Type.LIST)
@@ -404,8 +423,9 @@ public abstract class CommonConnectorConfig {
             .withWidth(Width.SHORT)
             .withImportance(Importance.LOW)
             .withValidation(CommonConnectorConfig::validateSkippedOperation)
-            .withDescription("The comma-separated list of operations to skip during streaming, defined as: 'c' for inserts/create; 'u' for updates; 'd' for deletes. "
-                    + "By default, no operations will be skipped.");
+            .withDescription(
+                    "The comma-separated list of operations to skip during streaming, defined as: 'c' for inserts/create; 'u' for updates; 'd' for deletes, 't' for truncates, and 'none' to indicate nothing skipped. "
+                            + "By default, no operations will be skipped.");
 
     public static final Field BINARY_HANDLING_MODE = Field.create("binary.handling.mode")
             .withDisplayName("Binary Handling")
@@ -446,6 +466,27 @@ public abstract class CommonConnectorConfig {
             .withImportance(Importance.MEDIUM)
             .withDescription("The name of the data collection that is used to send signals/commands to Debezium. Signaling is disabled when not set.");
 
+    public static final Field TRANSACTION_TOPIC = Field.create("transaction.topic")
+            .withDisplayName("Transaction topic name")
+            .withGroup(Field.createGroupEntry(Field.Group.ADVANCED, 21))
+            .withType(Type.STRING)
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.MEDIUM)
+            .withDefault("${database.server.name}.transaction")
+            .withDescription(
+                    "The name of the transaction metadata topic. The placeholder ${database.server.name} can be used for referring to the connector's logical name; defaults to ${database.server.name}.transaction.");
+
+    public static final Field CUSTOM_RETRIABLE_EXCEPTION = Field.createInternal("custom.retriable.exception")
+            .withDisplayName("Regular expression to match the exception message.")
+            .withType(Type.STRING)
+            .withGroup(Field.createGroupEntry(Field.Group.CONNECTOR_ADVANCED, 999))
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.LOW)
+            .withDescription("Provide a temporary workaround for an error that should be retriable."
+                    + " If set a stacktrace of non-retriable exception is traversed and messages are"
+                    + " matched against this regular expression. If matched the error is changed to retriable.")
+            .withDefault(false);
+
     protected static final ConfigDefinition CONFIG_DEFINITION = ConfigDefinition.editor()
             .connector(
                     EVENT_PROCESSING_FAILURE_HANDLING_MODE,
@@ -468,7 +509,8 @@ public abstract class CommonConnectorConfig {
                     SOURCE_STRUCT_MAKER_VERSION,
                     Heartbeat.HEARTBEAT_INTERVAL,
                     Heartbeat.HEARTBEAT_TOPICS_PREFIX,
-                    SIGNAL_DATA_COLLECTION)
+                    SIGNAL_DATA_COLLECTION,
+                    TRANSACTION_TOPIC)
             .create();
 
     private final Configuration config;
@@ -479,10 +521,12 @@ public abstract class CommonConnectorConfig {
     private final Duration pollInterval;
     private final String logicalName;
     private final String heartbeatTopicsPrefix;
-    private final Duration snapshotDelayMs;
+    private final Duration heartbeatInterval;
+    private final Duration snapshotDelay;
     private final Duration retriableRestartWait;
     private final int snapshotFetchSize;
     private final int incrementalSnapshotChunkSize;
+    private final boolean incrementalSnapshotAllowSchemaChanges;
     private final int snapshotMaxThreads;
     private final Integer queryFetchSize;
     private final SourceInfoStructMaker<? extends AbstractSourceInfo> sourceInfoStructMaker;
@@ -493,6 +537,7 @@ public abstract class CommonConnectorConfig {
     private final BinaryHandlingMode binaryHandlingMode;
     private final String signalingDataCollection;
     private final EnumSet<Operation> skippedOperations;
+    private final String transactionTopic;
 
     protected CommonConnectorConfig(Configuration config, String logicalName, int defaultSnapshotFetchSize) {
         this.config = config;
@@ -503,12 +548,14 @@ public abstract class CommonConnectorConfig {
         this.maxQueueSizeInBytes = config.getLong(MAX_QUEUE_SIZE_IN_BYTES);
         this.logicalName = logicalName;
         this.heartbeatTopicsPrefix = config.getString(Heartbeat.HEARTBEAT_TOPICS_PREFIX);
-        this.snapshotDelayMs = Duration.ofMillis(config.getLong(SNAPSHOT_DELAY_MS));
+        this.heartbeatInterval = config.getDuration(Heartbeat.HEARTBEAT_INTERVAL, ChronoUnit.MILLIS);
+        this.snapshotDelay = Duration.ofMillis(config.getLong(SNAPSHOT_DELAY_MS));
         this.retriableRestartWait = Duration.ofMillis(config.getLong(RETRIABLE_RESTART_WAIT));
         this.snapshotFetchSize = config.getInteger(SNAPSHOT_FETCH_SIZE, defaultSnapshotFetchSize);
         this.snapshotMaxThreads = config.getInteger(SNAPSHOT_MAX_THREADS);
         this.queryFetchSize = config.getInteger(QUERY_FETCH_SIZE);
         this.incrementalSnapshotChunkSize = config.getInteger(INCREMENTAL_SNAPSHOT_CHUNK_SIZE);
+        this.incrementalSnapshotAllowSchemaChanges = config.getBoolean(INCREMENTAL_SNAPSHOT_ALLOW_SCHEMA_CHANGES);
         this.sourceInfoStructMaker = getSourceInfoStructMaker(Version.parse(config.getString(SOURCE_STRUCT_MAKER_VERSION)));
         this.sanitizeFieldNames = config.getBoolean(SANITIZE_FIELD_NAMES) || isUsingAvroConverter(config);
         this.shouldProvideTransactionMetadata = config.getBoolean(PROVIDE_TRANSACTION_METADATA);
@@ -517,12 +564,16 @@ public abstract class CommonConnectorConfig {
         this.binaryHandlingMode = BinaryHandlingMode.parse(config.getString(BINARY_HANDLING_MODE));
         this.signalingDataCollection = config.getString(SIGNAL_DATA_COLLECTION);
         this.skippedOperations = determineSkippedOperations(config);
+        this.transactionTopic = config.getString(TRANSACTION_TOPIC).replace("${database.server.name}", logicalName);
     }
 
     private static EnumSet<Envelope.Operation> determineSkippedOperations(Configuration config) {
         String operations = config.getString(SKIPPED_OPERATIONS);
 
         if (operations != null) {
+            if (operations.trim().equalsIgnoreCase("none")) {
+                return EnumSet.noneOf(Envelope.Operation.class);
+            }
             return EnumSet.copyOf(Arrays.stream(operations.split(","))
                     .map(String::trim)
                     .map(Operation::forCode)
@@ -575,12 +626,16 @@ public abstract class CommonConnectorConfig {
         return heartbeatTopicsPrefix;
     }
 
+    public Duration getHeartbeatInterval() {
+        return heartbeatInterval;
+    }
+
     public Duration getRetriableRestartWait() {
         return retriableRestartWait;
     }
 
     public Duration getSnapshotDelay() {
-        return snapshotDelayMs;
+        return snapshotDelay;
     }
 
     public int getSnapshotFetchSize() {
@@ -612,10 +667,25 @@ public abstract class CommonConnectorConfig {
     }
 
     /**
+     * Returns the name to be used for the connector's TX metadata topic.
+     */
+    public String getTransactionTopic() {
+        return transactionTopic;
+    }
+
+    /**
      * Whether a particular connector supports an optimized way for implementing operation skipping, or not.
      */
     public boolean supportsOperationFiltering() {
         return false;
+    }
+
+    protected boolean supportsSchemaChangesDuringIncrementalSnapshot() {
+        return false;
+    }
+
+    public boolean isIncrementalSnapshotSchemaChangesEnabled() {
+        return supportsSchemaChangesDuringIncrementalSnapshot() && incrementalSnapshotAllowSchemaChanges;
     }
 
     @SuppressWarnings("unchecked")
@@ -645,9 +715,16 @@ public abstract class CommonConnectorConfig {
         return skippedOperations;
     }
 
-    public Set<String> getDataCollectionsToBeSnapshotted() {
+    @Deprecated
+    public Set<String> legacyGetDataCollectionsToBeSnapshotted() {
         return Optional.ofNullable(config.getString(SNAPSHOT_MODE_TABLES))
                 .map(tables -> Strings.setOf(tables, Function.identity()))
+                .orElseGet(Collections::emptySet);
+    }
+
+    public Set<Pattern> getDataCollectionsToBeSnapshotted() {
+        return Optional.ofNullable(config.getString(SNAPSHOT_MODE_TABLES))
+                .map(tables -> Strings.setOfRegex(tables, Pattern.CASE_INSENSITIVE))
                 .orElseGet(Collections::emptySet);
     }
 
@@ -656,6 +733,13 @@ public abstract class CommonConnectorConfig {
      * topic.
      */
     public boolean isSchemaChangesHistoryEnabled() {
+        return false;
+    }
+
+    /**
+     * @return true if the connector should emit messages which include table and column comments.
+     */
+    public boolean isSchemaCommentsHistoryEnabled() {
         return false;
     }
 
@@ -698,24 +782,36 @@ public abstract class CommonConnectorConfig {
         return count;
     }
 
-    private static int validateSkippedOperation(Configuration config, Field field, ValidationOutput problems) {
+    protected static int validateSkippedOperation(Configuration config, Field field, ValidationOutput problems) {
         String operations = config.getString(field);
 
-        if (operations == null) {
+        if (operations == null || "none".equals(operations)) {
             return 0;
         }
 
+        boolean noneSpecified = false;
+        boolean operationsSpecified = false;
         for (String operation : operations.split(",")) {
             switch (operation.trim()) {
+                case "none":
+                    noneSpecified = true;
+                    continue;
                 case "r":
                 case "c":
                 case "u":
                 case "d":
+                case "t":
+                    operationsSpecified = true;
                     continue;
                 default:
                     problems.accept(field, operation, "Invalid operation");
                     return 1;
             }
+        }
+
+        if (noneSpecified && operationsSpecified) {
+            problems.accept(field, "none", "'none' cannot be specified with other skipped operation types");
+            return 1;
         }
 
         return 0;
@@ -752,5 +848,31 @@ public abstract class CommonConnectorConfig {
 
     public String getSignalingDataCollectionId() {
         return signalingDataCollection;
+    }
+
+    public Optional<String[]> parseSignallingMessage(Struct value) {
+        final Struct after = value.getStruct(Envelope.FieldName.AFTER);
+        if (after == null) {
+            LOGGER.warn("After part of signal '{}' is missing", value);
+            return Optional.empty();
+        }
+        List<org.apache.kafka.connect.data.Field> fields = after.schema().fields();
+        if (fields.size() != 3) {
+            LOGGER.warn("The signal event '{}' should have 3 fields but has {}", after, fields.size());
+            return Optional.empty();
+        }
+        return Optional.of(new String[]{
+                after.getString(fields.get(0).name()),
+                after.getString(fields.get(1).name()),
+                after.getString(fields.get(2).name())
+        });
+    }
+
+    public boolean isSignalDataCollection(DataCollectionId dataCollectionId) {
+        return signalingDataCollection != null && signalingDataCollection.equals(dataCollectionId.identifier());
+    }
+
+    public Optional<String> customRetriableException() {
+        return Optional.ofNullable(config.getString(CUSTOM_RETRIABLE_EXCEPTION));
     }
 }

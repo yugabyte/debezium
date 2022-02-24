@@ -31,6 +31,7 @@ import org.junit.rules.TestRule;
 
 import io.debezium.config.Configuration;
 import io.debezium.connector.oracle.junit.SkipTestDependingOnAdapterNameRule;
+import io.debezium.connector.oracle.logminer.processor.TransactionCommitConsumer;
 import io.debezium.connector.oracle.util.TestHelper;
 import io.debezium.data.Envelope;
 import io.debezium.data.VerifyRecord;
@@ -216,10 +217,10 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 1);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         Struct before = before(record);
         assertThat(before.get("ID")).isEqualTo(1);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
 
         assertThat(after(record)).isNull();
 
@@ -235,20 +236,20 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 2);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(2);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
 
         assertThat(after(record)).isNull();
 
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(2);
         VerifyRecord.isValidDelete(record, "ID", 3);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(3);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
 
         assertThat(after(record)).isNull();
     }
@@ -368,10 +369,10 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 1);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         Struct before = before(record);
         assertThat(before.get("ID")).isEqualTo(1);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
         assertThat(before.get("VAL_DATA")).isEqualTo("Test1U");
 
         assertThat(after(record)).isNull();
@@ -388,10 +389,10 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 2);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(2);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
         assertThat(before.get("VAL_DATA")).isEqualTo("Test2U");
 
         assertThat(after(record)).isNull();
@@ -399,10 +400,10 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(2);
         VerifyRecord.isValidDelete(record, "ID", 3);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(3);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
         assertThat(before.get("VAL_DATA")).isEqualTo("Test3U");
 
         assertThat(after(record)).isNull();
@@ -516,10 +517,10 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 1);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         Struct before = before(record);
         assertThat(before.get("ID")).isEqualTo(1);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
 
         assertThat(after(record)).isNull();
 
@@ -536,20 +537,20 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 2);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(2);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
 
         assertThat(after(record)).isNull();
 
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(2);
         VerifyRecord.isValidDelete(record, "ID", 3);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(3);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
 
         assertThat(after(record)).isNull();
     }
@@ -669,10 +670,10 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 1);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         Struct before = before(record);
         assertThat(before.get("ID")).isEqualTo(1);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
         assertThat(before.get("VAL_DATA")).isEqualTo("Test1U");
 
         assertThat(after(record)).isNull();
@@ -690,10 +691,10 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 2);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(2);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
         assertThat(before.get("VAL_DATA")).isEqualTo("Test2U");
 
         assertThat(after(record)).isNull();
@@ -701,10 +702,10 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(2);
         VerifyRecord.isValidDelete(record, "ID", 3);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(3);
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
         assertThat(before.get("VAL_DATA")).isEqualTo("Test3U");
 
         assertThat(after(record)).isNull();
@@ -856,11 +857,11 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 1);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         Struct before = before(record);
         assertThat(before.get("ID")).isEqualTo(1);
-        assertThat(before.get("VAL_BLOBS")).isNull();
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOBS")).isEqualTo(getUnavailableValuePlaceholder(config));
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
         assertThat(before.get("VAL_DATA")).isEqualTo("Test1U");
 
         assertThat(after(record)).isNull();
@@ -878,11 +879,11 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(0);
         VerifyRecord.isValidDelete(record, "ID", 2);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(2);
-        assertThat(before.get("VAL_BLOBS")).isNull();
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOBS")).isEqualTo(getUnavailableValuePlaceholder(config));
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
         assertThat(before.get("VAL_DATA")).isEqualTo("Test2U");
 
         assertThat(after(record)).isNull();
@@ -890,11 +891,11 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         record = records.recordsForTopic(topicName("BLOB_TEST")).get(2);
         VerifyRecord.isValidDelete(record, "ID", 3);
 
-        // blob fields will never have a "before" state
+        // blob fields will never have a "before" state; emitted with unavailable value placeholder
         before = before(record);
         assertThat(before.get("ID")).isEqualTo(3);
-        assertThat(before.get("VAL_BLOBS")).isNull();
-        assertThat(before.get("VAL_BLOB")).isNull();
+        assertThat(before.get("VAL_BLOBS")).isEqualTo(getUnavailableValuePlaceholder(config));
+        assertThat(before.get("VAL_BLOB")).isEqualTo(getUnavailableValuePlaceholder(config));
         assertThat(before.get("VAL_DATA")).isEqualTo("Test3U");
 
         assertThat(after(record)).isNull();
@@ -916,7 +917,9 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
                 .with(OracleConnectorConfig.LOB_ENABLED, true)
                 .build();
 
-        LogInterceptor logInterceptor = new LogInterceptor();
+        LogInterceptor logminerLogInterceptor = new LogInterceptor(TransactionCommitConsumer.class);
+        final LogInterceptor xstreamLogInterceptor = new LogInterceptor("io.debezium.connector.oracle.xstream.LcrEventHandler");
+
         start(OracleConnector.class, config);
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
@@ -943,7 +946,9 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
                 + "dbms_lob.erase(loc_b, amount, 1); end;");
 
         // Wait until the log has recorded the message.
-        Awaitility.await().atMost(Duration.ofMinutes(1)).until(() -> logInterceptor.containsWarnMessage("LOB_ERASE for table"));
+        Awaitility.await().atMost(Duration.ofMinutes(1))
+                .until(() -> logminerLogInterceptor.containsWarnMessage("LOB_ERASE for table")
+                        || xstreamLogInterceptor.containsWarnMessage("LOB_ERASE for table"));
         assertNoRecordsToConsume();
     }
 
@@ -1129,7 +1134,15 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
             record = table.get(0);
             after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
             assertThat(after.get("ID")).isEqualTo(3);
-            assertThat(after.get("DATA")).isNull();
+            if (logMinerAdapter) {
+                // With LogMiner, the first event only contains the initialization of id
+                assertThat(after.get("DATA")).isNull();
+            }
+            else {
+                // Xstream combines the insert and subsequent LogMiner update into a single insert event
+                // automatically, so we receive the value here where the LogMiner implementation doesn't.
+                assertThat(after.get("DATA")).isEqualTo(getByteBufferFromBlob(blob1));
+            }
             assertThat(((Struct) record.value()).get("op")).isEqualTo("c");
 
             // LogMiner will pickup a separate update for BLOB fields.
@@ -1144,14 +1157,179 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
                 assertThat(((Struct) record.value()).get("op")).isEqualTo("u");
             }
 
-            // the second insert won't emit an update due to the blob field being set by using the
-            // SELECT_LOB_LOCATOR, LOB_WRITE, and LOB_TRIM operators when using LogMiner and the
-            // BLOB field will be excluded automatically by Xstream due to skipping chunk processing.
             record = table.get(logMinerAdapter ? 2 : 1);
             after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
             assertThat(after.get("ID")).isEqualTo(4);
-            assertThat(after.get("DATA")).isNull();
+            if (logMinerAdapter) {
+                // the second insert won't emit an update due to the clob field being set by using the
+                // SELECT_LOB_LOCATOR, LOB_WRITE, and LOB_TRIM operators when using LogMiner and the
+                assertThat(after.get("DATA")).isNull();
+            }
+            else {
+                // Xstream gets this value; it will be supplied.
+                assertThat(after.get("DATA")).isEqualTo(getByteBufferFromBlob(blob2));
+            }
             assertThat(((Struct) record.value()).get("op")).isEqualTo("c");
+
+            // Test updates with small blob values
+            Blob blob1u = createBlob(part(BIN_DATA, 5, 255));
+            connection.prepareQuery("UPDATE dbz3645 set data=? WHERE id = 3", ps -> ps.setBlob(1, blob1u), null);
+            connection.commit();
+
+            sourceRecords = consumeRecordsByTopic(1);
+            table = sourceRecords.recordsForTopic(topicName("DBZ3645"));
+            VerifyRecord.isValidUpdate(table.get(0), "ID", 3);
+
+            // When updating a table that contains a small BLOB value but the update does not modify
+            // any of the non-BLOB fields, we expect the placeholder in the before and the value in the after.
+            assertThat(getBeforeField(table.get(0), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            assertThat(getAfterField(table.get(0), "DATA")).isEqualTo(getByteBufferFromBlob(blob1u));
+            assertNoRecordsToConsume();
+
+            // Test updates with large blob values
+            Blob blob2u = createBlob(part(BIN_DATA, 5, 10000));
+            connection.prepareQuery("UPDATE dbz3645 set data=? WHERE id = 4", ps -> ps.setBlob(1, blob2u), null);
+            connection.commit();
+
+            if (logMinerAdapter) {
+                // When updating a table that contains a large BLOB value but the update does not modify
+                // any of the non-BLOB fields, don't expect any events to be emitted. This is because
+                // the event is treated as a SELECT_LOB_LOCATOR and LOB_WRITE series which is ignored.
+                waitForAvailableRecords(5, TimeUnit.SECONDS);
+            }
+            else {
+                // Xstream actually picks up this particular event.
+                sourceRecords = consumeRecordsByTopic(1);
+                table = sourceRecords.recordsForTopic(topicName("DBZ3645"));
+                VerifyRecord.isValidUpdate(table.get(0), "ID", 4);
+                assertThat(getBeforeField(table.get(0), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+                assertThat(getAfterField(table.get(0), "DATA")).isEqualTo(getByteBufferFromBlob(blob2u));
+            }
+
+            assertNoRecordsToConsume();
+
+            // Test update small blob row by changing non-blob fields
+            connection.execute("UPDATE dbz3645 set id=5 where id=3");
+
+            // Get streaming records
+            // Expect 3 records: delete for ID=3, tombstone for ID=3, create for ID=5
+            sourceRecords = consumeRecordsByTopic(3);
+            table = sourceRecords.recordsForTopic(topicName("DBZ3645"));
+            VerifyRecord.isValidDelete(table.get(0), "ID", 3);
+            VerifyRecord.isValidTombstone(table.get(1), "ID", 3);
+            VerifyRecord.isValidInsert(table.get(2), "ID", 5);
+
+            // When updating a table that contains a small BLOB value but the update does not modify
+            // any of the BLOB fields, we expect the placeholder.
+            record = table.get(2);
+            after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            assertNoRecordsToConsume();
+
+            // Test update large blob row by changing non-blob fields
+            connection.execute("UPDATE dbz3645 set id=6 where id=4");
+
+            // Get streaming records
+            // Expect 3 records: delete for ID=4, tombstone for ID=4, create for ID=6
+            sourceRecords = consumeRecordsByTopic(3);
+            table = sourceRecords.recordsForTopic(topicName("DBZ3645"));
+            VerifyRecord.isValidDelete(table.get(0), "ID", 4);
+            VerifyRecord.isValidTombstone(table.get(1), "ID", 4);
+            VerifyRecord.isValidInsert(table.get(2), "ID", 6);
+
+            // When updating a table that contains a large BLOB value but the update does not modify
+            // any of the BLOB fields, we expect the placeholder.
+            assertThat(getBeforeField(table.get(0), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            assertThat(getAfterField(table.get(2), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            assertNoRecordsToConsume();
+
+            // Test updating both small blob and non-blob fields
+            Blob blob1u2 = createBlob(part(BIN_DATA, 10, 260));
+            connection.prepareQuery("UPDATE dbz3645 SET data=?, id=7 WHERE id=5", ps -> ps.setBlob(1, blob1u2), null);
+            connection.commit();
+
+            // Get streaming records
+            // The number of expected records depends on whether this test is using LogMiner or Xstream.
+            // LogMiner expects 4: delete for ID=5, tombstone for ID=5, create for ID=7, update for ID=7
+            // XStream expects 3: delete for ID=5, tombstone for ID=5, create for ID=7
+            //
+            // NOTE: The extra update event is because the BLOB value is treated inline and so LogMiner
+            // does not emit a SELECT_LOB_LOCATOR event but rather a subsequent update that is captured
+            // but not merged since event merging happens only when LOB is enabled.
+            sourceRecords = consumeRecordsByTopic(logMinerAdapter ? 4 : 3);
+            table = sourceRecords.recordsForTopic(topicName("DBZ3645"));
+            VerifyRecord.isValidDelete(table.get(0), "ID", 5);
+            VerifyRecord.isValidTombstone(table.get(1), "ID", 5);
+            VerifyRecord.isValidInsert(table.get(2), "ID", 7);
+
+            if (logMinerAdapter) {
+                VerifyRecord.isValidUpdate(table.get(3), "ID", 7);
+            }
+
+            // When updating a table's small blob and non-blob columns
+            assertThat(getBeforeField(table.get(0), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            if (logMinerAdapter) {
+                assertThat(getAfterField(table.get(2), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+                assertThat(getBeforeField(table.get(3), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+                assertThat(getAfterField(table.get(3), "DATA")).isEqualTo(getByteBufferFromBlob(blob1u2));
+            }
+            else {
+                // Xstream combines the insert/update into a single insert
+                assertThat(getAfterField(table.get(2), "DATA")).isEqualTo(getByteBufferFromBlob(blob1u2));
+            }
+            assertNoRecordsToConsume();
+
+            // Test updating both large blob and non-blob fields
+            Blob blob2u2 = createBlob(part(BIN_DATA, 10, 12500));
+            connection.prepareQuery("UPDATE dbz3645 SET data=?, id=8 WHERE id=6", ps -> ps.setBlob(1, blob2u2), null);
+            connection.commit();
+
+            // Get streaming records
+            // Expect 3 records: delete for ID=6, tombstone for ID=6, create for ID=8
+            sourceRecords = consumeRecordsByTopic(3);
+            table = sourceRecords.recordsForTopic(topicName("DBZ3645"));
+            VerifyRecord.isValidDelete(table.get(0), "ID", 6);
+            VerifyRecord.isValidTombstone(table.get(1), "ID", 6);
+            VerifyRecord.isValidInsert(table.get(2), "ID", 8);
+
+            // When updating a table's large blob and non-blob columns, we expect placeholder in after
+            assertThat(getBeforeField(table.get(0), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            if (logMinerAdapter) {
+                // LogMiner is unable to provide the value, so it gets emitted with the placeholder.
+                assertThat(getAfterField(table.get(2), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            }
+            else {
+                // Xstream gets the value, so its provided.
+                assertThat(getAfterField(table.get(2), "DATA")).isEqualTo(getByteBufferFromBlob(blob2u2));
+            }
+            assertNoRecordsToConsume();
+
+            // Test deleting a row from a table with a small blob column
+            connection.execute("DELETE FROM dbz3645 WHERE id=7");
+
+            // Get streaming records
+            // Expect 2 records: delete for ID=6, tombstone for ID=6
+            sourceRecords = consumeRecordsByTopic(2);
+            table = sourceRecords.recordsForTopic(topicName("DBZ3645"));
+            VerifyRecord.isValidDelete(table.get(0), "ID", 7);
+            VerifyRecord.isValidTombstone(table.get(1), "ID", 7);
+
+            // when deleting, we expect placeholder
+            assertThat(getBeforeField(table.get(0), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            assertNoRecordsToConsume();
+
+            // Test deleting a row from a table with a large blob column
+            connection.execute("DELETE FROM dbz3645 WHERE id=8");
+
+            // Get streaming records
+            // Expect 2 records: delete for ID=6, tombstone for ID=6
+            sourceRecords = consumeRecordsByTopic(2);
+            table = sourceRecords.recordsForTopic(topicName("DBZ3645"));
+            VerifyRecord.isValidDelete(table.get(0), "ID", 8);
+            VerifyRecord.isValidTombstone(table.get(1), "ID", 8);
+
+            // when deleting, we expect placeholder
+            assertThat(getBeforeField(table.get(0), "DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
 
             // As a sanity, there should be no more records.
             assertNoRecordsToConsume();
@@ -1198,6 +1376,314 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
         }
     }
 
+    @Test
+    @FixFor("DBZ-4276")
+    public void shouldStreamBlobWithUnavailableColumnValuePlaceholder() throws Exception {
+        TestHelper.dropTable(connection, "dbz4276");
+        try {
+            connection.execute("CREATE TABLE dbz4276 (id numeric(9,0), data blob not null, data3 varchar2(50), primary key(id))");
+            TestHelper.streamTable(connection, "dbz4276");
+
+            // Empty function usage
+            connection.execute("INSERT INTO dbz4276 (id,data,data3) values (1,EMPTY_BLOB(),'Test')");
+
+            Configuration config = TestHelper.defaultConfig()
+                    .with(OracleConnectorConfig.TABLE_INCLUDE_LIST, "DEBEZIUM\\.DBZ4276")
+                    .with(OracleConnectorConfig.LOB_ENABLED, true)
+                    .build();
+
+            start(OracleConnector.class, config);
+            assertConnectorIsRunning();
+
+            waitForSnapshotToBeCompleted(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
+
+            SourceRecords records = consumeRecordsByTopic(1);
+            assertThat(records.recordsForTopic(topicName("DBZ4276"))).hasSize(1);
+
+            SourceRecord record = records.recordsForTopic(topicName("DBZ4276")).get(0);
+            Struct after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("ID")).isEqualTo(1);
+            assertThat(after.get("DATA")).isEqualTo(ByteBuffer.wrap("".getBytes()));
+            assertThat(after.get("DATA3")).isEqualTo("Test");
+
+            waitForStreamingRunning(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
+
+            // Test unavailable column placeholder with update
+            connection.execute("UPDATE dbz4276 set data3 = '123' WHERE id = 1");
+
+            records = consumeRecordsByTopic(1);
+            assertThat(records.recordsForTopic(topicName("DBZ4276"))).hasSize(1);
+
+            record = records.recordsForTopic(topicName("DBZ4276")).get(0);
+            Struct before = ((Struct) record.value()).getStruct(Envelope.FieldName.BEFORE);
+            assertThat(before.get("ID")).isEqualTo(1);
+            assertThat(before.get("DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            assertThat(before.get("DATA3")).isEqualTo("Test");
+
+            after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("ID")).isEqualTo(1);
+            assertThat(after.get("DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            assertThat(after.get("DATA3")).isEqualTo("123");
+
+            // Test unavailable column placeholder with update
+            connection.execute("DELETE FROM dbz4276 WHERE id = 1");
+
+            records = consumeRecordsByTopic(2); // delete and tombstone
+            assertThat(records.recordsForTopic(topicName("DBZ4276"))).hasSize(2);
+
+            record = records.recordsForTopic(topicName("DBZ4276")).get(0);
+            before = ((Struct) record.value()).getStruct(Envelope.FieldName.BEFORE);
+            assertThat(before.get("ID")).isEqualTo(1);
+            assertThat(before.get("DATA")).isEqualTo(getUnavailableValuePlaceholder(config));
+            assertThat(before.get("DATA3")).isEqualTo("123");
+
+            after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after).isNull();
+
+            // As a sanity check, there should be no more records.
+            assertNoRecordsToConsume();
+        }
+        finally {
+            TestHelper.dropTable(connection, "dbz4276");
+        }
+    }
+
+    @Test
+    @FixFor("DBZ-4366")
+    public void shouldStreamBlobsWrittenInChunkedMode() throws Exception {
+        TestHelper.dropTable(connection, "dbz4366");
+        try {
+            connection.execute("CREATE TABLE dbz4366 (id numeric(9,0), data blob not null, primary key(id))");
+            TestHelper.streamTable(connection, "dbz4366");
+
+            Configuration config = TestHelper.defaultConfig()
+                    .with(OracleConnectorConfig.TABLE_INCLUDE_LIST, "DEBEZIUM\\.DBZ4366")
+                    .with(OracleConnectorConfig.LOB_ENABLED, true)
+                    .build();
+
+            start(OracleConnector.class, config);
+            assertConnectorIsRunning();
+
+            waitForStreamingRunning(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
+
+            connection.executeWithoutCommitting("INSERT INTO dbz4366 (id,data) values (1,EMPTY_BLOB())");
+            final String fillQuery = "DECLARE\n" +
+                    "  loc BLOB;\n" +
+                    "  i PLS_INTEGER;\n" +
+                    "BEGIN\n" +
+                    "  SELECT data into loc FROM dbz4366 WHERE id = 1 FOR UPDATE;\n" +
+                    "  DBMS_LOB.OPEN(loc, DBMS_LOB.LOB_READWRITE);\n" +
+                    "  FOR i IN 1..1024 LOOP\n" +
+                    "    DBMS_LOB.WRITEAPPEND(loc, 1024, ?);\n" +
+                    "  END LOOP;\n" +
+                    "  DBMS_LOB.CLOSE(loc);\n" +
+                    "END;";
+            connection.prepareQuery(fillQuery, ps -> ps.setBytes(1, part(BIN_DATA, 0, 1024)), null);
+            connection.execute("COMMIT");
+
+            SourceRecords records = consumeRecordsByTopic(1);
+            assertThat(records.recordsForTopic(topicName("DBZ4366"))).hasSize(1);
+
+            SourceRecord record = records.recordsForTopic(topicName("DBZ4366")).get(0);
+            Struct after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("ID")).isEqualTo(1);
+            ByteBuffer data = (ByteBuffer) after.get("DATA");
+            assertThat(data.array().length).isEqualTo(1024 * 1024);
+
+            // As a sanity check, there should be no more records.
+            assertNoRecordsToConsume();
+        }
+        finally {
+            TestHelper.dropTable(connection, "dbz4366");
+        }
+    }
+
+    @Test
+    @FixFor("DBZ-4366")
+    public void shouldStreamBlobsWrittenInInterleavedChunkedMode() throws Exception {
+        TestHelper.dropTable(connection, "dbz4366");
+        try {
+            connection.execute("CREATE TABLE dbz4366 (id numeric(9,0), data blob not null, data2 blob not null, primary key(id))");
+            TestHelper.streamTable(connection, "dbz4366");
+
+            Configuration config = TestHelper.defaultConfig()
+                    .with(OracleConnectorConfig.TABLE_INCLUDE_LIST, "DEBEZIUM\\.DBZ4366")
+                    .with(OracleConnectorConfig.LOB_ENABLED, true)
+                    .build();
+
+            start(OracleConnector.class, config);
+            assertConnectorIsRunning();
+
+            waitForStreamingRunning(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
+
+            connection.executeWithoutCommitting("INSERT INTO dbz4366 (id,data,data2) values (1,EMPTY_BLOB(),EMPTY_BLOB())");
+            final String fillQuery = "DECLARE\n" +
+                    "  loc BLOB;\n" +
+                    "  loc2 BLOB;\n" +
+                    "  i PLS_INTEGER;\n" +
+                    "BEGIN\n" +
+                    "  FOR i IN 1..1024 LOOP\n" +
+                    "    SELECT data into loc FROM dbz4366 WHERE id = 1 FOR UPDATE;\n" +
+                    "    DBMS_LOB.OPEN(loc, DBMS_LOB.LOB_READWRITE);\n" +
+                    "    DBMS_LOB.WRITEAPPEND(loc, 1024, ?);\n" +
+                    "    DBMS_LOB.CLOSE(loc);\n" +
+                    "    \n" +
+                    "    SELECT data2 into loc2 FROM dbz4366 WHERE id = 1 FOR UPDATE;\n" +
+                    "    DBMS_LOB.OPEN(loc2, DBMS_LOB.LOB_READWRITE);\n" +
+                    "    DBMS_LOB.WRITEAPPEND(loc2, 1024, ?);\n" +
+                    "    DBMS_LOB.CLOSE(loc2);\n" +
+                    "  END LOOP;\n" +
+                    "END;";
+            connection.prepareQuery(fillQuery, ps -> {
+                ps.setBytes(1, part(BIN_DATA, 0, 1024));
+                ps.setBytes(2, part(BIN_DATA, 0, 1024));
+            }, null);
+            connection.execute("COMMIT");
+
+            SourceRecords records = consumeRecordsByTopic(1);
+            assertThat(records.recordsForTopic(topicName("DBZ4366"))).hasSize(1);
+
+            SourceRecord record = records.recordsForTopic(topicName("DBZ4366")).get(0);
+            Struct after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("ID")).isEqualTo(1);
+            ByteBuffer data = (ByteBuffer) after.get("DATA");
+            assertThat(data.array().length).isEqualTo(1024 * 1024);
+            ByteBuffer data2 = (ByteBuffer) after.get("DATA2");
+            assertThat(data2.array().length).isEqualTo(1024 * 1024);
+
+            // As a sanity check, there should be no more records.
+            assertNoRecordsToConsume();
+        }
+        finally {
+            TestHelper.dropTable(connection, "dbz4366");
+        }
+    }
+
+    @Test
+    @FixFor("DBZ-4366")
+    public void shouldStreamBlobsWrittenInInterleavedChunkedMode2() throws Exception {
+        TestHelper.dropTable(connection, "dbz4366");
+        try {
+            connection.execute("CREATE TABLE dbz4366 (id numeric(9,0), data blob not null, data2 blob not null, primary key(id))");
+            TestHelper.streamTable(connection, "dbz4366");
+
+            Configuration config = TestHelper.defaultConfig()
+                    .with(OracleConnectorConfig.TABLE_INCLUDE_LIST, "DEBEZIUM\\.DBZ4366")
+                    .with(OracleConnectorConfig.LOB_ENABLED, true)
+                    .build();
+
+            start(OracleConnector.class, config);
+            assertConnectorIsRunning();
+
+            waitForStreamingRunning(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
+
+            connection.executeWithoutCommitting("INSERT INTO dbz4366 (id,data,data2) values (1,EMPTY_BLOB(),EMPTY_BLOB())");
+            final String fillQuery = "DECLARE\n" +
+                    "  loc BLOB;\n" +
+                    "  loc2 BLOB;\n" +
+                    "  i PLS_INTEGER;\n" +
+                    "BEGIN\n" +
+                    "  SELECT data into loc FROM dbz4366 WHERE id = 1 FOR UPDATE;\n" +
+                    "  DBMS_LOB.OPEN(loc, DBMS_LOB.LOB_READWRITE);\n" +
+                    "  SELECT data2 into loc2 FROM dbz4366 WHERE id = 1 FOR UPDATE;\n" +
+                    "  DBMS_LOB.OPEN(loc2, DBMS_LOB.LOB_READWRITE);\n" +
+                    "  FOR i IN 1..1024 LOOP\n" +
+                    "    DBMS_LOB.WRITEAPPEND(loc, 1024, ?);\n" +
+                    "    DBMS_LOB.WRITEAPPEND(loc2, 1024, ?);\n" +
+                    "  END LOOP;\n" +
+                    "  DBMS_LOB.CLOSE(loc);\n" +
+                    "  DBMS_LOB.CLOSE(loc2);\n" +
+                    "END;";
+            connection.prepareQuery(fillQuery, ps -> {
+                ps.setBytes(1, part(BIN_DATA, 0, 1024));
+                ps.setBytes(2, part(BIN_DATA, 0, 1024));
+            }, null);
+            connection.execute("COMMIT");
+
+            SourceRecords records = consumeRecordsByTopic(1);
+            assertThat(records.recordsForTopic(topicName("DBZ4366"))).hasSize(1);
+
+            SourceRecord record = records.recordsForTopic(topicName("DBZ4366")).get(0);
+            Struct after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("ID")).isEqualTo(1);
+            ByteBuffer data = (ByteBuffer) after.get("DATA");
+            assertThat(data.array().length).isEqualTo(1024 * 1024);
+            ByteBuffer data2 = (ByteBuffer) after.get("DATA2");
+            assertThat(data2.array().length).isEqualTo(1024 * 1024);
+
+            // As a sanity check, there should be no more records.
+            assertNoRecordsToConsume();
+        }
+        finally {
+            TestHelper.dropTable(connection, "dbz4366");
+        }
+    }
+
+    @Test
+    @FixFor("DBZ-4366")
+    public void shouldStreamBlobsWrittenInInterleavedChunkedMode3() throws Exception {
+        TestHelper.dropTable(connection, "dbz4366");
+        try {
+            connection.execute("CREATE TABLE dbz4366 (id numeric(9,0), data blob not null, primary key(id))");
+            TestHelper.streamTable(connection, "dbz4366");
+
+            Configuration config = TestHelper.defaultConfig()
+                    .with(OracleConnectorConfig.TABLE_INCLUDE_LIST, "DEBEZIUM\\.DBZ4366")
+                    .with(OracleConnectorConfig.LOB_ENABLED, true)
+                    .build();
+
+            start(OracleConnector.class, config);
+            assertConnectorIsRunning();
+
+            waitForStreamingRunning(TestHelper.CONNECTOR_NAME, TestHelper.SERVER_NAME);
+
+            connection.executeWithoutCommitting("INSERT INTO dbz4366 (id,data) values (1,EMPTY_BLOB())");
+            connection.executeWithoutCommitting("INSERT INTO dbz4366 (id,data) values (2,EMPTY_BLOB())");
+            final String fillQuery = "DECLARE\n" +
+                    "  loc BLOB;\n" +
+                    "  loc2 BLOB;\n" +
+                    "  i PLS_INTEGER;\n" +
+                    "BEGIN\n" +
+                    "  SELECT data into loc FROM dbz4366 WHERE id = 1 FOR UPDATE;\n" +
+                    "  DBMS_LOB.OPEN(loc, DBMS_LOB.LOB_READWRITE);\n" +
+                    "  SELECT data into loc2 FROM dbz4366 WHERE id = 2 FOR UPDATE;\n" +
+                    "  DBMS_LOB.OPEN(loc2, DBMS_LOB.LOB_READWRITE);\n" +
+                    "  FOR i IN 1..1024 LOOP\n" +
+                    "    DBMS_LOB.WRITEAPPEND(loc, 1024, ?);\n" +
+                    "    DBMS_LOB.WRITEAPPEND(loc2, 1024, ?);\n" +
+                    "  END LOOP;\n" +
+                    "  DBMS_LOB.CLOSE(loc);\n" +
+                    "  DBMS_LOB.CLOSE(loc2);\n" +
+                    "END;";
+            connection.prepareQuery(fillQuery, ps -> {
+                ps.setBytes(1, part(BIN_DATA, 0, 1024));
+                ps.setBytes(2, part(BIN_DATA, 0, 1024));
+            }, null);
+            connection.execute("COMMIT");
+
+            SourceRecords records = consumeRecordsByTopic(2);
+            assertThat(records.recordsForTopic(topicName("DBZ4366"))).hasSize(2);
+
+            SourceRecord record = records.recordsForTopic(topicName("DBZ4366")).get(0);
+            Struct after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("ID")).isEqualTo(1);
+            ByteBuffer data = (ByteBuffer) after.get("DATA");
+            assertThat(data.array().length).isEqualTo(1024 * 1024);
+
+            record = records.recordsForTopic(topicName("DBZ4366")).get(1);
+            after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
+            assertThat(after.get("ID")).isEqualTo(2);
+            data = (ByteBuffer) after.get("DATA");
+            assertThat(data.array().length).isEqualTo(1024 * 1024);
+
+            // As a sanity check, there should be no more records.
+            assertNoRecordsToConsume();
+        }
+        finally {
+            TestHelper.dropTable(connection, "dbz4366");
+        }
+    }
+
     private static byte[] part(byte[] buffer, int start, int length) {
         return Arrays.copyOfRange(buffer, start, length);
     }
@@ -1232,5 +1718,17 @@ public class OracleBlobDataTypesIT extends AbstractConnectorTest {
 
     private static ByteBuffer getByteBufferFromBlob(Blob blob) throws SQLException {
         return ByteBuffer.wrap(blob.getBytes(1, (int) blob.length()));
+    }
+
+    private static ByteBuffer getUnavailableValuePlaceholder(Configuration config) {
+        return ByteBuffer.wrap(config.getString(OracleConnectorConfig.UNAVAILABLE_VALUE_PLACEHOLDER).getBytes());
+    }
+
+    private static Object getBeforeField(SourceRecord record, String fieldName) {
+        return before(record).get(fieldName);
+    }
+
+    private static Object getAfterField(SourceRecord record, String fieldName) {
+        return after(record).get(fieldName);
     }
 }

@@ -25,28 +25,29 @@ final class ColumnImpl implements Column, Comparable<Column> {
     private final boolean optional;
     private final boolean autoIncremented;
     private final boolean generated;
-    private final Object defaultValue;
+    private final String defaultValueExpression;
     private final boolean hasDefaultValue;
     private final List<String> enumValues;
+    private final String comment;
 
     protected ColumnImpl(String columnName, int position, int jdbcType, int componentType, String typeName, String typeExpression,
                          String charsetName, String defaultCharsetName, int columnLength, Integer columnScale,
                          boolean optional, boolean autoIncremented, boolean generated) {
         this(columnName, position, jdbcType, componentType, typeName, typeExpression, charsetName,
-                defaultCharsetName, columnLength, columnScale, null, optional, autoIncremented, generated, null, false);
+                defaultCharsetName, columnLength, columnScale, null, optional, autoIncremented, generated, null, false, null);
     }
 
     protected ColumnImpl(String columnName, int position, int jdbcType, int nativeType, String typeName, String typeExpression,
                          String charsetName, String defaultCharsetName, int columnLength, Integer columnScale,
-                         boolean optional, boolean autoIncremented, boolean generated, Object defaultValue, boolean hasDefaultValue) {
+                         boolean optional, boolean autoIncremented, boolean generated, String defaultValueExpression, boolean hasDefaultValue) {
         this(columnName, position, jdbcType, nativeType, typeName, typeExpression, charsetName,
-                defaultCharsetName, columnLength, columnScale, null, optional, autoIncremented, generated, defaultValue, hasDefaultValue);
+                defaultCharsetName, columnLength, columnScale, null, optional, autoIncremented, generated, defaultValueExpression, hasDefaultValue, null);
     }
 
     protected ColumnImpl(String columnName, int position, int jdbcType, int nativeType, String typeName, String typeExpression,
                          String charsetName, String defaultCharsetName, int columnLength, Integer columnScale,
-                         List<String> enumValues,
-                         boolean optional, boolean autoIncremented, boolean generated, Object defaultValue, boolean hasDefaultValue) {
+                         List<String> enumValues, boolean optional, boolean autoIncremented, boolean generated,
+                         String defaultValueExpression, boolean hasDefaultValue, String comment) {
         this.name = columnName;
         this.position = position;
         this.jdbcType = jdbcType;
@@ -64,9 +65,10 @@ final class ColumnImpl implements Column, Comparable<Column> {
         this.optional = optional;
         this.autoIncremented = autoIncremented;
         this.generated = generated;
-        this.defaultValue = defaultValue;
+        this.defaultValueExpression = defaultValueExpression;
         this.hasDefaultValue = hasDefaultValue;
         this.enumValues = enumValues == null ? new ArrayList<>() : enumValues;
+        this.comment = comment;
         assert this.length >= -1;
     }
 
@@ -131,8 +133,8 @@ final class ColumnImpl implements Column, Comparable<Column> {
     }
 
     @Override
-    public Object defaultValue() {
-        return defaultValue;
+    public Optional<String> defaultValueExpression() {
+        return Optional.ofNullable(defaultValueExpression);
     }
 
     @Override
@@ -143,6 +145,11 @@ final class ColumnImpl implements Column, Comparable<Column> {
     @Override
     public List<String> enumValues() {
         return enumValues;
+    }
+
+    @Override
+    public String comment() {
+        return comment;
     }
 
     @Override
@@ -158,7 +165,7 @@ final class ColumnImpl implements Column, Comparable<Column> {
         if (obj instanceof Column) {
             Column that = (Column) obj;
             return this.name().equalsIgnoreCase(that.name()) &&
-                    this.typeExpression().equalsIgnoreCase(that.typeExpression()) &&
+                    Strings.equalsIgnoreCase(this.typeExpression(), that.typeExpression()) &&
                     this.typeName().equalsIgnoreCase(that.typeName()) &&
                     this.jdbcType() == that.jdbcType() &&
                     Strings.equalsIgnoreCase(this.charsetName(), that.charsetName()) &&
@@ -168,7 +175,7 @@ final class ColumnImpl implements Column, Comparable<Column> {
                     this.isOptional() == that.isOptional() &&
                     this.isAutoIncremented() == that.isAutoIncremented() &&
                     this.isGenerated() == that.isGenerated() &&
-                    Objects.equals(this.defaultValue(), that.defaultValue()) &&
+                    Objects.equals(this.defaultValueExpression(), that.defaultValueExpression()) &&
                     this.hasDefaultValue() == that.hasDefaultValue() &&
                     this.enumValues().equals(that.enumValues());
         }
@@ -198,11 +205,14 @@ final class ColumnImpl implements Column, Comparable<Column> {
         if (generated) {
             sb.append(" GENERATED");
         }
-        if (hasDefaultValue() && defaultValue() == null) {
+        if (hasDefaultValue() && defaultValueExpression == null) {
             sb.append(" DEFAULT VALUE NULL");
         }
-        else if (defaultValue != null) {
-            sb.append(" DEFAULT VALUE ").append(defaultValue);
+        else if (defaultValueExpression != null) {
+            sb.append(" DEFAULT VALUE ").append(defaultValueExpression);
+        }
+        if (comment != null) {
+            sb.append(" COMMENT '").append(comment).append("'");
         }
         return sb.toString();
     }
@@ -221,9 +231,10 @@ final class ColumnImpl implements Column, Comparable<Column> {
                 .optional(isOptional())
                 .autoIncremented(isAutoIncremented())
                 .generated(isGenerated())
-                .enumValues(enumValues);
+                .enumValues(enumValues)
+                .comment(comment);
         if (hasDefaultValue()) {
-            editor.defaultValue(defaultValue());
+            editor.defaultValueExpression(defaultValueExpression().orElse(null));
         }
         return editor;
     }

@@ -129,11 +129,11 @@ public interface Column extends Comparable<Column> {
     boolean isGenerated();
 
     /**
-     * Get the default value of the column
+     * Get the database-specific complete expression defining the column's default value.
      *
-     * @return the default value
+     * @return the complete type expression
      */
-    Object defaultValue();
+    Optional<String> defaultValueExpression();
 
     /**
      * Determine whether this column's has a default value
@@ -148,6 +148,12 @@ public interface Column extends Comparable<Column> {
      * @return the list of enum values
      */
     List<String> enumValues();
+
+    /**
+     * Get the comment of the column.
+     * @return the column comment; may be null if not set
+     */
+    String comment();
 
     @Override
     default int compareTo(Column that) {

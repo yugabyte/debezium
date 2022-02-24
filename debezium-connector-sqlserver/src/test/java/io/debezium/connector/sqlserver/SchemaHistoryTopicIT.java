@@ -272,6 +272,8 @@ public class SchemaHistoryTopicIT extends AbstractConnectorTest {
         connection.execute("INSERT INTO tablec VALUES(1, 'c')");
         // Enable CDC for already existing table
         TestHelper.enableTableCdc(connection, "tablec");
+        // Make sure table's capture instance exists first; avoids unexpected ALTER
+        TestHelper.waitForEnabledCdc(connection, "tablec");
 
         start(SqlServerConnector.class, config);
         assertConnectorIsRunning();
@@ -291,9 +293,15 @@ public class SchemaHistoryTopicIT extends AbstractConnectorTest {
                 .with(SqlServerConnectorConfig.TABLE_INCLUDE_LIST, "dbo.tablec,dbo.tabled")
                 .build();
         start(SqlServerConnector.class, config2);
+        assertConnectorIsRunning();
+
+        // Guarantee we've started streaming and not still in bootstrap steps
+        TestHelper.waitForStreamingStarted();
 
         // CDC for newly added table
         TestHelper.enableTableCdc(connection, "tabled");
+        // Make sure table's capture instance exists first
+        TestHelper.waitForEnabledCdc(connection, "tabled");
 
         connection.execute("INSERT INTO tabled VALUES(1, 'd')");
 
@@ -302,6 +310,13 @@ public class SchemaHistoryTopicIT extends AbstractConnectorTest {
         Assertions.assertThat(records.recordsForTopic("server1.dbo.tabled")).hasSize(1);
 
         final List<SourceRecord> schemaEvents = records.recordsForTopic("server1");
+
+        // TODO DBZ-4082: schemaEvents is null occasionally when running this test on CI;
+        // still we got the right number of records, so I'm logging all received records here
+        if (schemaEvents == null) {
+            Testing.print("Received records: " + records.allRecordsInOrder());
+        }
+
         final SourceRecord schemaEventD = schemaEvents.get(schemaEvents.size() - 1);
         Assertions.assertThat(((Struct) schemaEventD.value()).getStruct("source").getString("schema")).isEqualTo("dbo");
         Assertions.assertThat(((Struct) schemaEventD.value()).getStruct("source").getString("table")).isEqualTo("tabled");

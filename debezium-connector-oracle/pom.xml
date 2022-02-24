@@ -3,7 +3,7 @@
     <parent>
         <groupId>io.debezium</groupId>
         <artifactId>debezium-parent</artifactId>
-        <version>1.7.0-SNAPSHOT</version>
+        <version>1.9.0-SNAPSHOT</version>
 	<relativePath>../debezium-parent/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -44,6 +44,10 @@
             <artifactId>infinispan-core</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.infinispan</groupId>
+            <artifactId>infinispan-client-hotrod</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.infinispan.protostream</groupId>
             <artifactId>protostream-processor</artifactId>
         </dependency>
@@ -67,13 +71,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -108,6 +107,24 @@
     <properties>
         <adapter.name>logminer</adapter.name>
         <log.mining.buffer.type.name>memory</log.mining.buffer.type.name>
+        <version.oracle.server>19.3.0</version.oracle.server>
+
+        <!--
+        Specify properties that will be used for setting up the integration tests' Docker container.
+        Note that the `dockerhost.ip` property is computed from the IP addrses of DOCKER_HOST, which will
+        work on all platforms.  We'll set some of these system properties during integration testing.
+        -->
+
+        <!-- This should be kept in sync with the infinispan dependencies used -->
+        <version.infinispan.server>12.1</version.infinispan.server>
+        <oracle.infinispan.host>${docker.host.address}</oracle.infinispan.host>
+        <oracle.infinispan.image>infinispan/server:${version.infinispan.server}</oracle.infinispan.image>
+        <oracle.infinispan.port>11222</oracle.infinispan.port>
+        <oracle.infinispan.user>admin</oracle.infinispan.user>
+        <oracle.infinispan.password>admin</oracle.infinispan.password>
+        <docker.skip>false</docker.skip>
+        <docker.showLogs>true</docker.showLogs>
+        <connector.assembly.ref>connector-distribution</connector.assembly.ref>
     </properties>
 
     <build>
@@ -178,6 +195,20 @@
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>io.debezium</groupId>
+                <artifactId>debezium-schema-generator</artifactId>
+                <version>${project.version}</version>
+                <executions>
+                    <execution>
+                        <id>generate-connector-metadata</id>
+                        <goals>
+                            <goal>generate-api-spec</goal>
+                        </goals>
+                        <phase>prepare-package</phase>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
@@ -233,7 +264,7 @@
                                     <finalName>${project.artifactId}-${project.version}</finalName>
                                     <attach>true</attach>  <!-- we want attach & deploy these to Maven -->
                                     <descriptorRefs>
-                                        <descriptorRef>connector-distribution</descriptorRef>
+                                        <descriptorRef>${connector.assembly.ref}</descriptorRef>
                                     </descriptorRefs>
                                     <tarLongFileMode>posix</tarLongFileMode>
                                 </configuration>
@@ -294,12 +325,75 @@
                                     <finalName>${project.artifactId}-${project.version}</finalName>
                                     <attach>true</attach>  <!-- we want attach & deploy these to Maven -->
                                     <descriptorRefs>
-                                        <descriptorRef>connector-distribution</descriptorRef>
+                                        <descriptorRef>${connector.assembly.ref}</descriptorRef>
                                     </descriptorRefs>
                                     <tarLongFileMode>posix</tarLongFileMode>
                                 </configuration>
                             </execution>
                         </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>oracle-docker</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                      <groupId>io.fabric8</groupId>
+                      <artifactId>docker-maven-plugin</artifactId>
+                      <configuration>
+                        <watchInterval>500</watchInterval>
+                        <logDate>default</logDate>
+                        <verbose>true</verbose>
+                        <!--autoPull>always</autoPull-->
+                        <images>
+                          <!-- A container for the data server replica set -->
+                          <image>
+                            <name>quay.io/rh_integration/dbz-oracle:${version.oracle.server}</name>
+                            <alias>oracle1</alias>
+                            <run>
+                              <namingStrategy>alias</namingStrategy>
+                              <ports>
+                                <port>1521:1521</port> 
+                              </ports>
+                              <log>
+                                <prefix>oracle1</prefix>
+                                <enabled>true</enabled>
+                                <color>yellow</color>
+                              </log>
+                              <wait>
+                                <log>DONE: Executing user defined scripts</log>
+                                <time>120000</time> <!-- 2 minutes max -->
+                              </wait>
+                            </run>
+                          </image>
+                        </images>
+                      </configuration>
+                      <!--
+                      Connect this plugin to the maven lifecycle around the integration-test phase:
+                      start the container in pre-integration-test and stop it in post-integration-test.
+                      -->
+                      <executions>
+                        <execution>
+                          <id>start</id>
+                          <phase>pre-integration-test</phase>
+                          <goals>
+                            <goal>build</goal>
+                            <goal>start</goal>
+                          </goals>
+                        </execution>
+                        <execution>
+                          <id>stop</id>
+                          <phase>post-integration-test</phase>
+                          <goals>
+                            <goal>stop</goal>
+                          </goals>
+                        </execution>
+                      </executions>
                     </plugin>
                 </plugins>
             </build>
@@ -317,11 +411,100 @@
                 </dependency>
             </dependencies>
         </profile>
+        <!-- This profile should be used for testing connector with Infinispan only -->
         <profile>
             <id>infinispan-buffer</id>
             <properties>
                 <log.mining.buffer.type.name>infinispan</log.mining.buffer.type.name>
             </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration combine.self="override">
+                            <excludes>
+                                <!-- When compiling with this profile, xstream is not added by default -->
+                                <exclude>**/io/debezium/connector/oracle/xstream/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>infinispan-buffer-remote</id>
+            <properties>
+                <log.mining.buffer.type.name>infinispan_remote</log.mining.buffer.type.name>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration combine.self="override">
+                            <excludes>
+                                <!-- When compiling with this profile, xstream is not added by default -->
+                                <exclude>**/io/debezium/connector/oracle/xstream/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.fabric8</groupId>
+                        <artifactId>docker-maven-plugin</artifactId>
+                        <configuration>
+                            <watchInterval>500</watchInterval>
+                            <logDate>default</logDate>
+                            <verbose>true</verbose>
+                            <images>
+                                <image>
+                                    <!-- A docker image using Infinispan -->
+                                    <name>${oracle.infinispan.image}</name>
+                                    <run>
+                                        <namingStrategy>none</namingStrategy>
+                                        <env>
+                                            <USER>${oracle.infinispan.user}</USER>
+                                            <PASS>${oracle.infinispan.password}</PASS>
+                                        </env>
+                                        <ports>
+                                            <port>${oracle.infinispan.port}:11222</port>
+                                        </ports>
+                                        <log>
+                                            <prefix>infinispan</prefix>
+                                            <enabled>${docker.showLogs}</enabled>
+                                            <color>green</color>
+                                        </log>
+                                        <wait>
+                                            <time>60000</time> <!-- 60 seconds max -->
+                                            <log>Infinispan Server [0-9a-zA-z.]* started</log>
+                                        </wait>
+                                    </run>
+                                </image>
+                            </images>
+                        </configuration>
+                        <!--
+                        Connect this plugin to the maven lifecycle around the integration-test phase:
+                        start the container in pre-integration-test and stop it in post-integration-test.
+                        -->
+                        <executions>
+                            <execution>
+                                <id>start</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>start</goal>
+                                </goals>
+                            </execution>
+                            <execution>
+                                <id>stop</id>
+                                <phase>post-integration-test</phase>
+                                <goals>
+                                    <goal>stop</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

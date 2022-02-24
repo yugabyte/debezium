@@ -32,13 +32,6 @@ public class LogMinerEventRow {
 
     private static final Calendar UTC_CALENDAR = Calendar.getInstance(TimeZone.getTimeZone(ZoneOffset.UTC));
 
-    /**
-     * Used by calls to {@link #fromResultSet(ResultSet, String, boolean)} to return the same instance
-     * but initialized with values from each row without creating multiple objects repeatedly
-     * during the result-set iteration.
-     */
-    private static final LogMinerEventRow row = new LogMinerEventRow();
-
     private static final int SCN = 1;
     private static final int SQL_REDO = 2;
     private static final int OPERATION_CODE = 3;
@@ -52,7 +45,6 @@ public class LogMinerEventRow {
     private static final int ROW_ID = 11;
     private static final int ROLLBACK_FLAG = 12;
     private static final int RS_ID = 13;
-    private static final int HASH = 14;
 
     private Scn scn;
     private TableId tableId;
@@ -66,7 +58,6 @@ public class LogMinerEventRow {
     private String rowId;
     private boolean rollbackFlag;
     private String rsId;
-    private long hash;
     private String redoSql;
 
     public Scn getScn() {
@@ -117,10 +108,6 @@ public class LogMinerEventRow {
         return rsId;
     }
 
-    public long getHash() {
-        return hash;
-    }
-
     public String getRedoSql() {
         return redoSql;
     }
@@ -139,6 +126,7 @@ public class LogMinerEventRow {
      * @throws SQLException if there was a problem reading the result set
      */
     public static LogMinerEventRow fromResultSet(ResultSet resultSet, String catalogName, boolean isTxIdRawValue) throws SQLException {
+        LogMinerEventRow row = new LogMinerEventRow();
         row.initializeFromResultSet(resultSet, catalogName, isTxIdRawValue);
         return row;
     }
@@ -152,9 +140,6 @@ public class LogMinerEventRow {
      * @throws SQLException if there was a problem reading the result set
      */
     private void initializeFromResultSet(ResultSet resultSet, String catalogName, boolean isTxIdRawValue) throws SQLException {
-        // First reset the internal state
-        reset();
-
         // Initialize the state from the result set
         this.scn = getScn(resultSet);
         this.tableName = resultSet.getString(TABLE_NAME);
@@ -167,30 +152,10 @@ public class LogMinerEventRow {
         this.rowId = resultSet.getString(ROW_ID);
         this.rollbackFlag = resultSet.getInt(ROLLBACK_FLAG) == 1;
         this.rsId = resultSet.getString(RS_ID);
-        this.hash = resultSet.getLong(HASH);
         this.redoSql = getSqlRedo(resultSet);
         if (this.tableName != null) {
             this.tableId = new TableId(catalogName, tablespaceName, tableName);
         }
-    }
-
-    /**
-     * Resets the internal state of the instance
-     */
-    private void reset() {
-        this.scn = null;
-        this.tableName = null;
-        this.tablespaceName = null;
-        this.eventType = null;
-        this.changeTime = null;
-        this.transactionId = null;
-        this.operation = null;
-        this.userName = null;
-        this.rowId = null;
-        this.rollbackFlag = false;
-        this.rsId = null;
-        this.redoSql = null;
-        this.tableId = null;
     }
 
     private String getTransactionId(ResultSet rs, boolean asRawValue) throws SQLException {
@@ -255,7 +220,6 @@ public class LogMinerEventRow {
                 ", rowId='" + rowId + '\'' +
                 ", rollbackFlag=" + rollbackFlag +
                 ", rsId=" + rsId +
-                ", hash=" + hash +
                 ", redoSql='" + redoSql + '\'' +
                 '}';
     }

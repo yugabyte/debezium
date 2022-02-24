@@ -15,6 +15,7 @@ import org.junit.runners.model.Statement;
 import org.reflections.Reflections;
 
 import io.debezium.junit.DatabaseVersionResolver.DatabaseVersion;
+import io.debezium.util.JvmVersionUtil;
 import io.debezium.util.Testing;
 
 /**
@@ -29,6 +30,37 @@ public class SkipTestRule extends AnnotationBasedTestRule {
     @Override
     public Statement apply(Statement base,
                            Description description) {
+        SkipWhenJavaVersion skipJavaVersionAnnotation = hasAnnotation(description, SkipWhenJavaVersion.class);
+        if (skipJavaVersionAnnotation != null) {
+            int checkedVersion = skipJavaVersionAnnotation.value();
+            int actualVersion = JvmVersionUtil.getFeatureVersion();
+            boolean isSkippedVersion;
+
+            switch (skipJavaVersionAnnotation.check()) {
+                case EQUAL:
+                    isSkippedVersion = actualVersion == checkedVersion;
+                case GREATER_THAN:
+                    isSkippedVersion = actualVersion > checkedVersion;
+                    break;
+                case GREATER_THAN_OR_EQUAL:
+                    isSkippedVersion = actualVersion >= checkedVersion;
+                    break;
+                case LESS_THAN:
+                    isSkippedVersion = actualVersion < checkedVersion;
+                    break;
+                case LESS_THAN_OR_EQUAL:
+                    isSkippedVersion = actualVersion <= checkedVersion;
+                    break;
+                default:
+                    isSkippedVersion = false;
+                    break;
+            }
+
+            if (isSkippedVersion) {
+                return emptyStatement("Java version=" + actualVersion, description);
+            }
+        }
+
         SkipLongRunning skipLongRunningAnnotation = hasAnnotation(description, SkipLongRunning.class);
         if (skipLongRunningAnnotation != null) {
             String skipLongRunning = System.getProperty(SkipLongRunning.SKIP_LONG_RUNNING_PROPERTY);
@@ -100,6 +132,22 @@ public class SkipTestRule extends AnnotationBasedTestRule {
             }
         }
 
+        final SkipWhenConnectorUnderTest connectorUnderTestAnnotation = hasAnnotation(description, SkipWhenConnectorUnderTest.class);
+        if (connectorUnderTestAnnotation != null) {
+            if (isSkippedByConnectorUnderTest(description, connectorUnderTestAnnotation)) {
+                return emptyStatement("Connector under test " + connectorUnderTestAnnotation.value(), description);
+            }
+        }
+
+        final SkipWhenConnectorsUnderTest connectorsUnderTestAnnotation = hasAnnotation(description, SkipWhenConnectorsUnderTest.class);
+        if (connectorsUnderTestAnnotation != null) {
+            for (SkipWhenConnectorUnderTest connector : connectorsUnderTestAnnotation.value()) {
+                if (isSkippedByConnectorUnderTest(description, connector)) {
+                    return emptyStatement("Connector under test " + connector.value(), description);
+                }
+            }
+        }
+
         // First check if multiple database version skips are specified.
         SkipWhenDatabaseVersions skipWhenDatabaseVersions = hasAnnotation(description, SkipWhenDatabaseVersions.class);
         if (skipWhenDatabaseVersions != null) {
@@ -119,6 +167,20 @@ public class SkipTestRule extends AnnotationBasedTestRule {
         }
 
         return base;
+    }
+
+    public boolean isSkippedByConnectorUnderTest(Description description,
+                                                 final SkipWhenConnectorUnderTest connectorUnderTestAnnotation) {
+        boolean isConnectorUnderTest;
+        switch (connectorUnderTestAnnotation.check()) {
+            case EQUAL:
+                isConnectorUnderTest = connectorUnderTestAnnotation.value().isEqualTo(description.getClassName());
+                break;
+            default:
+                isConnectorUnderTest = false;
+                break;
+        }
+        return isConnectorUnderTest;
     }
 
     private boolean isSkippedByDatabaseVersion(SkipWhenDatabaseVersion skipWhenDatabaseVersion) {

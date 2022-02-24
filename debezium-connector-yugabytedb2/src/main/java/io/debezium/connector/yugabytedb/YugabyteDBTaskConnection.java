@@ -26,6 +26,18 @@ final class YugabyteDBTaskConnection implements BaseConnection {
         this.encoding = encoding;
     }
 
+    @Override public boolean getLogServerErrorDetail() {
+        return false;
+    }
+
+    @Override public void setAdaptiveFetch(boolean adaptiveFetch) {
+        // todo: see if something needs to be done
+    }
+
+    @Override public boolean getAdaptiveFetch() {
+        return false;
+    }
+
     /**
      * {@inheritDoc}
      */

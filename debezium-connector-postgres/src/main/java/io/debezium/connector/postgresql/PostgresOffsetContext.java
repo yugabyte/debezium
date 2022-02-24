@@ -52,7 +52,7 @@ public class PostgresOffsetContext implements OffsetContext {
 
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
         this.lastCommitLsn = lastCommitLsn;
-        sourceInfo.update(lsn, time, txId, null, sourceInfo.xmin());
+        sourceInfo.update(lsn, time, txId, sourceInfo.xmin(), null);
         sourceInfo.updateLastCommit(lastCommitLsn);
         sourceInfoSchema = sourceInfo.schema();
 
@@ -126,13 +126,16 @@ public class PostgresOffsetContext implements OffsetContext {
         sourceInfo.setSnapshot(SnapshotRecord.FALSE);
     }
 
-    public void updateSnapshotPosition(Instant timestamp, TableId tableId) {
-        sourceInfo.update(timestamp, tableId);
+    public void updateWalPosition(Lsn lsn, Lsn lastCompletelyProcessedLsn, Instant commitTime, Long txId, Long xmin, TableId tableId) {
+        this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
+        sourceInfo.update(lsn, commitTime, txId, xmin, tableId);
     }
 
-    public void updateWalPosition(Lsn lsn, Lsn lastCompletelyProcessedLsn, Instant commitTime, Long txId, TableId tableId, Long xmin) {
-        this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
-        sourceInfo.update(lsn, commitTime, txId, tableId, xmin);
+    /**
+     * update wal position for lsn events that do not have an associated table or schema
+     */
+    public void updateWalPosition(Lsn lsn, Lsn lastCompletelyProcessedLsn, Instant commitTime, Long txId, Long xmin) {
+        updateWalPosition(lsn, lastCompletelyProcessedLsn, commitTime, txId, xmin, null);
     }
 
     public void updateCommitPosition(Lsn lsn, Lsn lastCompletelyProcessedLsn) {
@@ -205,7 +208,7 @@ public class PostgresOffsetContext implements OffsetContext {
             final boolean snapshot = (boolean) ((Map<String, Object>) offset).getOrDefault(SourceInfo.SNAPSHOT_KEY, Boolean.FALSE);
             final boolean lastSnapshotRecord = (boolean) ((Map<String, Object>) offset).getOrDefault(SourceInfo.LAST_SNAPSHOT_RECORD_KEY, Boolean.FALSE);
             return new PostgresOffsetContext(connectorConfig, lsn, lastCompletelyProcessedLsn, lastCommitLsn, txId, useconds, snapshot, lastSnapshotRecord,
-                    TransactionContext.load(offset), SignalBasedIncrementalSnapshotContext.load(offset));
+                    TransactionContext.load(offset), SignalBasedIncrementalSnapshotContext.load(offset, false));
         }
     }
 
@@ -239,7 +242,7 @@ public class PostgresOffsetContext implements OffsetContext {
                     false,
                     false,
                     new TransactionContext(),
-                    new SignalBasedIncrementalSnapshotContext<>());
+                    new SignalBasedIncrementalSnapshotContext<>(false));
         }
         catch (SQLException e) {
             throw new ConnectException("Database processing error", e);

@@ -1,22 +1,24 @@
 name: reference
 title: Debezium Documentation
 version: 'master'
+display_version: 'nightly'
+prerelease: true
 nav:
   - modules/ROOT/nav.adoc
 
 asciidoc:
   attributes:
-    debezium-version: '1.7.0.Beta1'
-    debezium-dev-version: '1.7'
-    debezium-kafka-version: '2.7.0'
-    debezium-docker-label: '1.6'
+    debezium-version: '1.9.0.Alpha1'
+    debezium-dev-version: '1.9'
+    debezium-kafka-version: '3.0.0'
+    debezium-docker-label: '1.9'
     DockerKafkaConnect: registry.redhat.io/amq7/amq-streams-kafka-28-rhel8:1.8.0
-    install-version: '1.6'
+    install-version: '1.9'
     assemblies: '../assemblies'
     modules: '../../modules'
     mysql-version: '8.0'
     strimzi-version: '0.18.0'
-    apicurio-version: '2.0.0.Final'
+    apicurio-version: '2.0.2.Final'
     db2-version: '11.5.0.0'
     community: true
     registry: 'Apicurio Registry'
@@ -36,7 +38,6 @@ asciidoc:
     link-mongodb-event-flattening: 'transformations/mongodb-event-flattening.adoc'
     link-mysql-connector: 'connectors/mysql.adoc'
     link-oracle-connector: 'connectors/oracle.adoc'
-    link-outbox-event-router: 'transformations/outbox-event-router.adoc'
     link-prefix: 'xref'
     link-postgresql-connector: 'connectors/postgresql.adoc'
     link-postgresql-plugins: 'postgres-plugins.adoc'

@@ -17,8 +17,8 @@ import io.debezium.pipeline.ErrorHandler;
  */
 public class SqlServerErrorHandler extends ErrorHandler {
 
-    public SqlServerErrorHandler(String logicalName, ChangeEventQueue<?> queue) {
-        super(SqlServerConnector.class, logicalName, queue);
+    public SqlServerErrorHandler(SqlServerConnectorConfig connectorConfig, ChangeEventQueue<?> queue) {
+        super(SqlServerConnector.class, connectorConfig, queue);
     }
 
     @Override
@@ -31,6 +31,10 @@ public class SqlServerErrorHandler extends ErrorHandler {
                 && (throwable.getMessage().contains("Connection timed out (Read failed)")
                         || throwable.getMessage().contains("Connection timed out (Write failed)")
                         || throwable.getMessage().contains("The connection has been closed.")
+                        || throwable.getMessage().contains("The connection is closed.")
+                        || throwable.getMessage().contains("The login failed.")
+                        || throwable.getMessage().contains("Server is in script upgrade mode.")
+                        || throwable.getMessage().contains("Try the statement later.")
                         || throwable.getMessage().contains("Connection reset")
                         || throwable.getMessage().contains("SHUTDOWN is in progress")
                         || throwable.getMessage().contains("The server failed to resume the transaction")

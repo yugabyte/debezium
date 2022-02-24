@@ -51,6 +51,7 @@ import io.debezium.jdbc.TemporalPrecisionMode;
 import io.debezium.junit.SkipWhenDatabaseVersion;
 import io.debezium.junit.logging.LogInterceptor;
 import io.debezium.relational.RelationalChangeRecordEmitter;
+import io.debezium.relational.RelationalDatabaseSchema;
 import io.debezium.relational.history.DatabaseHistory;
 import io.debezium.relational.history.FileDatabaseHistory;
 import io.debezium.relational.history.KafkaDatabaseHistory;
@@ -1145,7 +1146,7 @@ public class MySqlConnectorIT extends AbstractConnectorTest {
                     while (rs.next()) {
                         final String dbName = rs.getString(1);
                         if (!Filters.isBuiltInDatabase(dbName) && !dbName.equals(DATABASE.getDatabaseName())) {
-                            connection.execute("DROP DATABASE IF EXISTS " + dbName);
+                            connection.execute("DROP DATABASE IF EXISTS `" + dbName + "`");
                         }
                     }
                 });
@@ -2158,7 +2159,7 @@ public class MySqlConnectorIT extends AbstractConnectorTest {
     @Test
     @FixFor("DBZ-1242")
     public void testEmptySchemaLogWarningWithDatabaseWhitelist() throws Exception {
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(RelationalDatabaseSchema.class);
 
         config = DATABASE.defaultConfig()
                 .with(MySqlConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL)
@@ -2176,7 +2177,7 @@ public class MySqlConnectorIT extends AbstractConnectorTest {
     @Test
     @FixFor("DBZ-1242")
     public void testNoEmptySchemaLogWarningWithDatabaseWhitelist() throws Exception {
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(RelationalDatabaseSchema.class);
 
         config = DATABASE.defaultConfig()
                 .with(MySqlConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL)
@@ -2194,7 +2195,7 @@ public class MySqlConnectorIT extends AbstractConnectorTest {
     @FixFor("DBZ-1242")
     public void testEmptySchemaWarningWithTableWhitelist() throws Exception {
         // This captures all logged messages, allowing us to verify log message was written.
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(RelationalDatabaseSchema.class);
 
         config = DATABASE.defaultConfig()
                 .with(MySqlConnectorConfig.SNAPSHOT_MODE, MySqlConnectorConfig.SnapshotMode.INITIAL)
@@ -2215,7 +2216,7 @@ public class MySqlConnectorIT extends AbstractConnectorTest {
     @FixFor("DBZ-1242")
     public void testNoEmptySchemaWarningWithTableWhitelist() throws Exception {
         // This captures all logged messages, allowing us to verify log message was written.
-        final LogInterceptor logInterceptor = new LogInterceptor();
+        final LogInterceptor logInterceptor = new LogInterceptor(RelationalDatabaseSchema.class);
 
         config = DATABASE.defaultConfig()
                 .with(MySqlConnectorConfig.SNAPSHOT_MODE, MySqlConnectorConfig.SnapshotMode.INITIAL)
@@ -2477,5 +2478,23 @@ public class MySqlConnectorIT extends AbstractConnectorTest {
         assertThat(changeEvents.size()).isEqualTo(3);
 
         stopConnector();
+    }
+
+    @Test
+    @FixFor("DBZ-1344")
+    public void testNoEmptySchemaLogWarningWithSnapshotNever() throws Exception {
+        final LogInterceptor logInterceptor = new LogInterceptor(RelationalDatabaseSchema.class);
+
+        config = DATABASE.defaultConfig()
+                .with(MySqlConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(MySqlConnectorConfig.DATABASE_INCLUDE_LIST, "my_database")
+                .build();
+
+        start(MySqlConnector.class, config);
+
+        consumeRecordsByTopic(12);
+        waitForAvailableRecords(100, TimeUnit.MILLISECONDS);
+
+        stopConnector(value -> assertThat(logInterceptor.containsWarnMessage(DatabaseSchema.NO_CAPTURED_DATA_COLLECTIONS_WARNING)).isFalse());
     }
 }

@@ -165,7 +165,7 @@ public class AlterTableParserListener extends MySqlParserBaseListener {
                 // definition; so in fact it's arguably not correct to use edit() on the existing column to begin with, but
                 // I'm going to leave this as is for now, to be prepared for the ability of updating column definitions in 8.0
                 ColumnEditor columnEditor = existingColumn.edit();
-                columnEditor.unsetDefaultValue();
+                columnEditor.unsetDefaultValueExpression();
 
                 columnDefinitionListener = new ColumnDefinitionParserListener(tableEditor, columnEditor, parser, listeners);
                 listeners.add(columnDefinitionListener);
@@ -206,7 +206,7 @@ public class AlterTableParserListener extends MySqlParserBaseListener {
             Column existingColumn = tableEditor.columnWithName(columnName);
             if (existingColumn != null) {
                 ColumnEditor columnEditor = existingColumn.edit();
-                columnEditor.unsetDefaultValue();
+                columnEditor.unsetDefaultValueExpression();
 
                 columnDefinitionListener = new ColumnDefinitionParserListener(tableEditor, columnEditor, parser, listeners);
                 listeners.add(columnDefinitionListener);
@@ -266,12 +266,12 @@ public class AlterTableParserListener extends MySqlParserBaseListener {
             if (column != null) {
                 defaultValueColumnEditor = column.edit();
                 if (ctx.SET() != null) {
-                    defaultValueListener = new DefaultValueParserListener(defaultValueColumnEditor, parser.getConverters(),
-                            new AtomicReference<Boolean>(column.isOptional()), true);
+                    defaultValueListener = new DefaultValueParserListener(defaultValueColumnEditor,
+                            new AtomicReference<Boolean>(column.isOptional()));
                     listeners.add(defaultValueListener);
                 }
                 else if (ctx.DROP() != null) {
-                    defaultValueColumnEditor.unsetDefaultValue();
+                    defaultValueColumnEditor.unsetDefaultValueExpression();
                 }
             }
         }, tableEditor);
@@ -352,5 +352,17 @@ public class AlterTableParserListener extends MySqlParserBaseListener {
             listeners.remove(columnDefinitionListener);
         }, tableEditor, columnDefinitionListener);
         super.exitAlterByRenameColumn(ctx);
+    }
+
+    @Override
+    public void enterTableOptionComment(MySqlParser.TableOptionCommentContext ctx) {
+        if (!parser.skipComments()) {
+            parser.runIfNotNull(() -> {
+                if (ctx.COMMENT() != null) {
+                    tableEditor.setComment(parser.withoutQuotes(ctx.STRING_LITERAL().getText()));
+                }
+            }, tableEditor);
+        }
+        super.enterTableOptionComment(ctx);
     }
 }

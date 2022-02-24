@@ -24,6 +24,7 @@ import io.debezium.config.Configuration;
 import io.debezium.config.EnumeratedValue;
 import io.debezium.config.Field;
 import io.debezium.config.Field.ValidationOutput;
+import io.debezium.heartbeat.DatabaseHeartbeatImpl;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.jdbc.JdbcValueConverters.DecimalMode;
 import io.debezium.jdbc.TemporalPrecisionMode;
@@ -64,6 +65,7 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
     public static final String DATABASE_WHITELIST_ALREADY_SPECIFIED_ERROR_MSG = "\"database.whitelist\" is already specified";
 
     public static final long DEFAULT_SNAPSHOT_LOCK_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(10);
+    public static final String DEFAULT_UNAVAILABLE_VALUE_PLACEHOLDER = "__debezium_unavailable_value";
 
     /**
      * The set of predefined DecimalHandlingMode options or aliases.
@@ -504,6 +506,19 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
                     + "The default is 'true'. This is independent of how the connector internally records database history.")
             .withDefault(true);
 
+    public static final Field INCLUDE_SCHEMA_COMMENTS = Field.create("include.schema.comments")
+            .withDisplayName("Include Table and Column Comments")
+            .withType(Type.BOOLEAN)
+            .withGroup(Field.createGroupEntry(Field.Group.CONNECTOR, 5))
+            .withValidation(Field::isBoolean)
+            .withWidth(Width.SHORT)
+            .withImportance(Importance.MEDIUM)
+            .withDescription("Whether the connector parse table and column's comment to metadata object."
+                    + "Note: Enable this option will bring the implications on memory usage. The number and size of ColumnImpl objects is what largely impacts "
+                    + "how much memory is consumed by the Debezium connectors, and adding a String to each of them can potentially be quite heavy. "
+                    + "The default is 'false'.")
+            .withDefault(false);
+
     public static final Field MASK_COLUMN_WITH_HASH = Field.create("column.mask.hash.([^.]+).with.salt.(.+)")
             .withDisplayName("Mask Columns Using Hash and Salt")
             .withType(Type.STRING)
@@ -555,6 +570,15 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
                     + " If you are excluding a lot of tables the default behavour should work well.")
             .withDefault(false);
 
+    public static final Field UNAVAILABLE_VALUE_PLACEHOLDER = Field.create("unavailable.value.placeholder")
+            .withDisplayName("Unavailable value placeholder")
+            .withType(Type.STRING)
+            .withWidth(Width.MEDIUM)
+            .withDefault(DEFAULT_UNAVAILABLE_VALUE_PLACEHOLDER)
+            .withImportance(Importance.MEDIUM)
+            .withDescription("Specify the constant that will be provided by Debezium to indicate that " +
+                    "the original value is unavailable and not provided by the database.");
+
     protected static final ConfigDefinition CONFIG_DEFINITION = CommonConnectorConfig.CONFIG_DEFINITION.edit()
             .type(
                     SERVER_NAME)
@@ -582,9 +606,11 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
                     MASK_COLUMN,
                     TRUNCATE_COLUMN,
                     INCLUDE_SCHEMA_CHANGES,
+                    INCLUDE_SCHEMA_COMMENTS,
                     PROPAGATE_COLUMN_SOURCE_TYPE,
                     PROPAGATE_DATATYPE_SOURCE_TYPE,
-                    SNAPSHOT_FULL_COLUMN_SCAN_FORCE)
+                    SNAPSHOT_FULL_COLUMN_SCAN_FORCE,
+                    DatabaseHeartbeatImpl.HEARTBEAT_ACTION_QUERY)
             .create();
 
     private final RelationalTableFilters tableFilters;
@@ -593,6 +619,7 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
     private final KeyMapper keyMapper;
     private final TableIdToStringMapper tableIdMapper;
     private final Configuration jdbcConfig;
+    private final String heartbeatActionQuery;
 
     protected RelationalDatabaseConnectorConfig(Configuration config, String logicalName, TableFilter systemTablesFilter,
                                                 TableIdToStringMapper tableIdMapper, int defaultSnapshotFetchSize,
@@ -621,6 +648,8 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
         else {
             this.columnFilter = ColumnNameFilterFactory.createExcludeListFilter(columnExcludeList, columnFilterMode);
         }
+
+        this.heartbeatActionQuery = config.getString(DatabaseHeartbeatImpl.HEARTBEAT_ACTION_QUERY_PROPERTY_NAME, "");
     }
 
     public RelationalTableFilters getTableFilters() {
@@ -656,6 +685,14 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
      */
     public Configuration getJdbcConfig() {
         return jdbcConfig;
+    }
+
+    public String getHeartbeatActionQuery() {
+        return heartbeatActionQuery;
+    }
+
+    public byte[] getUnavailableValuePlaceholder() {
+        return getConfig().getString(UNAVAILABLE_VALUE_PLACEHOLDER).getBytes();
     }
 
     public Duration snapshotLockTimeout() {
@@ -711,6 +748,11 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
     @Override
     public boolean isSchemaChangesHistoryEnabled() {
         return getConfig().getBoolean(INCLUDE_SCHEMA_CHANGES);
+    }
+
+    @Override
+    public boolean isSchemaCommentsHistoryEnabled() {
+        return getConfig().getBoolean(INCLUDE_SCHEMA_COMMENTS);
     }
 
     public TableIdToStringMapper getTableIdMapper() {

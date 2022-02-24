@@ -37,6 +37,7 @@ import io.debezium.jdbc.ResultReceiver;
 import io.debezium.relational.Column;
 import io.debezium.relational.ValueConverter;
 import io.debezium.time.Date;
+import io.debezium.time.Interval;
 import io.debezium.time.MicroDuration;
 import io.debezium.time.ZonedTimestamp;
 import io.debezium.util.NumberConversions;
@@ -56,6 +57,15 @@ import oracle.sql.TIMESTAMPLTZ;
 import oracle.sql.TIMESTAMPTZ;
 
 public class OracleValueConverters extends JdbcValueConverters {
+
+    /**
+     * Marker value indicating an unavilable column value.
+     */
+    public static final Object UNAVAILABLE_VALUE = new Object();
+    public static final String EMPTY_BLOB_FUNCTION = "EMPTY_BLOB()";
+    public static final String EMPTY_CLOB_FUNCTION = "EMPTY_CLOB()";
+    public static final String HEXTORAW_FUNCTION_START = "HEXTORAW('";
+    public static final String HEXTORAW_FUNCTION_END = "')";
 
     private static final Pattern INTERVAL_DAY_SECOND_PATTERN = Pattern.compile("([+\\-])?(\\d+) (\\d+):(\\d+):(\\d+).(\\d+)");
 
@@ -93,22 +103,24 @@ public class OracleValueConverters extends JdbcValueConverters {
             .appendOffset("+HH:MM", "")
             .toFormatter();
 
-    private static final String EMPTY_BLOB_FUNCTION = "EMPTY_BLOB()";
-    private static final String EMPTY_CLOB_FUNCTION = "EMPTY_CLOB()";
-    private static final String HEXTORAW_FUNCTION_START = "HEXTORAW('";
-    private static final String HEXTORAW_FUNCTION_END = "')";
-
     private static final Pattern TO_TIMESTAMP = Pattern.compile("TO_TIMESTAMP\\('(.*)'\\)", Pattern.CASE_INSENSITIVE);
     private static final Pattern TO_TIMESTAMP_TZ = Pattern.compile("TO_TIMESTAMP_TZ\\('(.*)'\\)", Pattern.CASE_INSENSITIVE);
     private static final Pattern TO_DATE = Pattern.compile("TO_DATE\\('(.*)',[ ]*'(.*)'\\)", Pattern.CASE_INSENSITIVE);
+    private static final BigDecimal MICROSECONDS_PER_SECOND = new BigDecimal(1_000_000);
 
     private final OracleConnection connection;
     private final boolean lobEnabled;
+    private final OracleConnectorConfig.IntervalHandlingMode intervalHandlingMode;
+    private final byte[] unavailableValuePlaceholderBinary;
+    private final String unavailableValuePlaceholderString;
 
     public OracleValueConverters(OracleConnectorConfig config, OracleConnection connection) {
-        super(config.getDecimalMode(), config.getTemporalPrecisionMode(), ZoneOffset.UTC, null, null, null);
+        super(config.getDecimalMode(), config.getTemporalPrecisionMode(), ZoneOffset.UTC, null, null, config.binaryHandlingMode());
         this.connection = connection;
         this.lobEnabled = config.isLobEnabled();
+        this.intervalHandlingMode = config.getIntervalHandlingMode();
+        this.unavailableValuePlaceholderBinary = config.getUnavailableValuePlaceholder();
+        this.unavailableValuePlaceholderString = new String(config.getUnavailableValuePlaceholder());
     }
 
     @Override
@@ -135,8 +147,10 @@ public class OracleValueConverters extends JdbcValueConverters {
                 return ZonedTimestamp.builder();
             case OracleTypes.INTERVALYM:
             case OracleTypes.INTERVALDS:
-                return MicroDuration.builder();
+                return intervalHandlingMode == OracleConnectorConfig.IntervalHandlingMode.STRING ? Interval.builder() : MicroDuration.builder();
             case Types.STRUCT:
+                return SchemaBuilder.string();
+            case OracleTypes.ROWID:
                 return SchemaBuilder.string();
             default: {
                 SchemaBuilder builder = super.schemaBuilder(column);
@@ -192,6 +206,7 @@ public class OracleValueConverters extends JdbcValueConverters {
             case Types.NVARCHAR:
             case Types.STRUCT:
             case Types.CLOB:
+            case OracleTypes.ROWID:
                 return data -> convertString(column, fieldDefn, data);
             case Types.BLOB:
                 return data -> convertBinary(column, fieldDefn, data, binaryMode);
@@ -210,6 +225,9 @@ public class OracleValueConverters extends JdbcValueConverters {
                 return (data) -> convertIntervalYearMonth(column, fieldDefn, data);
             case OracleTypes.INTERVALDS:
                 return (data) -> convertIntervalDaySecond(column, fieldDefn, data);
+            case OracleTypes.RAW:
+                // Raw data types are not supported
+                return null;
         }
 
         return super.converter(column, fieldDefn);
@@ -250,7 +268,10 @@ public class OracleValueConverters extends JdbcValueConverters {
         }
         if (data instanceof Clob) {
             if (!lobEnabled) {
-                return null;
+                if (column.isOptional()) {
+                    return null;
+                }
+                return "";
             }
             try {
                 Clob clob = (Clob) data;
@@ -273,6 +294,10 @@ public class OracleValueConverters extends JdbcValueConverters {
             }
         }
 
+        if (data == UNAVAILABLE_VALUE) {
+            return unavailableValuePlaceholderString;
+        }
+
         return super.convertString(column, fieldDefn, data);
     }
 
@@ -291,18 +316,23 @@ public class OracleValueConverters extends JdbcValueConverters {
                     data = RAW.hexString2Bytes(getHexToRawHexString(str));
                 }
             }
-            else if (data instanceof BlobChunkList) {
-                if (!lobEnabled) {
-                    return null;
-                }
-                data = convertBlobChunkList((BlobChunkList) data);
-            }
             else if (data instanceof Blob) {
                 if (!lobEnabled) {
-                    return null;
+                    if (column.isOptional()) {
+                        return null;
+                    }
+                    else {
+                        data = NumberConversions.BYTE_ZERO;
+                    }
                 }
-                Blob blob = (Blob) data;
-                data = blob.getBytes(1, Long.valueOf(blob.length()).intValue());
+                else {
+                    Blob blob = (Blob) data;
+                    data = blob.getBytes(1, Long.valueOf(blob.length()).intValue());
+                }
+            }
+
+            if (data == UNAVAILABLE_VALUE) {
+                data = unavailableValuePlaceholderBinary;
             }
 
             return super.convertBinary(column, fieldDefn, data, mode);
@@ -310,21 +340,6 @@ public class OracleValueConverters extends JdbcValueConverters {
         catch (SQLException e) {
             throw new DebeziumException("Couldn't convert value for column " + column.name(), e);
         }
-    }
-
-    private byte[] convertBlobChunkList(BlobChunkList chunks) throws SQLException {
-        if (chunks.isEmpty()) {
-            // if there are no chunks, simply return null
-            return null;
-        }
-
-        // Iterate each chunk's hex-string and combine them together.
-        final StringBuilder hexString = new StringBuilder();
-        for (String chunk : chunks) {
-            hexString.append(getHexToRawHexString(chunk));
-        }
-
-        return RAW.hexString2Bytes(hexString.toString());
     }
 
     @Override
@@ -631,7 +646,13 @@ public class OracleValueConverters extends JdbcValueConverters {
         return convertValue(column, fieldDefn, data, NumberConversions.LONG_FALSE, (r) -> {
             if (data instanceof Number) {
                 // we expect to get back from the plugin a double value
-                r.deliver(((Number) data).longValue());
+                final long micros = ((Number) data).longValue();
+                if (intervalHandlingMode == OracleConnectorConfig.IntervalHandlingMode.STRING) {
+                    r.deliver(Interval.toIsoString(0, 0, 0, 0, 0, new BigDecimal(micros).divide(MICROSECONDS_PER_SECOND)));
+                }
+                else {
+                    r.deliver(micros);
+                }
             }
             else if (data instanceof INTERVALYM) {
                 convertOracleIntervalYearMonth(data, r);
@@ -657,8 +678,13 @@ public class OracleValueConverters extends JdbcValueConverters {
             if (interval.charAt(i) == '-') {
                 final int year = sign * Integer.parseInt(interval.substring(start, i));
                 final int month = sign * Integer.parseInt(interval.substring(i + 1, interval.length()));
-                r.deliver(MicroDuration.durationMicros(year, month, 0, 0,
-                        0, 0, MicroDuration.DAYS_PER_MONTH_AVG));
+                if (intervalHandlingMode == OracleConnectorConfig.IntervalHandlingMode.STRING) {
+                    r.deliver(Interval.toIsoString(year, month, 0, 0, 0, BigDecimal.ZERO));
+                }
+                else {
+                    r.deliver(MicroDuration.durationMicros(year, month, 0, 0,
+                            0, 0, MicroDuration.DAYS_PER_MONTH_AVG));
+                }
             }
         }
     }
@@ -667,7 +693,13 @@ public class OracleValueConverters extends JdbcValueConverters {
         return convertValue(column, fieldDefn, data, NumberConversions.LONG_FALSE, (r) -> {
             if (data instanceof Number) {
                 // we expect to get back from the plugin a double value
-                r.deliver(((Number) data).longValue());
+                final long micros = ((Number) data).longValue();
+                if (intervalHandlingMode == OracleConnectorConfig.IntervalHandlingMode.STRING) {
+                    r.deliver(Interval.toIsoString(0, 0, 0, 0, 0, new BigDecimal(micros).divide(MICROSECONDS_PER_SECOND)));
+                }
+                else {
+                    r.deliver(micros);
+                }
             }
             else if (data instanceof INTERVALDS) {
                 convertOracleIntervalDaySecond(data, r);
@@ -686,15 +718,28 @@ public class OracleValueConverters extends JdbcValueConverters {
         final Matcher m = INTERVAL_DAY_SECOND_PATTERN.matcher(interval);
         if (m.matches()) {
             final int sign = "-".equals(m.group(1)) ? -1 : 1;
-            r.deliver(MicroDuration.durationMicros(
-                    0,
-                    0,
-                    sign * Integer.valueOf(m.group(2)),
-                    sign * Integer.valueOf(m.group(3)),
-                    sign * Integer.valueOf(m.group(4)),
-                    sign * Integer.valueOf(m.group(5)),
-                    sign * Integer.valueOf(Strings.pad(m.group(6), 6, '0')),
-                    MicroDuration.DAYS_PER_MONTH_AVG));
+            if (intervalHandlingMode == OracleConnectorConfig.IntervalHandlingMode.STRING) {
+                double seconds = (double) (sign * Integer.parseInt(m.group(5)))
+                        + (double) Integer.parseInt(Strings.pad(m.group(6), 6, '0')) / 1_000_000D;
+                r.deliver(Interval.toIsoString(
+                        0,
+                        0,
+                        sign * Integer.valueOf(m.group(2)),
+                        sign * Integer.valueOf(m.group(3)),
+                        sign * Integer.valueOf(m.group(4)),
+                        BigDecimal.valueOf(seconds)));
+            }
+            else {
+                r.deliver(MicroDuration.durationMicros(
+                        0,
+                        0,
+                        sign * Integer.valueOf(m.group(2)),
+                        sign * Integer.valueOf(m.group(3)),
+                        sign * Integer.valueOf(m.group(4)),
+                        sign * Integer.valueOf(m.group(5)),
+                        sign * Integer.valueOf(Strings.pad(m.group(6), 6, '0')),
+                        MicroDuration.DAYS_PER_MONTH_AVG));
+            }
         }
     }
 

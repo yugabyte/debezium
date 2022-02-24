@@ -7,10 +7,10 @@ package io.debezium.connector.oracle.logminer;
 
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 import io.debezium.connector.oracle.OracleConnectorConfig;
+import io.debezium.connector.oracle.OracleDatabaseSchema;
 import io.debezium.connector.oracle.logminer.logwriter.LogWriterFlushStrategy;
 import io.debezium.util.Strings;
 
@@ -21,11 +21,6 @@ import io.debezium.util.Strings;
  */
 public class LogMinerQueryBuilder {
 
-    /**
-     * This represents a hash function generated for each row in the query that is meant to provide a
-     * unique hash value for each row within the scope of a transaction.
-     */
-    private static final String ROW_HASH = "ORA_HASH(SCN||OPERATION||RS_ID||SEQUENCE#||RTRIM(SUBSTR(SQL_REDO,1,256)))";
     private static final String LOGMNR_CONTENTS_VIEW = "V$LOGMNR_CONTENTS";
 
     /**
@@ -53,12 +48,13 @@ public class LogMinerQueryBuilder {
      * </pre>
      *
      * @param connectorConfig connector configuration, should not be {@code null}
+     * @param schema database schema, should not be {@code null}
      * @return the SQL string to be used to fetch changes from Oracle LogMiner
      */
-    public static String build(OracleConnectorConfig connectorConfig) {
+    public static String build(OracleConnectorConfig connectorConfig, OracleDatabaseSchema schema) {
         final StringBuilder query = new StringBuilder(1024);
         query.append("SELECT SCN, SQL_REDO, OPERATION_CODE, TIMESTAMP, XID, CSF, TABLE_NAME, SEG_OWNER, OPERATION, ");
-        query.append("USERNAME, ROW_ID, ROLLBACK, RS_ID, ").append(getRowHash()).append(" ");
+        query.append("USERNAME, ROW_ID, ROLLBACK, RS_ID ");
         query.append("FROM ").append(LOGMNR_CONTENTS_VIEW).append(" ");
 
         // These bind parameters will be bound when the query is executed by the caller.
@@ -70,12 +66,20 @@ public class LogMinerQueryBuilder {
             query.append("AND ").append("SRC_CON_NAME = '").append(pdbName.toUpperCase()).append("' ");
         }
 
+        // Excluded schemas, if defined
+        // This prevents things such as picking DDL for changes to LogMiner tables in SYSTEM tablespace
+        // or picking up DML changes inside the SYS and SYSTEM tablespaces.
+        final String excludedSchemas = resolveExcludedSchemaPredicate("SEG_OWNER");
+        if (excludedSchemas.length() > 0) {
+            query.append("AND ").append(excludedSchemas).append(' ');
+        }
+
         query.append("AND (");
 
         // Always include START, COMMIT, MISSING_SCN, and ROLLBACK operations
         query.append("(OPERATION_CODE IN (6,7,34,36)");
 
-        if (!connectorConfig.getDatabaseHistory().storeOnlyCapturedTables()) {
+        if (!schema.storeOnlyCapturedTables()) {
             // In this mode, the connector will always be fed DDL operations for all tables even if they
             // are not part of the inclusion/exclusion lists.
             query.append(" OR ").append(buildDdlPredicate()).append(" ");
@@ -102,20 +106,6 @@ public class LogMinerQueryBuilder {
         // Always ignore the flush table
         query.append("AND TABLE_NAME != '").append(LogWriterFlushStrategy.LOGMNR_FLUSH_TABLE).append("' ");
 
-        // There are some common schemas that we automatically ignore when building the runtime Filter
-        // predicates and we put that same list of schemas here and apply those in the generated SQL.
-        if (!OracleConnectorConfig.EXCLUDED_SCHEMAS.isEmpty()) {
-            query.append("AND SEG_OWNER NOT IN (");
-            for (Iterator<String> i = OracleConnectorConfig.EXCLUDED_SCHEMAS.iterator(); i.hasNext();) {
-                String excludedSchema = i.next();
-                query.append("'").append(excludedSchema.toUpperCase()).append("'");
-                if (i.hasNext()) {
-                    query.append(",");
-                }
-            }
-            query.append(") ");
-        }
-
         String schemaPredicate = buildSchemaPredicate(connectorConfig);
         if (!Strings.isNullOrEmpty(schemaPredicate)) {
             query.append("AND ").append(schemaPredicate).append(" ");
@@ -128,30 +118,7 @@ public class LogMinerQueryBuilder {
 
         query.append("))");
 
-        Set<String> excludedUsers = connectorConfig.getLogMiningUsernameExcludes();
-        if (!excludedUsers.isEmpty()) {
-            query.append(" AND USERNAME NOT IN (");
-            for (Iterator<String> i = excludedUsers.iterator(); i.hasNext();) {
-                String user = i.next();
-                query.append("'").append(user).append("'");
-                if (i.hasNext()) {
-                    query.append(",");
-                }
-            }
-            query.append(")");
-        }
-
         return query.toString();
-    }
-
-    /**
-     * Produces a hash of several columns in {@code V$LOGMNR_CONTENTS} to generate a unique identifier
-     * that can be used to recognize individual rows within the scope of a transaction.
-     *
-     * @return the row hashing function
-     */
-    private static String getRowHash() {
-        return ROW_HASH;
     }
 
     /**
@@ -256,5 +223,30 @@ public class LogMinerQueryBuilder {
             text += "$";
         }
         return text;
+    }
+
+    /**
+     * Resolve the built-in excluded schemas predicate.
+     *
+     * @param fieldName the query field name the predicate applies to, should never be {@code null}
+     * @return the predicate
+     */
+    private static String resolveExcludedSchemaPredicate(String fieldName) {
+        // There are some common schemas that we automatically ignore when building the runtime Filter
+        // predicates, and we put that same list of schemas here and apply those in the generated SQL.
+        if (!OracleConnectorConfig.EXCLUDED_SCHEMAS.isEmpty()) {
+            StringBuilder query = new StringBuilder();
+            query.append('(').append(fieldName).append(" IS NULL OR ");
+            query.append(fieldName).append(" NOT IN (");
+            for (Iterator<String> i = OracleConnectorConfig.EXCLUDED_SCHEMAS.iterator(); i.hasNext();) {
+                String excludedSchema = i.next();
+                query.append('\'').append(excludedSchema.toUpperCase()).append('\'');
+                if (i.hasNext()) {
+                    query.append(',');
+                }
+            }
+            return query.append(')').append(')').toString();
+        }
+        return "";
     }
 }

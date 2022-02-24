@@ -305,7 +305,8 @@ public class MongoDbSnapshotChangeEventSource extends AbstractSnapshotChangeEven
             }
         });
 
-        ctx.offset = new MongoDbOffsetContext(new SourceInfo(connectorConfig), new TransactionContext(), positions);
+        ctx.offset = new MongoDbOffsetContext(new SourceInfo(connectorConfig), new TransactionContext(),
+                new MongoDbIncrementalSnapshotContext<>(false), positions);
     }
 
     private void createDataEvents(ChangeEventSourceContext sourceContext, MongoDbSnapshotContext snapshotContext, ReplicaSet replicaSet,
@@ -485,7 +486,7 @@ public class MongoDbSnapshotChangeEventSource extends AbstractSnapshotChangeEven
         final ReplicaSetOffsetContext replicaSetOffsetContext = offsetContext.getReplicaSetOffsetContext(replicaSet);
         replicaSetOffsetContext.readEvent(collectionId, getClock().currentTime());
 
-        return new MongoDbChangeRecordEmitter(replicaSetPartition, replicaSetOffsetContext, getClock(), document, true);
+        return new MongoDbChangeSnapshotOplogRecordEmitter(replicaSetPartition, replicaSetOffsetContext, getClock(), document, true);
     }
 
     protected Clock getClock() {

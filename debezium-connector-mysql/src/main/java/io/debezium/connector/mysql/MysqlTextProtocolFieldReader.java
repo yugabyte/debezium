@@ -8,7 +8,6 @@ package io.debezium.connector.mysql;
 import java.io.UnsupportedEncodingException;
 import java.sql.Blob;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Calendar;
 
@@ -27,6 +26,10 @@ public class MysqlTextProtocolFieldReader extends AbstractMysqlFieldReader {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MysqlTextProtocolFieldReader.class);
 
+    public MysqlTextProtocolFieldReader(MySqlConnectorConfig config) {
+        super(config);
+    }
+
     /**
      * As MySQL connector/J implementation is broken for MySQL type "TIME" we have to use a binary-ish workaround
      *
@@ -40,10 +43,6 @@ public class MysqlTextProtocolFieldReader extends AbstractMysqlFieldReader {
         }
         else if (b.length() == 0) {
             LOGGER.warn("Encountered a zero length blob for column index {}", columnIndex);
-            final ResultSetMetaData metadata = rs.getMetaData();
-            for (int i = 1; i <= metadata.getColumnCount(); ++i) {
-                LOGGER.warn("Column '{}' value is '{}'", metadata.getColumnName(i), rs.getObject(i));
-            }
             return null;
         }
 
@@ -51,7 +50,9 @@ public class MysqlTextProtocolFieldReader extends AbstractMysqlFieldReader {
             return MySqlValueConverters.stringToDuration(new String(b.getBytes(1, (int) (b.length())), "UTF-8"));
         }
         catch (UnsupportedEncodingException e) {
-            logger.error("Could not read MySQL TIME value as UTF-8");
+            logInvalidValue(rs, columnIndex, b);
+            logger.error("Could not read MySQL TIME value as UTF-8. " +
+                    "Enable TRACE logging to log the problematic column and its value.");
             throw new RuntimeException(e);
         }
     }
@@ -71,7 +72,9 @@ public class MysqlTextProtocolFieldReader extends AbstractMysqlFieldReader {
             return MySqlValueConverters.stringToLocalDate(new String(b.getBytes(1, (int) (b.length())), "UTF-8"), column, table);
         }
         catch (UnsupportedEncodingException e) {
-            logger.error("Could not read MySQL DATE value as UTF-8");
+            logInvalidValue(rs, columnIndex, b);
+            logger.error("Could not read MySQL DATE value as UTF-8. " +
+                    "Enable TRACE logging to log the problematic column and its value.");
             throw new RuntimeException(e);
         }
     }
@@ -86,13 +89,19 @@ public class MysqlTextProtocolFieldReader extends AbstractMysqlFieldReader {
         if (b == null) {
             return null; // Don't continue parsing timestamp field if it is null
         }
+        else if (b.length() == 0) {
+            LOGGER.warn("Encountered a zero length blob for column index {}", columnIndex);
+            return null;
+        }
 
         try {
             return MySqlValueConverters.containsZeroValuesInDatePart((new String(b.getBytes(1, (int) (b.length())), "UTF-8")), column, table) ? null
                     : rs.getTimestamp(columnIndex, Calendar.getInstance());
         }
         catch (UnsupportedEncodingException e) {
-            logger.error("Could not read MySQL DATETIME value as UTF-8");
+            logInvalidValue(rs, columnIndex, b);
+            logger.error("Could not read MySQL DATETIME value as UTF-8. " +
+                    "Enable TRACE logging to log the problematic column and its value.");
             throw new RuntimeException(e);
         }
     }

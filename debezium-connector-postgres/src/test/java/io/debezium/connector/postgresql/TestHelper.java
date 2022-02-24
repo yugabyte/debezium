@@ -34,6 +34,7 @@ import io.debezium.config.Configuration;
 import io.debezium.connector.postgresql.PostgresConnectorConfig.SecureConnectionMode;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.PostgresConnection.PostgresValueConverterBuilder;
+import io.debezium.connector.postgresql.connection.PostgresDefaultValueConverter;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
@@ -81,12 +82,14 @@ public final class TestHelper {
      *
      * @param slotName the name of the logical decoding slot
      * @param dropOnClose true if the slot should be dropped upon close
+     * @param connectorConfig customized connector configuration
      * @return the PostgresConnection instance; never null
      * @throws SQLException if there is a problem obtaining a replication connection
      */
-    public static ReplicationConnection createForReplication(String slotName, boolean dropOnClose) throws SQLException {
+    public static ReplicationConnection createForReplication(String slotName, boolean dropOnClose,
+                                                             PostgresConnectorConfig config)
+            throws SQLException {
         final PostgresConnectorConfig.LogicalDecoder plugin = decoderPlugin();
-        final PostgresConnectorConfig config = new PostgresConnectorConfig(defaultConfig().build());
         return ReplicationConnection.builder(config)
                 .withPlugin(plugin)
                 .withSlot(slotName)
@@ -95,6 +98,18 @@ public final class TestHelper {
                 .statusUpdateInterval(Duration.ofSeconds(10))
                 .withSchema(getSchema(config))
                 .build();
+    }
+
+    /**
+     * Obtain a replication connection instance for the given slot name.
+     *
+     * @param slotName the name of the logical decoding slot
+     * @param dropOnClose true if the slot should be dropped upon close
+     * @return the PostgresConnection instance; never null
+     * @throws SQLException if there is a problem obtaining a replication connection
+     */
+    public static ReplicationConnection createForReplication(String slotName, boolean dropOnClose) throws SQLException {
+        return createForReplication(slotName, dropOnClose, new PostgresConnectorConfig(defaultConfig().build()));
     }
 
     /**
@@ -201,6 +216,20 @@ public final class TestHelper {
         }
     }
 
+    public static PostgresDefaultValueConverter getDefaultValueConverter() {
+        final PostgresConnectorConfig config = new PostgresConnectorConfig(defaultConfig().build());
+        try (final PostgresConnection connection = new PostgresConnection(config.getJdbcConfig(), getPostgresValueConverterBuilder(config))) {
+            return connection.getDefaultValueConverter();
+        }
+    }
+
+    public static Charset getDatabaseCharset() {
+        final PostgresConnectorConfig config = new PostgresConnectorConfig(defaultConfig().build());
+        try (final PostgresConnection connection = new PostgresConnection(config.getJdbcConfig(), getPostgresValueConverterBuilder(config))) {
+            return connection.getDatabaseCharset();
+        }
+    }
+
     public static PostgresSchema getSchema(PostgresConnectorConfig config) {
         return getSchema(config, TestHelper.getTypeRegistry());
     }
@@ -209,6 +238,7 @@ public final class TestHelper {
         return new PostgresSchema(
                 config,
                 typeRegistry,
+                TestHelper.getDefaultValueConverter(),
                 PostgresTopicSelector.create(config),
                 getPostgresValueConverter(typeRegistry, config));
     }
@@ -221,17 +251,16 @@ public final class TestHelper {
 
     public static JdbcConfiguration defaultJdbcConfig() {
         return JdbcConfiguration.copy(Configuration.fromSystemProperties("database."))
+                .with(RelationalDatabaseConnectorConfig.SERVER_NAME, "dbserver1")
                 .withDefault(JdbcConfiguration.DATABASE, "postgres")
                 .withDefault(JdbcConfiguration.HOSTNAME, "localhost")
                 .withDefault(JdbcConfiguration.PORT, 5432)
                 .withDefault(JdbcConfiguration.USER, "postgres")
                 .withDefault(JdbcConfiguration.PASSWORD, "postgres")
-                .with(PostgresConnectorConfig.MAX_RETRIES, 2)
-                .with(PostgresConnectorConfig.RETRY_DELAY_MS, 2000)
                 .build();
     }
 
-    protected static Configuration.Builder defaultConfig() {
+    public static Configuration.Builder defaultConfig() {
         JdbcConfiguration jdbcConfiguration = defaultJdbcConfig();
         Configuration.Builder builder = Configuration.create();
         jdbcConfiguration.forEach((field, value) -> builder.with(PostgresConnectorConfig.DATABASE_CONFIG_PREFIX + field, value));
@@ -239,7 +268,9 @@ public final class TestHelper {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, true)
                 .with(PostgresConnectorConfig.STATUS_UPDATE_INTERVAL_MS, 100)
                 .with(PostgresConnectorConfig.PLUGIN_NAME, decoderPlugin())
-                .with(PostgresConnectorConfig.SSL_MODE, SecureConnectionMode.DISABLED);
+                .with(PostgresConnectorConfig.SSL_MODE, SecureConnectionMode.DISABLED)
+                .with(PostgresConnectorConfig.MAX_RETRIES, 2)
+                .with(PostgresConnectorConfig.RETRY_DELAY_MS, 2000);
         final String testNetworkTimeout = System.getProperty(TEST_PROPERTY_PREFIX + "network.timeout");
         if (testNetworkTimeout != null && testNetworkTimeout.length() != 0) {
             builder.with(PostgresConnectorConfig.STATUS_UPDATE_INTERVAL_MS, Integer.parseInt(testNetworkTimeout));
@@ -391,6 +422,7 @@ public final class TestHelper {
                 config.hStoreHandlingMode(),
                 config.binaryHandlingMode(),
                 config.intervalHandlingMode(),
-                config.toastedValuePlaceholder());
+                config.getUnavailableValuePlaceholder(),
+                config.moneyFractionDigits());
     }
 }

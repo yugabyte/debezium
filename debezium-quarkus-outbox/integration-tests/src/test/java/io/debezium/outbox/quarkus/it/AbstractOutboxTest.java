@@ -9,14 +9,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.math.BigInteger;
-import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 import javax.inject.Inject;
 import javax.persistence.EntityManager;
-import javax.persistence.Query;
 
 import org.hibernate.engine.spi.SessionImplementor;
 import org.hibernate.metamodel.spi.MetamodelImplementor;
@@ -54,21 +52,25 @@ public abstract class AbstractOutboxTest {
         assertEquals(String.class, persister.getPropertyType("type").getReturnedClass());
         assertEquals(Instant.class, persister.getPropertyType("timestamp").getReturnedClass());
         assertEquals(String.class, persister.getPropertyType("payload").getReturnedClass());
+        assertEquals(String.class, persister.getPropertyType("name").getReturnedClass());
+        assertEquals(String.class, persister.getPropertyType("name_upper").getReturnedClass());
+        assertEquals(String.class, persister.getPropertyType("name_no_columndef").getReturnedClass());
     }
 
     @Test
+    @SuppressWarnings("rawtypes")
     public void firedEventGetsPersistedInOutboxTable() {
         myService.doSomething();
 
-        Query q = entityManager
-                .createNativeQuery("SELECT CAST(id as varchar), aggregateId, aggregateType, type, timestamp, payload FROM OutboxEvent");
-        Object[] row = (Object[]) q.getSingleResult();
-
-        assertNotNull(UUID.fromString((String) row[0]));
-        assertEquals(BigInteger.valueOf(1L), row[1]);
-        assertEquals("MyOutboxEvent", row[2]);
-        assertEquals("SomeType", row[3]);
-        assertTrue(((Timestamp) row[4]).toInstant().isBefore(Instant.now()));
-        assertEquals("Some amazing payload", row[5]);
+        final Map row = (Map) entityManager.createQuery("FROM OutboxEvent").getSingleResult();
+        assertNotNull(row.get("id"));
+        assertEquals(1L, row.get("aggregateId"));
+        assertEquals("MyOutboxEvent", row.get("aggregateType"));
+        assertEquals("SomeType", row.get("type"));
+        assertTrue(((Instant) row.get("timestamp")).isBefore(Instant.now()));
+        assertEquals("Some amazing payload", row.get("payload"));
+        assertEquals("John Doe", row.get("name"));
+        assertEquals("JOHN DOE", row.get("name_upper"));
+        assertEquals("Jane Doe", row.get("name_no_columndef"));
     }
 }

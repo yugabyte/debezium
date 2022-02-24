@@ -6,13 +6,15 @@
 package io.debezium.connector.mysql;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
-import io.debezium.config.CommonConnectorConfig;
+import io.debezium.connector.mysql.signal.ExecuteSnapshotKafkaSignal;
+import io.debezium.connector.mysql.signal.KafkaSignalThread;
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.source.snapshot.incremental.AbstractIncrementalSnapshotChangeEventSource;
@@ -20,6 +22,7 @@ import io.debezium.pipeline.source.spi.DataChangeEventListener;
 import io.debezium.pipeline.source.spi.SnapshotProgressListener;
 import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.pipeline.spi.Partition;
+import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.schema.DataCollectionId;
 import io.debezium.schema.DatabaseSchema;
 import io.debezium.util.Clock;
@@ -70,19 +73,33 @@ import io.debezium.util.Clock;
  * <p>A window can be opened and closed right away by the same event. This can happen when a high watermark is an empty set, which means there were no binlog events during the chunk select. Chunk will get inserted right after the low watermark, no events will be deduplicated from the chunk</p>
  * <br/>
  * <b>No updates for included tables</b>
- * <p>It’s important to receive binlog events for the Backfill to make progress.All binlog events are checked against the low and high watermarks, including the events from the tables that aren’t included in the connector. This guarantees that the window processing mode gets updated even when none of the tables included in the connector are getting binlog events.</p>
+ * <p>It’s important to receive binlog events for the incremental snapshot to make progress. All binlog events are checked against the low and high watermarks, including the events from the tables that aren’t included in the connector. This guarantees that the window processing mode gets updated even when none of the tables included in the connector are getting binlog events.</p>
  */
 public class MySqlReadOnlyIncrementalSnapshotChangeEventSource<T extends DataCollectionId> extends AbstractIncrementalSnapshotChangeEventSource<T> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MySqlReadOnlyIncrementalSnapshotChangeEventSource.class);
     private final String showMasterStmt = "SHOW MASTER STATUS";
+    private final KafkaSignalThread<T> kafkaSignal;
 
-    public MySqlReadOnlyIncrementalSnapshotChangeEventSource(CommonConnectorConfig config, JdbcConnection jdbcConnection,
+    public MySqlReadOnlyIncrementalSnapshotChangeEventSource(RelationalDatabaseConnectorConfig config,
+                                                             JdbcConnection jdbcConnection,
                                                              EventDispatcher<T> dispatcher,
-                                                             DatabaseSchema<?> databaseSchema, Clock clock,
+                                                             DatabaseSchema<?> databaseSchema,
+                                                             Clock clock,
                                                              SnapshotProgressListener progressListener,
                                                              DataChangeEventListener dataChangeEventListener) {
         super(config, jdbcConnection, dispatcher, databaseSchema, clock, progressListener, dataChangeEventListener);
+        kafkaSignal = new KafkaSignalThread<>(MySqlConnector.class, config, this);
+    }
+
+    @Override
+    public void init(OffsetContext offsetContext) {
+        super.init(offsetContext);
+        Long signalOffset = getContext().getSignalOffset();
+        if (signalOffset != null) {
+            kafkaSignal.seek(signalOffset);
+        }
+        kafkaSignal.start();
     }
 
     @Override
@@ -91,6 +108,7 @@ public class MySqlReadOnlyIncrementalSnapshotChangeEventSource<T extends DataCol
             LOGGER.warn("Context is null, skipping message processing");
             return;
         }
+        checkEnqueuedSnapshotSignals(offsetContext);
         LOGGER.trace("Checking window for table '{}', key '{}', window contains '{}'", dataCollectionId, key, window);
         boolean windowClosed = getContext().updateWindowState(offsetContext);
         if (windowClosed) {
@@ -108,14 +126,42 @@ public class MySqlReadOnlyIncrementalSnapshotChangeEventSource<T extends DataCol
             LOGGER.warn("Context is null, skipping message processing");
             return;
         }
-        while (getContext().snapshotRunning() && getContext().reachedHighWatermark(offsetContext)) {
+        checkEnqueuedSnapshotSignals(offsetContext);
+        readUntilGtidChange(partition, offsetContext);
+    }
+
+    private void readUntilGtidChange(Partition partition, OffsetContext offsetContext) throws InterruptedException {
+        String currentGtid = getContext().getCurrentGtid(offsetContext);
+        while (getContext().snapshotRunning() && getContext().reachedHighWatermark(currentGtid)) {
+            getContext().closeWindow();
             sendWindowEvents(partition, offsetContext);
             readChunk();
+            if (currentGtid == null && getContext().watermarksChanged()) {
+                return;
+            }
         }
     }
 
     @Override
     public void processFilteredEvent(Partition partition, OffsetContext offsetContext) throws InterruptedException {
+        if (getContext() == null) {
+            LOGGER.warn("Context is null, skipping message processing");
+            return;
+        }
+        checkEnqueuedSnapshotSignals(offsetContext);
+        boolean windowClosed = getContext().updateWindowState(offsetContext);
+        if (windowClosed) {
+            sendWindowEvents(partition, offsetContext);
+            readChunk();
+        }
+    }
+
+    public void enqueueDataCollectionNamesToSnapshot(List<String> dataCollectionIds, long signalOffset) {
+        getContext().enqueueDataCollectionsToSnapshot(dataCollectionIds, signalOffset);
+    }
+
+    @Override
+    public void processTransactionStartedEvent(Partition partition, OffsetContext offsetContext) throws InterruptedException {
         if (getContext() == null) {
             LOGGER.warn("Context is null, skipping message processing");
             return;
@@ -127,15 +173,17 @@ public class MySqlReadOnlyIncrementalSnapshotChangeEventSource<T extends DataCol
         }
     }
 
+    @Override
+    public void processTransactionCommittedEvent(Partition partition, OffsetContext offsetContext) throws InterruptedException {
+        if (getContext() == null) {
+            LOGGER.warn("Context is null, skipping message processing");
+            return;
+        }
+        readUntilGtidChange(partition, offsetContext);
+    }
+
     protected void updateLowWatermark() {
-        try {
-            getExecutedGtidSet(getContext()::setLowWatermark);
-            // it is required that the chunk selection sees the changes that are committed before its execution
-            jdbcConnection.commit();
-        }
-        catch (SQLException e) {
-            throw new DebeziumException(e);
-        }
+        getExecutedGtidSet(getContext()::setLowWatermark);
     }
 
     protected void updateHighWatermark() {
@@ -156,6 +204,7 @@ public class MySqlReadOnlyIncrementalSnapshotChangeEventSource<T extends DataCol
                     }
                 }
             });
+            jdbcConnection.commit();
         }
         catch (SQLException e) {
             throw new DebeziumException(e);
@@ -175,6 +224,15 @@ public class MySqlReadOnlyIncrementalSnapshotChangeEventSource<T extends DataCol
         }
     }
 
+    @Override
+    protected void sendEvent(Partition partition, EventDispatcher<T> dispatcher, OffsetContext offsetContext, Object[] row) throws InterruptedException {
+        SourceInfo sourceInfo = ((MySqlOffsetContext) offsetContext).getSource();
+        String query = sourceInfo.getQuery();
+        sourceInfo.setQuery(null);
+        super.sendEvent(partition, dispatcher, offsetContext, row);
+        sourceInfo.setQuery(query);
+    }
+
     public void rereadChunk() throws InterruptedException {
         if (context == null) {
             return;
@@ -185,6 +243,17 @@ public class MySqlReadOnlyIncrementalSnapshotChangeEventSource<T extends DataCol
         window.clear();
         context.revertChunk();
         readChunk();
+    }
+
+    private void checkEnqueuedSnapshotSignals(OffsetContext offsetContext) throws InterruptedException {
+        while (getContext().hasExecuteSnapshotSignals()) {
+            addDataCollectionNamesToSnapshot(getContext().getExecuteSnapshotSignals(), offsetContext);
+        }
+    }
+
+    private void addDataCollectionNamesToSnapshot(ExecuteSnapshotKafkaSignal executeSnapshotSignal, OffsetContext offsetContext) throws InterruptedException {
+        super.addDataCollectionNamesToSnapshot(executeSnapshotSignal.getDataCollections(), offsetContext);
+        getContext().setSignalOffset(executeSnapshotSignal.getSignalOffset());
     }
 
     private MySqlReadOnlyIncrementalSnapshotContext<T> getContext() {

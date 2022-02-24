@@ -34,6 +34,8 @@ public class OracleDdlParserListener extends PlSqlParserBaseListener implements 
         listeners.add(new CreateTableParserListener(catalogName, schemaName, parser, listeners));
         listeners.add(new AlterTableParserListener(catalogName, schemaName, parser, listeners));
         listeners.add(new DropTableParserListener(catalogName, schemaName, parser));
+        listeners.add(new CommentParserListener(catalogName, schemaName, parser));
+        listeners.add(new TruncateTableParserListener(catalogName, schemaName, parser));
     }
 
     @Override

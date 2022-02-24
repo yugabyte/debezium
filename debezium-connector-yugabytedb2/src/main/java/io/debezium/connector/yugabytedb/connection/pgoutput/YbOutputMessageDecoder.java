@@ -267,7 +267,7 @@ public class YbOutputMessageDecoder extends AbstractMessageDecoder {
         final List<io.debezium.relational.Column> readColumns = getTableColumnsFromDatabase(connection, databaseMetadata, tableId);
         columnDefaults = readColumns.stream()
                 .filter(io.debezium.relational.Column::hasDefaultValue)
-                .collect(toMap(io.debezium.relational.Column::name, column -> Optional.ofNullable(column.defaultValue())));
+                .collect(toMap(io.debezium.relational.Column::name, column -> Optional.ofNullable(column.defaultValueExpression())));
 
         columnOptionality = readColumns.stream().collect(toMap(io.debezium.relational.Column::name,
                 io.debezium.relational.Column::isOptional));
@@ -604,7 +604,7 @@ public class YbOutputMessageDecoder extends AbstractMessageDecoder {
                     .scale(columnMetadata.getScale());
 
             if (columnMetadata.hasDefaultValue()) {
-                editor.defaultValue(columnMetadata.getDefaultValue());
+                editor.defaultValueExpression(columnMetadata.getDefaultValue().toString());
             }
 
             columns.add(editor.create());

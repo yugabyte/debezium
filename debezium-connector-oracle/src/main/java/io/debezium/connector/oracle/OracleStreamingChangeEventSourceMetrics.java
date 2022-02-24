@@ -9,6 +9,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -23,14 +24,14 @@ import io.debezium.annotation.ThreadSafe;
 import io.debezium.annotation.VisibleForTesting;
 import io.debezium.connector.base.ChangeEventQueueMetrics;
 import io.debezium.connector.common.CdcSourceTaskContext;
-import io.debezium.pipeline.metrics.StreamingChangeEventSourceMetrics;
+import io.debezium.pipeline.metrics.DefaultStreamingChangeEventSourceMetrics;
 import io.debezium.pipeline.source.spi.EventMetadataProvider;
 
 /**
  * The metrics implementation for Oracle connector streaming phase.
  */
 @ThreadSafe
-public class OracleStreamingChangeEventSourceMetrics extends StreamingChangeEventSourceMetrics implements OracleStreamingChangeEventSourceMetricsMXBean {
+public class OracleStreamingChangeEventSourceMetrics extends DefaultStreamingChangeEventSourceMetrics implements OracleStreamingChangeEventSourceMetricsMXBean {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OracleStreamingChangeEventSourceMetrics.class);
 
@@ -47,7 +48,6 @@ public class OracleStreamingChangeEventSourceMetrics extends StreamingChangeEven
     private final AtomicReference<Duration> maxDurationOfFetchingQuery = new AtomicReference<>();
     private final AtomicReference<Duration> totalBatchProcessingDuration = new AtomicReference<>();
     private final AtomicReference<Duration> lastBatchProcessingDuration = new AtomicReference<>();
-    private final AtomicReference<Duration> maxBatchProcessingDuration = new AtomicReference<>();
     private final AtomicReference<Duration> totalParseTime = new AtomicReference<>();
     private final AtomicReference<Duration> totalStartLogMiningSessionDuration = new AtomicReference<>();
     private final AtomicReference<Duration> lastStartLogMiningSessionDuration = new AtomicReference<>();
@@ -136,10 +136,10 @@ public class OracleStreamingChangeEventSourceMetrics extends StreamingChangeEven
         offsetScn.set(Scn.NULL);
         committedScn.set(Scn.NULL);
 
-        currentLogFileName = new AtomicReference<>();
+        currentLogFileName = new AtomicReference<>(new String[0]);
         minimumLogsMined.set(0L);
         maximumLogsMined.set(0L);
-        redoLogStatus = new AtomicReference<>();
+        redoLogStatus = new AtomicReference<>(new String[0]);
         switchCounter.set(0);
 
         batchSizeDefault = connectorConfig.getLogMiningBatchSizeDefault();
@@ -165,7 +165,6 @@ public class OracleStreamingChangeEventSourceMetrics extends StreamingChangeEven
         maxDurationOfFetchingQuery.set(Duration.ZERO);
         lastDurationOfFetchingQuery.set(Duration.ZERO);
         logMinerQueryCount.set(0);
-        maxBatchProcessingDuration.set(Duration.ZERO);
         totalDurationOfFetchingQuery.set(Duration.ZERO);
         lastCapturedDmlCount.set(0);
         maxCapturedDmlCount.set(0);
@@ -213,6 +212,9 @@ public class OracleStreamingChangeEventSourceMetrics extends StreamingChangeEven
         if (names.size() < minimumLogsMined.get()) {
             minimumLogsMined.set(names.size());
         }
+        else if (minimumLogsMined.get() == 0) {
+            minimumLogsMined.set(names.size());
+        }
         if (names.size() > maximumLogsMined.get()) {
             maximumLogsMined.set(names.size());
         }
@@ -257,8 +259,14 @@ public class OracleStreamingChangeEventSourceMetrics extends StreamingChangeEven
     public void setLastDurationOfBatchProcessing(Duration lastDuration) {
         lastBatchProcessingDuration.set(lastDuration);
         totalBatchProcessingDuration.accumulateAndGet(lastDuration, Duration::plus);
-        if (maxBatchProcessingDuration.get().toMillis() < lastDuration.toMillis()) {
-            maxBatchProcessingDuration.set(lastDuration);
+        if (maxBatchProcessingTime.get().toMillis() < lastDuration.toMillis()) {
+            maxBatchProcessingTime.set(lastDuration);
+        }
+        if (minBatchProcessingTime.get().toMillis() > lastDuration.toMillis()) {
+            minBatchProcessingTime.set(lastDuration);
+        }
+        else if (minBatchProcessingTime.get().toMillis() == 0L) {
+            minBatchProcessingTime.set(lastDuration);
         }
         if (getLastBatchProcessingThroughput() > maxBatchProcessingThroughput.get()) {
             maxBatchProcessingThroughput.set(getLastBatchProcessingThroughput());
@@ -424,6 +432,7 @@ public class OracleStreamingChangeEventSourceMetrics extends StreamingChangeEven
 
     public void setCurrentBatchProcessingTime(Duration currentBatchProcessingTime) {
         totalProcessingTime.accumulateAndGet(currentBatchProcessingTime, Duration::plus);
+        setLastDurationOfBatchProcessing(currentBatchProcessingTime);
     }
 
     public void addCurrentResultSetNext(Duration currentNextTime) {
@@ -697,6 +706,9 @@ public class OracleStreamingChangeEventSourceMetrics extends StreamingChangeEven
             if (minLagFromTheSourceDuration.get().toMillis() > lag.toMillis()) {
                 minLagFromTheSourceDuration.set(lag);
             }
+            else if (minLagFromTheSourceDuration.get().toMillis() == 0) {
+                minLagFromTheSourceDuration.set(lag);
+            }
         }
     }
 
@@ -735,12 +747,11 @@ public class OracleStreamingChangeEventSourceMetrics extends StreamingChangeEven
                 ", maxDurationOfFetchingQuery=" + maxDurationOfFetchingQuery +
                 ", totalBatchProcessingDuration=" + totalBatchProcessingDuration +
                 ", lastBatchProcessingDuration=" + lastBatchProcessingDuration +
-                ", maxBatchProcessingDuration=" + maxBatchProcessingDuration +
                 ", maxBatchProcessingThroughput=" + maxBatchProcessingThroughput +
-                ", currentLogFileName=" + currentLogFileName +
+                ", currentLogFileName=" + Arrays.asList(currentLogFileName.get()) +
                 ", minLogFilesMined=" + minimumLogsMined +
                 ", maxLogFilesMined=" + maximumLogsMined +
-                ", redoLogStatus=" + redoLogStatus +
+                ", redoLogStatus=" + Arrays.asList(redoLogStatus.get()) +
                 ", switchCounter=" + switchCounter +
                 ", batchSize=" + batchSize +
                 ", millisecondToSleepBetweenMiningQuery=" + millisecondToSleepBetweenMiningQuery +
