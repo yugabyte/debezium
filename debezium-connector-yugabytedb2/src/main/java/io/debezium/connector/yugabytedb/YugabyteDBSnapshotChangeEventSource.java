@@ -21,10 +21,7 @@ import io.debezium.pipeline.source.AbstractSnapshotChangeEventSource;
 import io.debezium.pipeline.source.spi.SnapshotProgressListener;
 import io.debezium.pipeline.spi.SnapshotResult;
 import io.debezium.relational.RelationalSnapshotChangeEventSource;
-import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
-import io.debezium.schema.SchemaChangeEvent;
-import io.debezium.schema.SchemaChangeEvent.SchemaChangeEventType;
 import io.debezium.util.Clock;
 import io.debezium.util.Strings;
 
@@ -111,166 +108,7 @@ public class YugabyteDBSnapshotChangeEventSource extends AbstractSnapshotChangeE
                                                              SnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext,
                                                              SnapshottingTask snapshottingTask)
             throws Exception {
-        final RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> ctx = (RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext>) snapshotContext;
-
-        // Connection connection = null;
-        try {
-            LOGGER.info("Snapshot step 1 - Preparing");
-
-            if (previousOffset != null && previousOffset.isSnapshotRunning()) {
-                LOGGER.info("Previous snapshot was cancelled before completion; a new snapshot will be taken.");
-            }
-
-            // connection = createSnapshotConnection();
-            // connectionCreated(ctx);
-
-            LOGGER.info("Snapshot step 2 - Determining captured tables");
-
-            // Note that there's a minor race condition here: a new table matching the filters could be created between
-            // this call and the determination of the initial snapshot position below; this seems acceptable, though
-            determineCapturedTables(ctx);
-            snapshotProgressListener.monitoredDataCollectionsDetermined(ctx.capturedTables);
-
-            LOGGER.info("Snapshot step 3 - Locking captured tables {}", ctx.capturedTables);
-
-            if (snapshottingTask.snapshotSchema()) {
-                // lockTablesForSchemaSnapshot(context, ctx);
-            }
-
-            LOGGER.info("Snapshot step 4 - Determining snapshot offset");
-            determineSnapshotOffset(ctx, previousOffset);
-
-            LOGGER.info("Snapshot step 5 - Reading structure of captured tables");
-            readTableStructure(context, ctx, previousOffset);
-
-            if (snapshottingTask.snapshotSchema()) {
-                LOGGER.info("Snapshot step 6 - Persisting schema history");
-
-                // createSchemaChangeEventsForTables(context, ctx, snapshottingTask);
-
-                // if we've been interrupted before, the TX rollback will cause any locks to be released
-                releaseSchemaSnapshotLocks(ctx);
-            }
-            else {
-                LOGGER.info("Snapshot step 6 - Skipping persisting of schema history");
-            }
-
-            if (snapshottingTask.snapshotData()) {
-                LOGGER.info("Snapshot step 7 - Snapshotting data");
-                createDataEvents(context, ctx);
-            }
-            else {
-                LOGGER.info("Snapshot step 7 - Skipping snapshotting of data");
-                // releaseDataSnapshotLocks(ctx);
-                ctx.offset.preSnapshotCompletion();
-                ctx.offset.postSnapshotCompletion();
-            }
-
-            // postSnapshot();
-            dispatcher.alwaysDispatchHeartbeatEvent(ctx.partition, ctx.offset);
-            return SnapshotResult.completed(ctx.offset);
-        }
-        finally {
-            // rollbackTransaction(connection);
-        }
-    }
-
-    private void createDataEvents(ChangeEventSourceContext sourceContext,
-                                  RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext)
-            throws Exception {
-        EventDispatcher.SnapshotReceiver snapshotReceiver = dispatcher.getSnapshotChangeEventReceiver();
-        // tryStartingSnapshot(snapshotContext);
-
-        final int tableCount = snapshotContext.capturedTables.size();
-        int tableOrder = 1;
-        LOGGER.info("Snapshotting contents of {} tables while still in transaction", tableCount);
-        for (Iterator<TableId> tableIdIterator = snapshotContext.capturedTables.iterator(); tableIdIterator.hasNext();) {
-            final TableId tableId = tableIdIterator.next();
-            snapshotContext.lastTable = !tableIdIterator.hasNext();
-
-            if (!sourceContext.isRunning()) {
-                throw new InterruptedException("Interrupted while snapshotting table " + tableId);
-            }
-
-            LOGGER.debug("Snapshotting table {}", tableId);
-
-            createDataEventsForTable(sourceContext, snapshotContext, snapshotReceiver,
-                    snapshotContext.tables.forTable(tableId), tableOrder++, tableCount);
-        }
-
-        // releaseDataSnapshotLocks(snapshotContext);
-        snapshotContext.offset.preSnapshotCompletion();
-        snapshotReceiver.completeSnapshot();
-        snapshotContext.offset.postSnapshotCompletion();
-    }
-
-    private void createDataEventsForTable(ChangeEventSourceContext sourceContext,
-                                          RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext,
-                                          EventDispatcher.SnapshotReceiver snapshotReceiver, Table table, int tableOrder,
-                                          int tableCount)
-            throws InterruptedException {
-
-        long exportStart = clock.currentTimeInMillis();
-        LOGGER.info("Exporting data from table '{}' ({} of {} tables)", table.id(), tableOrder, tableCount);
-
-        // final Optional<String> selectStatement = determineSnapshotSelect(snapshotContext, table.id());
-        if (true/* !selectStatement.isPresent() */) {
-            LOGGER.warn("For table '{}' the select statement was not provided, skipping table", table.id());
-            snapshotProgressListener.dataCollectionSnapshotCompleted(table.id(), 0);
-            return;
-        }
-        // LOGGER.info("\t For table '{}' using select statement: '{}'", table.id(), selectStatement.get());
-        final OptionalLong rowCount = OptionalLong.empty();// rowCountForTable(table.id());
-
-        // try (Statement statement = readTableStatement(rowCount);
-        // ResultSet rs = statement.executeQuery(selectStatement.get())) {
-
-        // ColumnUtils.ColumnArray columnArray = ColumnUtils.toArray(rs, table);
-        long rows = 0;
-        // Threads.Timer logTimer = getTableScanLogTimer();
-        snapshotContext.lastRecordInTable = false;
-
-        // if (rs.next()) {
-        // while (!snapshotContext.lastRecordInTable) {
-        // if (!sourceContext.isRunning()) {
-        // throw new InterruptedException("Interrupted while snapshotting table " + table.id());
-        // }
-        //
-        // rows++;
-        // final Object[] row = jdbcConnection.rowToArray(table, schema(), rs, columnArray);
-        //
-        // snapshotContext.lastRecordInTable = !rs.next();
-        // if (logTimer.expired()) {
-        // long stop = clock.currentTimeInMillis();
-        // if (rowCount.isPresent()) {
-        // LOGGER.info("\t Exported {} of {} records for table '{}' after {}", rows, rowCount.getAsLong(),
-        // table.id(), Strings.duration(stop - exportStart));
-        // }
-        // else {
-        // LOGGER.info("\t Exported {} records for table '{}' after {}", rows, table.id(),
-        // Strings.duration(stop - exportStart));
-        // }
-        // snapshotProgressListener.rowsScanned(table.id(), rows);
-        // logTimer = getTableScanLogTimer();
-        // }
-        //
-        // if (snapshotContext.lastTable && snapshotContext.lastRecordInTable) {
-        // lastSnapshotRecord(snapshotContext);
-        // }
-        // dispatcher.dispatchSnapshotEvent(table.id(), getChangeRecordEmitter(snapshotContext, table.id(), row), snapshotReceiver);
-        // }
-        // }
-        // else if (snapshotContext.lastTable) {
-        // lastSnapshotRecord(snapshotContext);
-        // }
-
-        LOGGER.info("\t Finished exporting {} records for table '{}'; total duration '{}'", rows,
-                table.id(), Strings.duration(clock.currentTimeInMillis() - exportStart));
-        snapshotProgressListener.dataCollectionSnapshotCompleted(table.id(), rows);
-        // }
-        // catch (SQLException e) {
-        // throw new ConnectException("Snapshotting of table " + table.id() + " failed", e);
-        // }
+        return SnapshotResult.completed(previousOffset);
     }
 
     @Override
@@ -296,41 +134,11 @@ public class YugabyteDBSnapshotChangeEventSource extends AbstractSnapshotChangeE
         return new PostgresSnapshotContext(partition, connectorConfig.databaseName());
     }
 
-    // @Override
-    // protected void connectionCreated(RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext)
-    // throws Exception {
-    // // If using catch up streaming, the connector opens the transaction that the snapshot will eventually use
-    // // before the catch up streaming starts. By looking at the current wal location, the transaction can determine
-    // // where the catch up streaming should stop. The transaction is held open throughout the catch up
-    // // streaming phase so that the snapshot is performed from a consistent view of the data. Since the isolation
-    // // level on the transaction used in catch up streaming has already set the isolation level and executed
-    // // statements, the transaction does not need to get set the level again here.
-    // if (snapshotter.shouldStreamEventsStartingFromSnapshot() && startingSlotInfo == null) {
-    // setSnapshotTransactionIsolationLevel();
-    // }
-    // schema.refresh(jdbcConnection, false);
-    // }
-
     protected Set<TableId> getAllTableIds(RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> ctx)
             throws Exception {
         // return jdbcConnection.readTableNames(ctx.catalogName, null, null, new String[]{ "TABLE" });
         return new HashSet<>();
     }
-
-    // @Override
-    // protected void lockTablesForSchemaSnapshot(ChangeEventSourceContext sourceContext,
-    // RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext)
-    // throws SQLException, InterruptedException {
-    // final Duration lockTimeout = connectorConfig.snapshotLockTimeout();
-    // final Optional<String> lockStatement = snapshotter.snapshotTableLockingStatement(lockTimeout, snapshotContext.capturedTables);
-    //
-    // if (lockStatement.isPresent()) {
-    // LOGGER.info("Waiting a maximum of '{}' seconds for each table lock", lockTimeout.getSeconds());
-    // jdbcConnection.executeWithoutCommitting(lockStatement.get());
-    // // now that we have the locks, refresh the schema
-    // schema.refresh(jdbcConnection, false);
-    // }
-    // }
 
     protected void releaseSchemaSnapshotLocks(RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext)
             throws SQLException {
@@ -389,50 +197,6 @@ public class YugabyteDBSnapshotChangeEventSource extends AbstractSnapshotChangeE
         // }
 
         return null;// OpId.valueOf(jdbcConnection.currentXLogLocation());
-    }
-
-    protected void readTableStructure(ChangeEventSourceContext sourceContext,
-                                      RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext,
-                                      YugabyteDBOffsetContext offsetContext)
-            throws SQLException, InterruptedException {
-        Set<String> schemas = snapshotContext.capturedTables.stream()
-                .map(TableId::schema)
-                .collect(Collectors.toSet());
-
-        // reading info only for the schemas we're interested in as per the set of captured tables;
-        // while the passed table name filter alone would skip all non-included tables, reading the schema
-        // would take much longer that way
-        // for (String schema : schemas) {
-        // if (!sourceContext.isRunning()) {
-        // throw new InterruptedException("Interrupted while reading structure of schema " + schema);
-        // }
-        //
-        // LOGGER.info("Reading structure of schema '{}'", snapshotContext.catalogName);
-        // jdbcConnection.readSchema(
-        // snapshotContext.tables,
-        // snapshotContext.catalogName,
-        // schema,
-        // connectorConfig.getTableFilters().dataCollectionFilter(),
-        // null,
-        // false);
-        // }
-        // schema.refresh(jdbcConnection, false);
-    }
-
-    protected SchemaChangeEvent getCreateTableEvent(
-                                                    RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> snapshotContext,
-                                                    Table table)
-            throws SQLException {
-        return new SchemaChangeEvent(
-                snapshotContext.partition.getSourcePartition(),
-                snapshotContext.offset.getOffset(),
-                snapshotContext.offset.getSourceInfo(),
-                snapshotContext.catalogName,
-                table.id().schema(),
-                null,
-                table,
-                SchemaChangeEventType.CREATE,
-                true);
     }
 
     @Override

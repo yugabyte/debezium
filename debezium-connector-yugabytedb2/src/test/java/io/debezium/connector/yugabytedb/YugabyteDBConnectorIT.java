@@ -2099,6 +2099,34 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
 
     // SURANJAN
     @Test
+    public void testSsnapshotPerformance() throws Exception {
+        TestHelper.dropAllSchemas();
+        TestHelper.executeDDL("postgres_create_tables.ddl");
+        Thread.sleep(1000);
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                // .with
+                .with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1")
+                .with(YugabyteDBConnectorConfig.PORT, 5433)
+                .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
+                .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
+                .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
+                .with(YugabyteDBConnectorConfig.AUTO_CREATE_STREAM, Boolean.TRUE)
+                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" /* + ",public.t2" */);
+        // .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        final long recordsCount = 100000;
+        // final int batchSize = 10;
+
+        // batchInsertRecords(recordsCount, batchSize);
+        CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
+                .exceptionally(throwable -> {
+                    throw new RuntimeException(throwable);
+                }).get();
+    }
+
+    // SURANJAN
+    @Test
     public void testStreamingPerformance() throws Exception {
         TestHelper.dropAllSchemas();
         TestHelper.executeDDL("postgres_create_tables.ddl");
@@ -2110,6 +2138,7 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
                 .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
                 .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
+                .with(YugabyteDBConnectorConfig.AUTO_CREATE_STREAM, Boolean.TRUE)
                 .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, "public.t1" /* + ",public.t2" */);
         // .with(YugabyteDBConnectorConfig.STREAM_ID, "3ec5241cea9c44d9a891245c357f0533");
         start(YugabyteDBConnector.class, configBuilder.build());
