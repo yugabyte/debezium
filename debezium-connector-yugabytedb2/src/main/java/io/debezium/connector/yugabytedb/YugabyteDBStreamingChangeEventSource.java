@@ -303,8 +303,6 @@ public class YugabyteDBStreamingChangeEventSource implements
                         table, streamId, tabletId,
                         cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime());
 
-                boolean receivedMessage = response.getResp().getCdcSdkRecordsCount() != 0;
-
                 for (CdcService.CDCSDKProtoRecordPB record : response
                         .getResp()
                         .getCdcSdkProtoRecordsList()) {
@@ -405,19 +403,6 @@ public class YugabyteDBStreamingChangeEventSource implements
 
                 probeConnectionIfNeeded();
 
-                if (receivedMessage) {
-                    noMessageIterations = 0;
-                }
-                else {
-                    if (offsetContext.hasCompletelyProcessedPosition()) {
-                        dispatcher.dispatchHeartbeatEvent(part, offsetContext);
-                    }
-                    noMessageIterations++;
-                    if (noMessageIterations >= THROTTLE_NO_MESSAGE_BEFORE_PAUSE) {
-                        noMessageIterations = 0;
-                        pauseNoMessage.sleepWhen(true);
-                    }
-                }
                 if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
                     // During catch up streaming, the streaming phase needs to hold a transaction open so that
                     // the phase can stream event up to a specific lsn and the snapshot that occurs after the catch up
