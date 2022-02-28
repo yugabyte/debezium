@@ -117,6 +117,8 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                     return null;
                 case UPDATE:
                     return null;
+                case READ:
+                    return null;
                 // return columnValues(message.getOldTupleList(), tableId, true,
                 // message.hasTypeMetadata(), true, true);
                 default:
