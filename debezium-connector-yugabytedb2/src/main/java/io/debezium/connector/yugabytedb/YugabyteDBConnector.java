@@ -31,6 +31,7 @@ import io.debezium.connector.common.RelationalBaseSourceConnector;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.TableId;
+import org.yb.master.MasterTypes;
 
 /**
  * A Kafka Connect source connector that creates tasks which use YugabyteDB CDC API
@@ -343,6 +344,12 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         try {
             ListTablesResponse tablesResp = this.ybClient.getTablesList();
             for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
+                if (tableInfo.getRelationType() == MasterTypes.RelationType.INDEX_TABLE_RELATION ||
+                        tableInfo.getRelationType() == MasterTypes.RelationType.SYSTEM_TABLE_RELATION) {
+                    // Ignoring the index and system tables from getting added for streaming.
+                    continue;
+                }
+
                 String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName() + "." + tableInfo.getName();
                 TableId tableId = YugabyteDBSchema.parseWithSchema(fqlTableName, tableInfo.getPgschemaName());
                 if (yugabyteDBConnectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
