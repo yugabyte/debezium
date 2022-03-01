@@ -278,9 +278,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         for (Pair<String, String> entry : tabletPairList) {
             final String tabletId = entry.getValue();
             offsetContext.initSourceInfo(tabletId, this.connectorConfig);
-            if(offsetContext.lsn(tabletId).equals(new OpId(0,0,null,0,0))){
-                offsetContext.getSourceInfo(tabletId).updateLastCommit(offsetContext.lastCompletelyProcessedLsn());
-            }
+            offsetContext.getSourceInfo(tabletId).updateLastCommit(offsetContext.lastCompletelyProcessedLsn());
         }
         LOGGER.debug("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
 

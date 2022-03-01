@@ -336,7 +336,13 @@ public class YugabyteDBOffsetContext implements OffsetContext {
         public YugabyteDBOffsetContext load(Map<String, ?> offset) {
 
             LOGGER.debug("The offset being loaded in YugabyteDBOffsetContext.. " + offset);
-            OpId opid1 = OpId.valueOf((String) offset.get(YugabyteDBOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
+            OpId lastCompletelyProcessedLsn;
+            if(offset != null){
+                lastCompletelyProcessedLsn = OpId.valueOf((String) offset.get(YugabyteDBOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
+            }
+            else{
+                lastCompletelyProcessedLsn = new OpId(0, 0, null, 0, 0);
+            }
             /*
              * final OpId lsn = OpId.valueOf(readOptionalString(offset, SourceInfo.LSN_KEY));
              * final OpId lastCompletelyProcessedLsn = OpId.valueOf(readOptionalString(offset,
@@ -358,9 +364,9 @@ public class YugabyteDBOffsetContext implements OffsetContext {
              */
 
             return new YugabyteDBOffsetContext(connectorConfig,
-                    opid1,
-                    opid1,
-                    opid1,
+                    lastCompletelyProcessedLsn,
+                    lastCompletelyProcessedLsn,
+                    lastCompletelyProcessedLsn,
                     "txId", Instant.MIN, false, false,
                     TransactionContext.load(offset),
                     SignalBasedIncrementalSnapshotContext.load(offset));
