@@ -5,17 +5,6 @@
  */
 package io.debezium.connector.yugabytedb;
 
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Struct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.debezium.connector.SnapshotRecord;
 import io.debezium.connector.yugabytedb.connection.OpId;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
@@ -28,6 +17,15 @@ import io.debezium.relational.TableId;
 import io.debezium.schema.DataCollectionId;
 import io.debezium.time.Conversions;
 import io.debezium.util.Clock;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Struct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class YugabyteDBOffsetContext implements OffsetContext {
     public static final String LAST_COMPLETELY_PROCESSED_LSN_KEY = "lsn_proc";
@@ -72,21 +70,21 @@ public class YugabyteDBOffsetContext implements OffsetContext {
         this.incrementalSnapshotContext = incrementalSnapshotContext;
     }
 
-    public YugabyteDBOffsetContext(Set<YugabyteDBOffsetContext> s,
+    public YugabyteDBOffsetContext(Map<YBPartition, YugabyteDBOffsetContext> previousOffsets,
                                    YugabyteDBConnectorConfig config) {
         this.tabletSourceInfo = new ConcurrentHashMap();
         this.sourceInfo = new SourceInfo(config);
         this.sourceInfoSchema = sourceInfo.schema();
-        for (YugabyteDBOffsetContext context : s) {
-            if (context != null) {
-                this.lastCompletelyProcessedLsn = context.lastCompletelyProcessedLsn;
-                this.lastCommitLsn = context.lastCommitLsn;
-                LOGGER.debug("Populating the tabletsourceinfo" + context.getTabletSourceInfo());
-                if (context.getTabletSourceInfo() != null) {
-                    this.tabletSourceInfo.putAll(context.getTabletSourceInfo());
-                }
-            }
+
+        for (Map.Entry<YBPartition, YugabyteDBOffsetContext> context : previousOffsets.entrySet()) {
+            this.lastCompletelyProcessedLsn = context.getValue().lastCompletelyProcessedLsn;
+            this.lastCommitLsn = context.getValue().lastCommitLsn;
+            String tabletId = context.getKey().getSourcePartition().values().stream().findAny().get();
+            initSourceInfo(tabletId, config);
+            this.updateWalPosition(tabletId,
+                    this.lastCommitLsn, lastCompletelyProcessedLsn, null, null, null, null);
         }
+        LOGGER.debug("Populating the tabletsourceinfo with " + this.getTabletSourceInfo());
         this.transactionContext = new TransactionContext();
         this.incrementalSnapshotContext = new SignalBasedIncrementalSnapshotContext<>();
     }
@@ -243,6 +241,10 @@ public class YugabyteDBOffsetContext implements OffsetContext {
         return lastCompletelyProcessedLsn;
     }
 
+    OpId lastCompletelyProcessedLsn(String tabletId) {
+        return lastCompletelyProcessedLsn;
+    }
+
     OpId lastCommitLsn() {
         return lastCommitLsn;
     }
@@ -341,7 +343,7 @@ public class YugabyteDBOffsetContext implements OffsetContext {
                 lastCompletelyProcessedLsn = OpId.valueOf((String) offset.get(YugabyteDBOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
             }
             else {
-                lastCompletelyProcessedLsn = new OpId(0, 0, null, 0, 0);
+                lastCompletelyProcessedLsn = new OpId(0, 0, "".getBytes(), 0, 0);
             }
             /*
              * final OpId lsn = OpId.valueOf(readOptionalString(offset, SourceInfo.LSN_KEY));
