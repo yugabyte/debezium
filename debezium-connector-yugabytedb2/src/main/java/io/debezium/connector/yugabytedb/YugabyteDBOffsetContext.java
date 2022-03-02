@@ -5,16 +5,6 @@
  */
 package io.debezium.connector.yugabytedb;
 
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Struct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.debezium.connector.SnapshotRecord;
 import io.debezium.connector.yugabytedb.connection.OpId;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
@@ -27,6 +17,15 @@ import io.debezium.relational.TableId;
 import io.debezium.schema.DataCollectionId;
 import io.debezium.time.Conversions;
 import io.debezium.util.Clock;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Struct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class YugabyteDBOffsetContext implements OffsetContext {
     public static final String LAST_COMPLETELY_PROCESSED_LSN_KEY = "lsn_proc";
@@ -78,12 +77,15 @@ public class YugabyteDBOffsetContext implements OffsetContext {
         this.sourceInfoSchema = sourceInfo.schema();
 
         for (Map.Entry<YBPartition, YugabyteDBOffsetContext> context : previousOffsets.entrySet()) {
-            this.lastCompletelyProcessedLsn = context.getValue().lastCompletelyProcessedLsn;
-            this.lastCommitLsn = context.getValue().lastCommitLsn;
-            String tabletId = context.getKey().getSourcePartition().values().stream().findAny().get();
-            initSourceInfo(tabletId, config);
-            this.updateWalPosition(tabletId,
-                    this.lastCommitLsn, lastCompletelyProcessedLsn, null, null, null, null);
+            YugabyteDBOffsetContext c = context.getValue();
+            if (c != null) {
+                this.lastCompletelyProcessedLsn = c.lastCompletelyProcessedLsn;
+                this.lastCommitLsn = c.lastCommitLsn;
+                String tabletId = context.getKey().getSourcePartition().values().stream().findAny().get();
+                initSourceInfo(tabletId, config);
+                this.updateWalPosition(tabletId,
+                        this.lastCommitLsn, lastCompletelyProcessedLsn, null, null, null, null);
+            }
         }
         LOGGER.debug("Populating the tabletsourceinfo with " + this.getTabletSourceInfo());
         this.transactionContext = new TransactionContext();
