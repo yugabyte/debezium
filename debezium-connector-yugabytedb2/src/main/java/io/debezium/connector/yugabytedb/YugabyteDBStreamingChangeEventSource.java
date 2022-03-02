@@ -122,9 +122,11 @@ public class YugabyteDBStreamingChangeEventSource implements
             LOGGER.info("No start opid found in the context.");
             offsetContext = YugabyteDBOffsetContext.initialContext(connectorConfig, connection, clock);
         }
-        /*if (snapshotter.shouldSnapshot()) {
-            getSnapshotChanges();
-        }*/
+        /*
+         * if (snapshotter.shouldSnapshot()) {
+         * getSnapshotChanges();
+         * }
+         */
 
         try {
             final WalPositionLocator walPosition;
@@ -231,10 +233,9 @@ public class YugabyteDBStreamingChangeEventSource implements
     }
 
     private void getSnapshotChanges(ChangeEventSourceContext context,
-                            YugabyteDBPartition partitionn,
-                            YugabyteDBOffsetContext offsetContext,
-                            boolean previousOffsetPresent) {
-
+                                    YugabyteDBPartition partitionn,
+                                    YugabyteDBOffsetContext offsetContext,
+                                    boolean previousOffsetPresent) {
 
     }
 
