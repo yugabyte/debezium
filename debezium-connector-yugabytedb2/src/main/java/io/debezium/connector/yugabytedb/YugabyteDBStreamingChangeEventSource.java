@@ -266,7 +266,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         for (Pair<String, String> entry : tabletPairList) {
             final String tabletId = entry.getValue();
             offsetContext.initSourceInfo(tabletId, this.connectorConfig);
-
+            offsetContext.getSourceInfo(tabletId).updateLastCommit(offsetContext.lastCompletelyProcessedLsn());
             if (offsetContext.lsn(tabletId).equals(new OpId(0, 0, null, 0, 0))) {
                 offsetContext.getSourceInfo(tabletId)
                         .updateLastCommit(new OpId(-1, -1, "".getBytes(), -1, 0));
@@ -410,19 +410,6 @@ public class YugabyteDBStreamingChangeEventSource implements
 
                 probeConnectionIfNeeded();
 
-                if (receivedMessage) {
-                    noMessageIterations = 0;
-                }
-                else {
-                    if (offsetContext.hasCompletelyProcessedPosition()) {
-                        dispatcher.dispatchHeartbeatEvent(part, offsetContext);
-                    }
-                    noMessageIterations++;
-                    if (noMessageIterations >= THROTTLE_NO_MESSAGE_BEFORE_PAUSE) {
-                        noMessageIterations = 0;
-                        pauseNoMessage.sleepWhen(true);
-                    }
-                }
                 if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
                     // During catch up streaming, the streaming phase needs to hold a transaction open so that
                     // the phase can stream event up to a specific lsn and the snapshot that occurs after the catch up

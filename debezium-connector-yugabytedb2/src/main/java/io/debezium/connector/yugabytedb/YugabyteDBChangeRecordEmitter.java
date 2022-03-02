@@ -5,6 +5,17 @@
  */
 package io.debezium.connector.yugabytedb;
 
+import java.sql.SQLException;
+import java.util.*;
+import java.util.stream.Collectors;
+
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.header.ConnectHeaders;
+import org.postgresql.core.BaseConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.debezium.connector.yugabytedb.connection.ReplicationMessage;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
 import io.debezium.data.Envelope.Operation;
@@ -16,16 +27,6 @@ import io.debezium.relational.*;
 import io.debezium.schema.DataCollectionSchema;
 import io.debezium.util.Clock;
 import io.debezium.util.Strings;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.header.ConnectHeaders;
-import org.postgresql.core.BaseConnection;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.sql.SQLException;
-import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Emits change data based on a logical decoding event coming as protobuf or JSON message.
