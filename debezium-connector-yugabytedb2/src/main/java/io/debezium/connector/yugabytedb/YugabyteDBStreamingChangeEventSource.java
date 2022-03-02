@@ -116,11 +116,20 @@ public class YugabyteDBStreamingChangeEventSource implements
         // replication slot could exist at the time of starting Debezium so
         // we will stream from the position in the slot
         // instead of the last position in the database
+        // Get all partitions
+        // Get
+        Set<YBPartition> partitions = new YugabyteDBPartition.Provider(connectorConfig).getPartitions();
         boolean hasStartLsnStoredInContext = offsetContext != null && !offsetContext.getTabletSourceInfo().isEmpty();
 
+        LOGGER.info("SKSK The offset context is " + offsetContext + " partition is " + partition);
         if (!hasStartLsnStoredInContext) {
             LOGGER.info("No start opid found in the context.");
-            offsetContext = YugabyteDBOffsetContext.initialContext(connectorConfig, connection, clock);
+            if (snapshotter.shouldSnapshot()) {
+                offsetContext = YugabyteDBOffsetContext.initialContextForSnapshot(connectorConfig, connection, clock, partitions);
+            }
+            else {
+                offsetContext = YugabyteDBOffsetContext.initialContext(connectorConfig, connection, clock, partitions);
+            }
         }
         /*
          * if (snapshotter.shouldSnapshot()) {
@@ -167,10 +176,10 @@ public class YugabyteDBStreamingChangeEventSource implements
             // stream.startKeepAlive(Threads.newSingleThreadExecutor(PostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
             // }
             // processMessages(context, partition, offsetContext, stream);
-            if (!snapshotter.shouldStream()) {
-                LOGGER.info("Streaming is not enabled in correct configuration");
-                return;
-            }
+            // if (!snapshotter.shouldStream()) {
+            // LOGGER.info("Streaming is not enabled in correct configuration");
+            // return;
+            // }
             getChanges(context, partition, offsetContext, hasStartLsnStoredInContext);
         }
         catch (Throwable e) {
@@ -275,17 +284,17 @@ public class YugabyteDBStreamingChangeEventSource implements
         }
 
         int noMessageIterations = 0;
-        for (Pair<String, String> entry : tabletPairList) {
-            final String tabletId = entry.getValue();
-            offsetContext.initSourceInfo(tabletId, this.connectorConfig);
-
-            offsetContext.getSourceInfo(tabletId).updateLastCommit(offsetContext.lastCompletelyProcessedLsn());
-
-            if (offsetContext.lsn(tabletId).equals(new OpId(0, 0, null, 0, 0))) {
-                offsetContext.getSourceInfo(tabletId)
-                        .updateLastCommit(new OpId(-1, -1, "".getBytes(), -1, 0));
-            }
-        }
+        // for (Pair<String, String> entry : tabletPairList) {
+        // final String tabletId = entry.getValue();
+        // offsetContext.initSourceInfo(tabletId, this.connectorConfig);
+        //
+        // offsetContext.getSourceInfo(tabletId).updateLastCommit(offsetContext.lastCompletelyProcessedLsn());
+        //
+        // if (offsetContext.lsn(tabletId).equals(new OpId(0, 0, null, 0, 0))) {
+        // offsetContext.getSourceInfo(tabletId)
+        // .updateLastCommit(new OpId(-1, -1, "".getBytes(), -1, 0));
+        // }
+        // }
         LOGGER.info("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
 
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||

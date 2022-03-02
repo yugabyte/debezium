@@ -5,6 +5,17 @@
  */
 package io.debezium.connector.yugabytedb;
 
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Struct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.debezium.connector.SnapshotRecord;
 import io.debezium.connector.yugabytedb.connection.OpId;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
@@ -17,15 +28,6 @@ import io.debezium.relational.TableId;
 import io.debezium.schema.DataCollectionId;
 import io.debezium.time.Conversions;
 import io.debezium.util.Clock;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Struct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class YugabyteDBOffsetContext implements OffsetContext {
     public static final String LAST_COMPLETELY_PROCESSED_LSN_KEY = "lsn_proc";
@@ -92,25 +94,34 @@ public class YugabyteDBOffsetContext implements OffsetContext {
         this.incrementalSnapshotContext = new SignalBasedIncrementalSnapshotContext<>();
     }
 
+    public static YugabyteDBOffsetContext initialContextForSnapshot(YugabyteDBConnectorConfig connectorConfig,
+                                                                    YugabyteDBConnection jdbcConnection,
+                                                                    Clock clock,
+                                                                    Set<YBPartition> partitions) {
+        return initialContext(connectorConfig, jdbcConnection, clock, new OpId(-1, -1, "".getBytes(), -1, 0),
+                new OpId(-1, -1, "".getBytes(), -1, 0), partitions);
+    }
+
     public static YugabyteDBOffsetContext initialContext(YugabyteDBConnectorConfig connectorConfig,
                                                          YugabyteDBConnection jdbcConnection,
-                                                         Clock clock) {
-        return initialContext(connectorConfig, jdbcConnection, clock, null,
-                null);
+                                                         Clock clock,
+                                                         Set<YBPartition> partitions) {
+        return initialContext(connectorConfig, jdbcConnection, clock, new OpId(0, 0, "".getBytes(), 0, 0),
+                new OpId(0, 0, "".getBytes(), 0, 0), partitions);
     }
 
     public static YugabyteDBOffsetContext initialContext(YugabyteDBConnectorConfig connectorConfig,
                                                          YugabyteDBConnection jdbcConnection,
                                                          Clock clock,
                                                          OpId lastCommitLsn,
-                                                         OpId lastCompletelyProcessedLsn) {
-
+                                                         OpId lastCompletelyProcessedLsn,
+                                                         Set<YBPartition> partitions) {
         LOGGER.info("Creating initial offset context");
         final OpId lsn = null; // OpId.valueOf(jdbcConnection.currentXLogLocation());
         // TODO:Suranjan read the offset for each of the tablet
         final long txId = 0L;// new OpId(0,0,"".getBytes(), 0);
         LOGGER.info("Read checkpoint at '{}' ", lsn, txId);
-        return new YugabyteDBOffsetContext(
+        YugabyteDBOffsetContext context = new YugabyteDBOffsetContext(
                 connectorConfig,
                 lsn,
                 lastCompletelyProcessedLsn,
@@ -121,7 +132,13 @@ public class YugabyteDBOffsetContext implements OffsetContext {
                 false,
                 new TransactionContext(),
                 new SignalBasedIncrementalSnapshotContext<>());
-
+        for (YBPartition p : partitions) {
+            if (context.getTabletSourceInfo().get(p.getTabletId()) == null) {
+                context.initSourceInfo(p.getTabletId(), connectorConfig);
+                context.updateWalPosition(p.getTabletId(), lastCommitLsn, lastCompletelyProcessedLsn, clock.currentTimeAsInstant(), String.valueOf(txId), null, null);
+            }
+        }
+        return context;
     }
 
     @Override
