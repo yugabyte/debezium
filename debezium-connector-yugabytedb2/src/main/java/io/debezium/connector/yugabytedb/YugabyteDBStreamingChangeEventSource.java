@@ -121,7 +121,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         Set<YBPartition> partitions = new YugabyteDBPartition.Provider(connectorConfig).getPartitions();
         boolean hasStartLsnStoredInContext = offsetContext != null && !offsetContext.getTabletSourceInfo().isEmpty();
 
-        LOGGER.info("SKSK The offset context is " + offsetContext + " partition is " + partition);
+        // LOGGER.info("SKSK The offset context is " + offsetContext + " partition is " + partition);
         if (!hasStartLsnStoredInContext) {
             LOGGER.info("No start opid found in the context.");
             if (snapshotter.shouldSnapshot()) {
