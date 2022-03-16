@@ -283,6 +283,12 @@ public class YugabyteDBStreamingChangeEventSource implements
             tableIdToTable.put(tId, table);
         }
 
+        Map<String, Boolean> schemaStreamed = new HashMap<>();
+        // Initialize all the tabletIds with false
+        for (Pair<String, String> entry : tabletPairList) {
+            schemaStreamed.put(entry.getValue(), Boolean.TRUE);
+        }
+
         int noMessageIterations = 0;
         // for (Pair<String, String> entry : tabletPairList) {
         // final String tabletId = entry.getValue();
@@ -317,7 +323,8 @@ public class YugabyteDBStreamingChangeEventSource implements
 
                 GetChangesResponse response = this.syncClient.getChangesCDCSDK(
                         table, streamId, tabletId,
-                        cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime());
+                        cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime(), schemaStreamed.get(tabletId));
+
 
                 boolean receivedMessage = false; // response.getResp().getCdcSdkRecordsCount() != 0;
 
@@ -378,6 +385,9 @@ public class YugabyteDBStreamingChangeEventSource implements
                             LOGGER.debug("Received DDL message {}", message.getSchema().toString()
                                     + " the table is " + message.getTable());
 
+                            // Set schema received for this tablet ID
+                            schemaStreamed.put(tabletId, Boolean.FALSE);
+
                             TableId tableId = null;
                             if (message.getOperation() != Operation.NOOP) {
                                 tableId = YugabyteDBSchema.parseWithSchema(message.getTable(), pgSchemaNameInRecord);
@@ -419,6 +429,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                         se.printStackTrace();
                     }
                 }
+
 
                 // if (cp.equals(new OpId(-1, -1, "".getBytes(), -1, 0))) {
 
