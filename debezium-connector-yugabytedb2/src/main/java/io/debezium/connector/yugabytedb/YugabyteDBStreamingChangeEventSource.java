@@ -274,7 +274,12 @@ public class YugabyteDBStreamingChangeEventSource implements
             tableIdToTable.put(tId, table);
         }
 
-        int noMessageIterations = 0;
+        // todo: rename schemaStreamed to something else
+        Map<String, Boolean> schemaStreamed = new HashMap<>();
+        for (Pair<String, String> entry : tabletPairList) {
+            schemaStreamed.put(entry.getValue(), Boolean.TRUE);
+        }
+
         for (Pair<String, String> entry : tabletPairList) {
             final String tabletId = entry.getValue();
             offsetContext.initSourceInfo(tabletId, this.connectorConfig);
@@ -301,7 +306,7 @@ public class YugabyteDBStreamingChangeEventSource implements
 
                 GetChangesResponse response = this.syncClient.getChangesCDCSDK(
                         table, streamId, tabletId,
-                        cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime());
+                        cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime(), schemaStreamed.get(tabletId));
 
                 for (CdcService.CDCSDKProtoRecordPB record : response
                         .getResp()
@@ -358,6 +363,9 @@ public class YugabyteDBStreamingChangeEventSource implements
                         else if (message.isDDLMessage()) {
                             LOGGER.debug("Received DDL message {}", message.getSchema().toString()
                                     + " the table is " + message.getTable());
+
+                            // If a DDL message is received for a tablet, we do not need its schema again
+                            schemaStreamed.put(tabletId, Boolean.FALSE);
 
                             TableId tableId = null;
                             if (message.getOperation() != Operation.NOOP) {
