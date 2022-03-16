@@ -284,7 +284,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         }
 
         Map<String, Boolean> schemaStreamed = new HashMap<>();
-        // Initialize all the tabletIds with false
+        // Initialize all the tabletIds with true signifying we need schemas for all the tablets
         for (Pair<String, String> entry : tabletPairList) {
             schemaStreamed.put(entry.getValue(), Boolean.TRUE);
         }
