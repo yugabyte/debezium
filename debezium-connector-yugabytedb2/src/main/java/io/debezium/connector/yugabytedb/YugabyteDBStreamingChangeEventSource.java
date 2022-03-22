@@ -94,7 +94,6 @@ public class YugabyteDBStreamingChangeEventSource implements
         this.taskContext = taskContext;
         this.snapshotter = snapshotter;
         checkPointMap = new ConcurrentHashMap<>();
-        // this.replicationConnection = replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
 
         String masterAddress = connectorConfig.masterAddresses();
@@ -186,7 +185,6 @@ public class YugabyteDBStreamingChangeEventSource implements
             errorHandler.setProducerThrowable(e);
         }
         finally {
-
             if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
                 // Need to CDCSDK see what can be done.
                 // try {

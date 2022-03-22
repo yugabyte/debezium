@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import io.debezium.relational.TableSchema;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Before;
@@ -16,6 +17,8 @@ import org.junit.Test;
 import io.debezium.config.Configuration;
 import io.debezium.embedded.AbstractConnectorTest;
 import io.debezium.util.Strings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Basic unit tests to check the behaviour with YugabyteDB datatypes
@@ -24,6 +27,8 @@ import io.debezium.util.Strings;
  */
 
 public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBDatatypesTest.class);
+
     private static final String INSERT_STMT = "INSERT INTO s1.a (aa) VALUES (1);" +
             "INSERT INTO s2.a (aa) VALUES (1);";
     private static final String CREATE_TABLES_STMT = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
@@ -41,6 +46,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
             for (int i = 0; i < numOfRowsToBeInserted; i++) {
                 TestHelper.execute(String.format(formatInsertString, i));
             }
+            LOGGER.info("Finished inserting records.");
         }).exceptionally(throwable -> {
             throw new RuntimeException(throwable);
         });
@@ -62,7 +68,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
         return TestHelper.defaultConfig()
                 .with(YugabyteDBConnectorConfig.HOSTNAME, "127.0.0.1") // this field is required as of now
                 .with(YugabyteDBConnectorConfig.PORT, 5433)
-                .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
+                .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.INITIAL.getValue())
                 .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
                 .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, "127.0.0.1:7100")
                 .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, fullTablenameWithSchema)
@@ -70,6 +76,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
     }
 
     private void verifyPrimaryKeyOnly(long recordsCount) {
+        System.out.println("SKSK verifyPrimaryKeyOnly");
         int totalConsumedRecords = 0;
         long start = System.currentTimeMillis();
         List<SourceRecord> records = new ArrayList<>();
@@ -139,6 +146,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
 
     @Test
     public void testRecordConsumption() throws Exception {
+        System.out.println("SKSK testRecordConsumption");
         TestHelper.dropAllSchemas();
         TestHelper.executeDDL("postgres_create_tables.ddl");
         Thread.sleep(1000);

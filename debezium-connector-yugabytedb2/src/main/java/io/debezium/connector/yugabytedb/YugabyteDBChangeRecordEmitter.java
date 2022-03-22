@@ -418,7 +418,9 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         Struct newKey = tableSchema.keyFromColumnData(newColumnValues);
 
         Struct newValue = tableSchema.valueFromColumnData(newColumnValues);
-        Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);
+        //Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);
+        // In case of YB , we only send the changed column value and schema.
+        Struct oldValue = tableSchema.valueFromChangedColumnData(oldColumnValues);
 
         if (skipEmptyMessages() && (newColumnValues == null || newColumnValues.length == 0)) {
             logger.warn("no new values found for table '{}' from update message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());

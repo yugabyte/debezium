@@ -1,13 +1,8 @@
-/*
- * Copyright Debezium Authors.
- *
- * Licensed under the Apache Software License version 2.0, available at http://www.apache.org/licenses/LICENSE-2.0
- */
-package io.debezium.relational;
-
+package io.debezium.connector.yugabytedb;
 import java.util.Arrays;
 import java.util.Objects;
 
+import io.debezium.relational.TableSchema;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.slf4j.Logger;
@@ -16,20 +11,22 @@ import org.slf4j.LoggerFactory;
 import io.debezium.annotation.Immutable;
 import io.debezium.data.Envelope;
 import io.debezium.data.SchemaUtil;
+import io.debezium.relational.StructGenerator;
+import io.debezium.relational.TableId;
 import io.debezium.schema.DataCollectionSchema;
 
 /**
  * Defines the Kafka Connect {@link Schema} functionality associated with a given {@link Table table definition}, and which can
  * be used to send rows of data that match the table definition to Kafka Connect.
  * <p>
- * Given a {@link Table} definition, creating and using a {@link TableSchema} is straightforward:
+ * Given a {@link io.debezium.relational.Table} definition, creating and using a {@link YBTableSchema} is straightforward:
  *
  * <pre>
  * Table table = ...
  * TableSchema tableSchema = new TableSchemaBuilder().create(table);
  * </pre>
  *
- * or use a subclass of {@link TableSchemaBuilder} for the particular DBMS. Then, for each row of data:
+ * or use a subclass of {@link YugabyteDBTableSchemaBuilder} for the particular DBMS. Then, for each row of data:
  *
  * <pre>
  * Object[] data = ...
@@ -42,23 +39,23 @@ import io.debezium.schema.DataCollectionSchema;
  * all of which can be handed to Kafka Connect to create a new record.
  * <p>
  * When the table structure changes, simply obtain a new or updated {@link Table} definition (e.g., via an {@link Table#edit()
- * editor}), rebuild the {@link TableSchema} for that {@link Table}, and use the new {@link TableSchema} instance for subsequent
+ * editor}), rebuild the {@link YBTableSchema} for that {@link Table}, and use the new {@link YBTableSchema} instance for subsequent
  * records.
  *
- * @author Randall Hauch
- * @see TableSchemaBuilder
+ * @author Suranjan Kumar
+ * @see io.debezium.connector.yugabytedb.YugabyteDBTableSchemaBuilder
  */
 @Immutable
-public class TableSchema implements DataCollectionSchema {
+public class YBTableSchema extends TableSchema {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TableSchema.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YBTableSchema.class);
 
     private final TableId id;
     private final Schema keySchema;
     private final Envelope envelopeSchema;
-    private final Schema valueSchema;
+    private Schema valueSchema;
     private final StructGenerator keyGenerator;
-    private final StructGenerator valueGenerator;
+    private StructGenerator valueGenerator;
 
     /**
      * Create an instance with the specified {@link Schema}s for the keys and values, and the functions that generate the
@@ -72,7 +69,8 @@ public class TableSchema implements DataCollectionSchema {
      * @param valueGenerator the function that converts a row into a single value object for Kafka Connect; may not be null but
      *            may return nulls
      */
-    public TableSchema(TableId id, Schema keySchema, StructGenerator keyGenerator, Envelope envelopeSchema, Schema valueSchema, StructGenerator valueGenerator) {
+    public YBTableSchema(TableId id, Schema keySchema, StructGenerator keyGenerator, Envelope envelopeSchema, Schema valueSchema, StructGenerator valueGenerator) {
+        super(id,keySchema, keyGenerator, envelopeSchema, valueSchema, valueGenerator);
         this.id = id;
         this.keySchema = keySchema;
         this.envelopeSchema = envelopeSchema;
@@ -95,6 +93,9 @@ public class TableSchema implements DataCollectionSchema {
         return valueSchema;
     }
 
+    public void setValueSchema(Schema valueSchema) {
+        this.valueSchema =  valueSchema;
+    }
     /**
      * Get the {@link Schema} that represents the table's primary key.
      *
@@ -141,10 +142,6 @@ public class TableSchema implements DataCollectionSchema {
         return columnData == null ? null : valueGenerator.generateValue(columnData);
     }
 
-    public Struct valueFromChangedColumnData(Object[] columnData) {
-        return columnData == null ? null : valueGenerator.generateValue(columnData);
-    }
-
     @Override
     public int hashCode() {
         return valueSchema().hashCode();
@@ -155,8 +152,8 @@ public class TableSchema implements DataCollectionSchema {
         if (obj == this) {
             return true;
         }
-        if (obj instanceof TableSchema) {
-            TableSchema that = (TableSchema) obj;
+        if (obj instanceof YBTableSchema) {
+            YBTableSchema that = (YBTableSchema) obj;
             return Objects.equals(this.keySchema(), that.keySchema()) && Objects.equals(this.valueSchema(), that.valueSchema());
         }
         return false;
