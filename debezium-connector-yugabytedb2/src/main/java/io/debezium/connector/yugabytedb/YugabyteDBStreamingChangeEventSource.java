@@ -243,9 +243,12 @@ public class YugabyteDBStreamingChangeEventSource implements
             tableIdToTable.put(tId, table);
         }
 
+        // todo: rename schemaStreamed to something else
         Map<String, Boolean> schemaStreamed = new HashMap<>();
         Map<String, Boolean> snapshotDoneForTablet = new HashMap<>();
-        // Initialize all the tabletIds with true signifying we need schemas for all the tablets
+
+        // Initialize all the tabletIds with true signifying we need schemas for all the tablets.
+        // Also initialize the snapshot flags for each tablet.
         for (Pair<String, String> entry : tabletPairList) {
             schemaStreamed.put(entry.getValue(), Boolean.TRUE);
             snapshotDoneForTablet.put(entry.getValue(), Boolean.FALSE);
@@ -336,7 +339,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                             LOGGER.debug("Received DDL message {}", message.getSchema().toString()
                                     + " the table is " + message.getTable());
 
-                            // Set schema received for this tablet ID
+                            // Set schema received for this tablet ID which means that if a DDL message is received for a tablet,
+                            // we do not need its schema again.
                             schemaStreamed.put(tabletId, Boolean.FALSE);
 
                             TableId tableId = null;
