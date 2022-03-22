@@ -365,25 +365,6 @@ public class YugabyteDBOffsetContext implements OffsetContext {
             else {
                 lastCompletelyProcessedLsn = new OpId(0, 0, "".getBytes(), 0, 0);
             }
-            /*
-             * final OpId lsn = OpId.valueOf(readOptionalString(offset, SourceInfo.LSN_KEY));
-             * final OpId lastCompletelyProcessedLsn = OpId.valueOf(readOptionalString(offset,
-             * LAST_COMPLETELY_PROCESSED_LSN_KEY));
-             * final OpId lastCommitLsn = OpId.valueOf(readOptionalString(offset,
-             * LAST_COMPLETELY_PROCESSED_LSN_KEY));
-             * final String txId = readOptionalString(offset, SourceInfo.TXID_KEY);
-             * 
-             * final Instant useconds = Conversions.toInstantFromMicros((Long) offset
-             * .get(SourceInfo.TIMESTAMP_USEC_KEY));
-             * final boolean snapshot = (boolean) ((Map<String, Object>) offset)
-             * .getOrDefault(SourceInfo.SNAPSHOT_KEY, Boolean.FALSE);
-             * final boolean lastSnapshotRecord = (boolean) ((Map<String, Object>) offset)
-             * .getOrDefault(SourceInfo.LAST_SNAPSHOT_RECORD_KEY, Boolean.FALSE);
-             * return new YugabyteDBOffsetContext(connectorConfig, lsn, lastCompletelyProcessedLsn,
-             * lastCommitLsn, txId, useconds, snapshot, lastSnapshotRecord,
-             * TransactionContext.load(offset), SignalBasedIncrementalSnapshotContext
-             * .load(offset));
-             */
 
             return new YugabyteDBOffsetContext(connectorConfig,
                     lastCompletelyProcessedLsn,

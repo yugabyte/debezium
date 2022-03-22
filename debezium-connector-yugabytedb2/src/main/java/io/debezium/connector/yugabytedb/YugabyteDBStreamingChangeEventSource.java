@@ -507,10 +507,6 @@ public class YugabyteDBStreamingChangeEventSource implements
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("Flushing LSN to server: {}", lsn);
             }
-            // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
-            // CDCSDK yugabyte does it automatically.
-            // but we may need an API
-            // replicationStream.flushLsn(lsn);
         }
         else {
             LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
