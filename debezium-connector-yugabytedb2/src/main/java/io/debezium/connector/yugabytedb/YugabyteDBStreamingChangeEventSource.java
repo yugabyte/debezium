@@ -386,7 +386,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                 }
 
 
-                if (!snapshotter.shouldStream() && response.getWriteId() != -1) {
+                if (!snapshotter.shouldStream() && response.getResp().getCdcSdkCheckpoint().getWriteId() != -1) {
+                    LOGGER.debug("Marking snapshot complete for tablet: " + tabletId);
                     snapshotDoneForTablet.put(tabletId, Boolean.TRUE);
                 }
 
