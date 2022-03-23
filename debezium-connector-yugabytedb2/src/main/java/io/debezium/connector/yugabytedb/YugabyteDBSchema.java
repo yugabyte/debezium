@@ -71,6 +71,13 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
                 config.getSanitizeFieldNames());
     }
 
+    private static TableSchemaBuilder getYBTableSchemaBuilder(YugabyteDBConnectorConfig config,
+                                                            YugabyteDBValueConverter valueConverter) {
+        return new TableSchemaBuilder(valueConverter, SchemaNameAdjuster.create(),
+                config.customConverterRegistry(), config.getSourceInfoStructMaker().schema(),
+                config.getSanitizeFieldNames());
+    }
+
     /**
      * Initializes the content for this schema by reading all the database information from the supplied connection.
      *

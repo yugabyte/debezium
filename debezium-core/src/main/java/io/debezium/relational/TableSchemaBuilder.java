@@ -5,21 +5,6 @@
  */
 package io.debezium.relational;
 
-import java.sql.Types;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-
-import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.errors.DataException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.debezium.annotation.Immutable;
 import io.debezium.annotation.ThreadSafe;
 import io.debezium.data.Envelope;
@@ -32,6 +17,20 @@ import io.debezium.schema.FieldNameSelector;
 import io.debezium.schema.FieldNameSelector.FieldNamer;
 import io.debezium.util.SchemaNameAdjuster;
 import io.debezium.util.Strings;
+import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.Types;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * Builder that constructs {@link TableSchema} instances for {@link Table} definitions.
@@ -188,9 +187,14 @@ public class TableSchemaBuilder {
                         // It is possible for some databases and values (MySQL and all-zero datetime)
                         // to be reported as null by JDBC or streaming reader.
                         // It thus makes sense to convert them to a sensible default replacement value.
-                        value = converter.convert(value);
+                        value = converter.convert(((Object[])value)[0]);
+                        //value = converter.convert(value);
                         try {
-                            result.put(fields[i], value);
+                            Struct cell = new Struct(fields[i].schema());
+                            cell.put("value", value);
+                            cell.put("set", true);
+                            //valueStruct.put(cdef.getColumnName(), cell);
+                            result.put(fields[i], cell);
                         }
                         catch (DataException e) {
                             Column col = columns.get(i);
@@ -245,7 +249,18 @@ public class TableSchemaBuilder {
             int numFields = recordIndexes.length;
             ValueConverter[] converters = convertersForColumns(schema, tableId, columnsThatShouldBeAdded, mappers);
             return (row) -> {
+//                    columns
+//                        .stream()
+//                        .filter(column -> filter == null || filter.matches(tableId.catalog(), tableId.schema(), tableId.table(), column.name()))
+//                        .forEach(column -> {
+//                            ColumnMapper mapper = mappers == null ? null : mappers.mapperFor(tableId, column);
+//                            addField(valSchemaBuilder, table, column, mapper);
+//                        });
+//
+//                Schema valSchema = valSchemaBuilder.optional().build();
+
                 Struct result = new Struct(schema);
+
                 for (int i = 0; i != numFields; ++i) {
                     validateIncomingRowToInternalMetadata(recordIndexes, fields, converters, row, i);
                     Object value = row[recordIndexes[i]];
@@ -261,8 +276,17 @@ public class TableSchemaBuilder {
 
                     if (converter != null) {
                         try {
-                            value = converter.convert(value);
-                            result.put(fields[i], value);
+                            if (value != null) {
+                                value = converter.convert(((Object[])value)[0]);
+                                Struct cell = new Struct(fields[i].schema());
+                                cell.put("value", value);
+                                cell.put("set", true);
+                                //valueStruct.put(cdef.getColumnName(), cell);
+                                result.put(fields[i], cell);
+                            } else {
+                                result.put(fields[i], null);
+                            }
+                            //result.put(fields[i], value);
                         }
                         catch (DataException | IllegalArgumentException e) {
                             Column col = columns.get(i);
@@ -373,8 +397,9 @@ public class TableSchemaBuilder {
                 fieldBuilder
                         .defaultValue(customConverterRegistry.getValueConverter(table.id(), column).orElse(ValueConverter.passthrough()).convert(column.defaultValue()));
             }
+            Schema optionalCellSchema = cellSchema(fieldNamer.fieldNameFor(column), fieldBuilder.build(), column.isOptional());
 
-            builder.field(fieldNamer.fieldNameFor(column), fieldBuilder.build());
+            builder.field(fieldNamer.fieldNameFor(column), optionalCellSchema);
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("- field '{}' ({}{}) from column {}", column.name(), builder.isOptional() ? "OPTIONAL " : "",
                         fieldBuilder.type(),
@@ -398,5 +423,20 @@ public class TableSchemaBuilder {
      */
     protected ValueConverter createValueConverterFor(TableId tableId, Column column, Field fieldDefn) {
         return customConverterRegistry.getValueConverter(tableId, column).orElse(valueConverterProvider.converter(column, fieldDefn));
+    }
+
+    static Schema cellSchema(String name, Schema valueSchema, boolean isOptional) {
+        if (valueSchema != null) {
+            SchemaBuilder schemaBuilder = SchemaBuilder.struct().name(name)
+                    .field("value", valueSchema)
+                    .field("set", Schema.BOOLEAN_SCHEMA);
+            if (isOptional) {
+                schemaBuilder.optional();
+            }
+            return schemaBuilder.build();
+        }
+        else {
+            return null;
+        }
     }
 }
