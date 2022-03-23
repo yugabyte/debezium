@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yb.client.*;
 import org.yb.master.MasterDdlOuterClass;
+import org.yb.master.MasterTypes;
 
 import com.google.common.net.HostAndPort;
 
@@ -31,7 +32,6 @@ import io.debezium.connector.common.RelationalBaseSourceConnector;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.TableId;
-import org.yb.master.MasterTypes;
 
 /**
  * A Kafka Connect source connector that creates tasks which use YugabyteDB CDC API

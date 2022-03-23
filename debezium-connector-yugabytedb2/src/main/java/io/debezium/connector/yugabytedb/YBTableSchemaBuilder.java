@@ -1,10 +1,8 @@
-/*
- * Copyright Debezium Authors.
- *
+package io.debezium.connector.yugabytedb;
+
+/* *
  * Licensed under the Apache Software License version 2.0, available at http://www.apache.org/licenses/LICENSE-2.0
  */
-package io.debezium.relational;
-
 import java.sql.Types;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,6 +22,7 @@ import io.debezium.annotation.Immutable;
 import io.debezium.annotation.ThreadSafe;
 import io.debezium.data.Envelope;
 import io.debezium.data.SchemaUtil;
+import io.debezium.relational.*;
 import io.debezium.relational.Key.KeyMapper;
 import io.debezium.relational.Tables.ColumnNameFilter;
 import io.debezium.relational.mapping.ColumnMapper;
@@ -48,9 +47,9 @@ import io.debezium.util.Strings;
  */
 @ThreadSafe
 @Immutable
-public class TableSchemaBuilder {
+public class YBTableSchemaBuilder extends TableSchemaBuilder {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TableSchemaBuilder.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YBTableSchemaBuilder.class);
 
     private final SchemaNameAdjuster schemaNameAdjuster;
     private final ValueConverterProvider valueConverterProvider;
@@ -65,8 +64,9 @@ public class TableSchemaBuilder {
      *            null
      * @param schemaNameAdjuster the adjuster for schema names; may not be null
      */
-    public TableSchemaBuilder(ValueConverterProvider valueConverterProvider, SchemaNameAdjuster schemaNameAdjuster, CustomConverterRegistry customConverterRegistry,
-                              Schema sourceInfoSchema, boolean sanitizeFieldNames) {
+    public YBTableSchemaBuilder(ValueConverterProvider valueConverterProvider, SchemaNameAdjuster schemaNameAdjuster, CustomConverterRegistry customConverterRegistry,
+                                Schema sourceInfoSchema, boolean sanitizeFieldNames) {
+        super(valueConverterProvider, schemaNameAdjuster, customConverterRegistry, sourceInfoSchema, sanitizeFieldNames);
         this.schemaNameAdjuster = schemaNameAdjuster;
         this.valueConverterProvider = valueConverterProvider;
         this.sourceInfoSchema = sourceInfoSchema;
