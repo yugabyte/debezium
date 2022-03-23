@@ -57,8 +57,9 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
             return false;
         }
 
-        if (field.schema().fields().size() != 1
-                || field.schema().fields().get(0).name() != "value") {
+        if (field.schema().fields().size() != 2
+                || (field.schema().fields().get(0).name() != "value"
+                || field.schema().fields().get(0).name() != "set")) {
             return false;
         }
 
