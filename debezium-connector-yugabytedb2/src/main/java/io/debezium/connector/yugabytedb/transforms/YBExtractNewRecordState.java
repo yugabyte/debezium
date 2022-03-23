@@ -25,8 +25,7 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
     @Override
     public R apply(final R record) {
         final R ret = super.apply(record);
-        LOGGER.info("VKVK beginning of apply after super function: " + record);
-        if (ret == null || !(ret.value() instanceof Struct)) {
+        if (ret == null || (ret.value() != null && !(ret.value() instanceof Struct))) {
             return ret;
         }
 
@@ -34,31 +33,14 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
         Schema updatedSchemaForKey = (Schema) p.getFirst();
         Struct updatedValueForKey = (Struct) p.getSecond();
 
-        Pair val = getUpdatedValueAndSchema((Struct) ret.value());
-        Schema updatedSchemaForValue = (Schema) val.getFirst();
-        Struct updatedValueForValue = (Struct) val.getSecond();
+        Schema updatedSchemaForValue = null;
+        Struct updatedValueForValue = null;
+        if (ret.value() != null) {
+            Pair val = getUpdatedValueAndSchema((Struct) ret.value());
+            updatedSchemaForValue = (Schema) val.getFirst();
+            updatedValueForValue = (Struct) val.getSecond();
+        }
 
-        // final Struct value = (Struct)ret.value();
-        // LOGGER.info("VKVK value of record: " + value);
-        // Schema updatedSchema = schemaUpdateCache.get(value.schema());
-        // LOGGER.info("VKVK json representation before update: " + io.debezium.data.SchemaUtil.asString(updatedSchema));
-        // if (updatedSchema == null) {
-        // LOGGER.info("VKVK calling makeUpdatedSchema");
-        // updatedSchema = makeUpdatedSchema(value.schema());
-        // schemaUpdateCache.put(value.schema(), updatedSchema);
-        // }
-        // LOGGER.info("VKVK json representation after update: " + io.debezium.data.SchemaUtil.asString(updatedSchema));
-        // final Struct updatedValue = new Struct(updatedSchema);
-        // LOGGER.info("VKVK updatedValue: " + updatedValue);
-        // for (Field field : value.schema().fields()) {
-        // if (isSimplifiableField(field)) {
-        // Struct fieldValue = (Struct) value.get(field);
-        // updatedValue.put(field.name(), fieldValue == null ? null : fieldValue.get("value"));
-        // } else {
-        // updatedValue.put(field.name(), value.get(field));
-        // }
-        // }
-        // LOGGER.info("VKVK updatedValue2: " + updatedValue);
         return ret.newRecord(ret.topic(), ret.kafkaPartition(), updatedSchemaForKey, updatedValueForKey, updatedSchemaForValue, updatedValueForValue, ret.timestamp());
     }
 
@@ -69,29 +51,23 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
     }
 
     private boolean isSimplifiableField(Field field) {
-        // LOGGER.info("VKVK size: " + field.schema().fields().size());
         if (field.schema().type() != Type.STRUCT) {
-            // LOGGER.info("VKVK field schema type: " + field.schema().type());
             return false;
         }
 
         if (field.schema().fields().size() != 2
                 || (!Objects.equals(field.schema().fields().get(0).name(), "value")
                         || !Objects.equals(field.schema().fields().get(1).name(), "set"))) {
-            // LOGGER.info("VKVK fields get value name: " + field.schema().fields().get(0).name());
-            // LOGGER.info("VKVK fields get set name: " + field.schema().fields().get(1).name());
-            return false;
+             return false;
         }
-
         return true;
     }
 
+    // todo: this function can be removed
     private Schema makeUpdatedSchema(Schema schema) {
         final SchemaBuilder builder = SchemaUtil.copySchemaBasics(schema, SchemaBuilder.struct());
 
-        // LOGGER.info("VKVK inside makeUpdatedSchema, schema field size: " + schema.fields().size());
         for (Field field : schema.fields()) {
-            // LOGGER.info("VKVK calling for name: " + field.name() + " and value: " + field.schema());
             if (isSimplifiableField(field)) {
                 builder.field(field.name(), field.schema().field("value").schema());
             }
@@ -106,14 +82,11 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
     private Schema makeUpdatedSchema(Schema schema, Struct value) {
         final SchemaBuilder builder = SchemaUtil.copySchemaBasics(schema, SchemaBuilder.struct());
 
-        // LOGGER.info("VKVK inside makeUpdatedSchema, schema field size: " + schema.fields().size());
         for (Field field : schema.fields()) {
-            // LOGGER.info("VKVK calling for name: " + field.name() + " and value: " + field.schema());
             if (isSimplifiableField(field)) {
                 if (value.get(field.name()) != null) {
                     builder.field(field.name(), field.schema().field("value").schema());
                 }
-                // builder.field(field.name(), field.schema().field("value").schema());
             }
             else {
                 builder.field(field.name(), field.schema());
@@ -125,35 +98,26 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
 
     private Pair<Schema, Struct> getUpdatedValueAndSchema(Struct obj) {
         final Struct value = obj;
-        // LOGGER.info("VKVK value of record: " + value);
-        Schema updatedSchema = null; // schemaUpdateCache.get(value.schema());
-        // LOGGER.info("VKVK json representation before update: " + io.debezium.data.SchemaUtil.asString(updatedSchema));
+        Schema updatedSchema = null;
         if (updatedSchema == null) {
-            // LOGGER.info("VKVK calling makeUpdatedSchema");
-            // LOGGER.info("VKVK value schema as json: " + io.debezium.data.SchemaUtil.asString(value.schema()));
-            updatedSchema = makeUpdatedSchema(value.schema(), value);
-            // schemaUpdateCache.put(value.schema(), updatedSchema);
+             updatedSchema = makeUpdatedSchema(value.schema(), value);
         }
-        // LOGGER.info("VKVK json representation after update: " + io.debezium.data.SchemaUtil.asString(updatedSchema));
+
+        LOGGER.debug("Updated schema as json: " + io.debezium.data.SchemaUtil.asString(value.schema()));
+
         final Struct updatedValue = new Struct(updatedSchema);
-        // LOGGER.info("VKVK updatedValue: " + updatedValue);
+
         for (Field field : value.schema().fields()) {
             if (isSimplifiableField(field)) {
                 Struct fieldValue = (Struct) value.get(field);
                 if (fieldValue != null) {
                     updatedValue.put(field.name(), fieldValue.get("value"));
                 }
-                else {
-                    // remove the field from the schema which has the null value
-                }
-                // updatedValue.put(field.name(), fieldValue == null ? null : fieldValue.get("value"));
             }
             else {
-                // updatedValue.put(field.name(), value.get(field));
             }
         }
-        // LOGGER.info("VKVK updatedValue2: " + updatedValue);
-
+        
         return new org.yb.util.Pair<Schema, Struct>(updatedSchema, updatedValue);
     }
 }
