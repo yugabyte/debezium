@@ -300,7 +300,7 @@ public class YugabyteDBStreamingChangeEventSource implements
 
                 GetChangesResponse response = this.syncClient.getChangesCDCSDK(
                         table, streamId, tabletId,
-                        cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime());
+                        cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime(), true);
 
                 for (CdcService.CDCSDKProtoRecordPB record : response
                         .getResp()
