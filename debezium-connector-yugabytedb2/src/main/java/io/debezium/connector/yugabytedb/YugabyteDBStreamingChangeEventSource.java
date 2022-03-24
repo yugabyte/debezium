@@ -258,6 +258,9 @@ public class YugabyteDBStreamingChangeEventSource implements
 
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                 (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
+            // The following will specify the connector polling interval at which
+            // yb-client will ask the database for changes
+            Thread.sleep(connectorConfig.cdcPollIntervalms());
 
             for (Pair<String, String> entry : tabletPairList) {
                 final String tabletId = entry.getValue();
@@ -267,10 +270,6 @@ public class YugabyteDBStreamingChangeEventSource implements
                 if (!snapshotter.shouldStream() && snapshotDoneForTablet.get(tabletId)) {
                     continue;
                 }
-
-                // The following will specify the connector polling interval at which
-                // yb-client will ask the database for changes
-                Thread.sleep(connectorConfig.cdcPollIntervalms());
 
                 YBTable table = tableIdToTable.get(entry.getKey());
                 OpId cp = offsetContext.lsn(tabletId);
