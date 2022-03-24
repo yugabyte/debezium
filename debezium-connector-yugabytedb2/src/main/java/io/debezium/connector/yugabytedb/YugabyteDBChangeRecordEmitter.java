@@ -6,13 +6,7 @@
 package io.debezium.connector.yugabytedb;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.data.Struct;
@@ -29,13 +23,7 @@ import io.debezium.function.Predicates;
 import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.pipeline.spi.Partition;
-import io.debezium.relational.Column;
-import io.debezium.relational.ColumnEditor;
-import io.debezium.relational.RelationalChangeRecordEmitter;
-import io.debezium.relational.Table;
-import io.debezium.relational.TableEditor;
-import io.debezium.relational.TableId;
-import io.debezium.relational.TableSchema;
+import io.debezium.relational.*;
 import io.debezium.schema.DataCollectionSchema;
 import io.debezium.util.Clock;
 import io.debezium.util.Strings;
@@ -99,6 +87,8 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                 return Operation.UPDATE;
             case DELETE:
                 return Operation.DELETE;
+            case READ:
+                return Operation.READ;
             case TRUNCATE:
                 return Operation.TRUNCATE;
             default:
@@ -128,6 +118,8 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                     return null;
                 case UPDATE:
                     return null;
+                case READ:
+                    return null;
                 // return columnValues(message.getOldTupleList(), tableId, true,
                 // message.hasTypeMetadata(), true, true);
                 default:
@@ -147,7 +139,8 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                 case CREATE:
                     return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
                 case UPDATE:
-                    // todo vaibhav: add scenario for the case of multiple columns being updated
+                    return updatedColumnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
+                case READ:
                     return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
                 default:
                     return null;
@@ -215,7 +208,52 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
             if (position != -1) {
                 Object value = column.getValue(() -> (BaseConnection) connection.connection(),
                         connectorConfig.includeUnknownDatatypes());
-                values[position] = value;
+                // values[position] = value;
+                values[position] = new Object[]{ value, Boolean.TRUE };
+            }
+        }
+        return values;
+    }
+
+    private Object[] updatedColumnValues(List<ReplicationMessage.Column> columns, TableId tableId,
+                                         boolean refreshSchemaIfChanged, boolean metadataInMessage,
+                                         boolean sourceOfToasted, boolean oldValues)
+            throws SQLException {
+        if (columns == null || columns.isEmpty()) {
+            return null;
+        }
+        final Table table = schema.tableFor(tableId);
+        if (table == null) {
+            schema.dumpTableId();
+        }
+        Objects.requireNonNull(table);
+
+        // based on the schema columns, create the values on the same position as the columns
+        List<Column> schemaColumns = table.columns();
+        // based on the replication message without toasted columns for now
+        List<ReplicationMessage.Column> columnsWithoutToasted = columns.stream().filter(Predicates.not(ReplicationMessage.Column::isToastedColumn))
+                .collect(Collectors.toList());
+        // JSON does not deliver a list of all columns for REPLICA IDENTITY DEFAULT
+        Object[] values = new Object[columnsWithoutToasted.size() < schemaColumns.size()
+                ? schemaColumns.size()
+                : columnsWithoutToasted.size()];
+
+        // initialize to unset
+
+        final Set<String> undeliveredToastableColumns = new HashSet<>(schema
+                .getToastableColumnsForTableId(table.id()));
+        for (ReplicationMessage.Column column : columns) {
+            // DBZ-298 Quoted column names will be sent like that in messages,
+            // but stored unquoted in the column names
+            final String columnName = Strings.unquoteIdentifierPart(column.getName());
+            undeliveredToastableColumns.remove(columnName);
+
+            int position = getPosition(columnName, table, values);
+            if (position != -1) {
+                Object value = column.getValue(() -> (BaseConnection) connection.connection(),
+                        connectorConfig.includeUnknownDatatypes());
+
+                values[position] = new Object[]{ value, Boolean.TRUE };
             }
         }
         return values;
