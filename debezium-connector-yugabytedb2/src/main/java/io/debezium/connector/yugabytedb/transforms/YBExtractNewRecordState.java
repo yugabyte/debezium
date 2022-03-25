@@ -58,7 +58,7 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
         if (field.schema().fields().size() != 2
                 || (!Objects.equals(field.schema().fields().get(0).name(), "value")
                         || !Objects.equals(field.schema().fields().get(1).name(), "set"))) {
-             return false;
+            return false;
         }
         return true;
     }
@@ -100,7 +100,7 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
         final Struct value = obj;
         Schema updatedSchema = null;
         if (updatedSchema == null) {
-             updatedSchema = makeUpdatedSchema(value.schema(), value);
+            updatedSchema = makeUpdatedSchema(value.schema(), value);
         }
 
         LOGGER.debug("Updated schema as json: " + io.debezium.data.SchemaUtil.asString(value.schema()));
@@ -117,7 +117,7 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
             else {
             }
         }
-        
+
         return new org.yb.util.Pair<Schema, Struct>(updatedSchema, updatedValue);
     }
 }

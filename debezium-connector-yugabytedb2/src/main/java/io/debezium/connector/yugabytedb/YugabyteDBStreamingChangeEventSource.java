@@ -282,7 +282,6 @@ public class YugabyteDBStreamingChangeEventSource implements
                         table, streamId, tabletId,
                         cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime(), schemaStreamed.get(tabletId));
 
-
                 for (CdcService.CDCSDKProtoRecordPB record : response.getResp().getCdcSdkProtoRecordsList()) {
                     LOGGER.info("SKSK the recrds are " + record);
                     CdcService.RowMessage m = record.getRowMessage();
@@ -383,7 +382,6 @@ public class YugabyteDBStreamingChangeEventSource implements
                         se.printStackTrace();
                     }
                 }
-
 
                 if (!snapshotter.shouldStream() && response.getResp().getCdcSdkCheckpoint().getWriteId() != -1) {
                     LOGGER.debug("Marking snapshot complete for tablet: " + tabletId);
