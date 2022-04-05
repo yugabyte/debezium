@@ -344,9 +344,17 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         try {
             ListTablesResponse tablesResp = this.ybClient.getTablesList();
             for (MasterDdlOuterClass.ListTablesResponsePB.TableInfo tableInfo : tablesResp.getTableInfoList()) {
+                // Ignoring the index and system tables from getting added for streaming.
                 if (tableInfo.getRelationType() == MasterTypes.RelationType.INDEX_TABLE_RELATION ||
                         tableInfo.getRelationType() == MasterTypes.RelationType.SYSTEM_TABLE_RELATION) {
-                    // Ignoring the index and system tables from getting added for streaming.
+                    continue;
+                }
+
+                // Ignore the tables without a pgschema_name, these tables are the ones created with the older versions of YugabyteDB where
+                // the changes for CDCSDK were not present. For more details, visit https://github.com/yugabyte/yugabyte-db/issues/11976
+                if (tableInfo.getPgschemaName() == null || tableInfo.getPgschemaName().isEmpty()) {
+                    LOGGER.warn(String.format("Ignoring the table %s.%s since it does not have a pgschema_name value", tableInfo.getNamespace().getName(),
+                            tableInfo.getName()));
                     continue;
                 }
 
