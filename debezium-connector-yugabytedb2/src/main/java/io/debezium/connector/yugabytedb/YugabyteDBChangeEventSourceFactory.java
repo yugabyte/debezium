@@ -7,10 +7,7 @@ package io.debezium.connector.yugabytedb;
 
 import java.util.Optional;
 
-import io.debezium.connector.yugabytedb.connection.ReplicationConnection;
 import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
-import io.debezium.connector.yugabytedb.spi.SlotCreationResult;
-import io.debezium.connector.yugabytedb.spi.SlotState;
 import io.debezium.connector.yugabytedb.spi.Snapshotter;
 import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.EventDispatcher;
@@ -35,9 +32,6 @@ public class YugabyteDBChangeEventSourceFactory implements ChangeEventSourceFact
     private final YugabyteDBSchema schema;
     private final YugabyteDBTaskContext taskContext;
     private final Snapshotter snapshotter;
-    private final ReplicationConnection replicationConnection;
-    private final SlotCreationResult slotCreatedInfo;
-    private final SlotState startingSlotInfo;
 
     public YugabyteDBChangeEventSourceFactory(YugabyteDBConnectorConfig configuration,
                                               Snapshotter snapshotter,
@@ -45,10 +39,7 @@ public class YugabyteDBChangeEventSourceFactory implements ChangeEventSourceFact
                                               ErrorHandler errorHandler,
                                               EventDispatcher<TableId> dispatcher,
                                               Clock clock, YugabyteDBSchema schema,
-                                              YugabyteDBTaskContext taskContext,
-                                              ReplicationConnection replicationConnection,
-                                              SlotCreationResult slotCreatedInfo,
-                                              SlotState startingSlotInfo) {
+                                              YugabyteDBTaskContext taskContext) {
         this.configuration = configuration;
         this.jdbcConnection = jdbcConnection;
         this.errorHandler = errorHandler;
@@ -57,14 +48,10 @@ public class YugabyteDBChangeEventSourceFactory implements ChangeEventSourceFact
         this.schema = schema;
         this.taskContext = taskContext;
         this.snapshotter = snapshotter;
-        this.replicationConnection = replicationConnection;
-        this.slotCreatedInfo = slotCreatedInfo;
-        this.startingSlotInfo = startingSlotInfo;
     }
 
     @Override
-    public SnapshotChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> getSnapshotChangeEventSource(
-                                                                                                                SnapshotProgressListener snapshotProgressListener) {
+    public SnapshotChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> getSnapshotChangeEventSource(SnapshotProgressListener snapshotProgressListener) {
         return new YugabyteDBSnapshotChangeEventSource(
                 configuration,
                 taskContext,
@@ -85,15 +72,15 @@ public class YugabyteDBChangeEventSourceFactory implements ChangeEventSourceFact
                 errorHandler,
                 clock,
                 schema,
-                taskContext,
-                replicationConnection);
+                taskContext);
     }
 
     @Override
-    public Optional<IncrementalSnapshotChangeEventSource<? extends DataCollectionId>> getIncrementalSnapshotChangeEventSource(YugabyteDBOffsetContext offsetContext,
-                                                                                                                              SnapshotProgressListener snapshotProgressListener,
-                                                                                                                              DataChangeEventListener dataChangeEventListener) {
-        final SignalBasedIncrementalSnapshotChangeEventSource<TableId> incrementalSnapshotChangeEventSource = new SignalBasedIncrementalSnapshotChangeEventSource<TableId>(
+    public Optional<IncrementalSnapshotChangeEventSource<? extends DataCollectionId>> getIncrementalSnapshotChangeEventSource(
+            YugabyteDBOffsetContext offsetContext,
+            SnapshotProgressListener snapshotProgressListener,
+            DataChangeEventListener dataChangeEventListener) {
+        final SignalBasedIncrementalSnapshotChangeEventSource<TableId> incrementalSnapshotChangeEventSource = new SignalBasedIncrementalSnapshotChangeEventSource<>(
                 configuration,
                 jdbcConnection,
                 dispatcher,

@@ -74,7 +74,7 @@ public class OpId implements Comparable<OpId> {
     // todo vaibhav: the ending bracket can be removed here
     @Override
     public String toString() {
-        return "" +
+        return "{" +
                 "term=" + term +
                 ", index=" + index +
                 ", key=" + Arrays.toString(key) +

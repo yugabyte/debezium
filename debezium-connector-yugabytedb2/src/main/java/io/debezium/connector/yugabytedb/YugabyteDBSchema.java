@@ -103,8 +103,6 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
     }
 
     protected YugabyteDBSchema refresh(TableId tableId, CdcService.CDCSDKSchemaPB schemaPB) {
-        // and then refresh the schemas
-        // refreshSchemas();
         if (cdcsdkSchemaPB == null) {
             cdcsdkSchemaPB = schemaPB;
         }
@@ -115,11 +113,18 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
         return this;
     }
 
+    /**
+     *
+     * @param tableId The fully qualified name for a table e.g. databaseName.schemaName.tableName
+     * @param schemaPB The {@link org.yb.cdc.CdcService.CDCSDKSchemaPB} value which needs to be added after refresh
+     * @param schemaName Name of the schema inside the database
+     * @return An instance of {@link YugabyteDBSchema}
+     */
     protected YugabyteDBSchema refreshWithSchema(TableId tableId,
                                                  CdcService.CDCSDKSchemaPB schemaPB,
                                                  String schemaName) {
-        // and then refresh the schemas
-        // refreshSchemas();
+        LOGGER.debug("Refreshing the cached schema with {}", schemaPB);
+
         if (cdcsdkSchemaPB == null) {
             cdcsdkSchemaPB = schemaPB;
         }
@@ -152,10 +157,6 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
                            TableId tableId) {
         // Before we make any changes, get the copy of the set of table IDs ...
         Set<TableId> tableIdsBefore = new HashSet<>(tables.tableIds());
-        // final String catalogName = "yugabyte";
-        // final String schemaName = "public";
-        // final String tableName = "t1";
-        // TableId tableId = new TableId(null, schemaName, tableName);
 
         Map<TableId, List<Column>> columnsByTable = new HashMap<>();
 
@@ -164,11 +165,9 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
         if (tableFilter == null || tableFilter.isIncluded(tableId)) {
             tableIds.add(tableId);
         }
-        int totalTables = 0;
 
         for (TableId includeTable : tableIds) {
-            Map<TableId, List<Column>> cols = getColumnsDetailsWithSchema(databaseCatalog, schemaNamePattern,
-                    includeTable.table(), tableFilter,
+            Map<TableId, List<Column>> cols = getColumnsDetailsWithSchema(databaseCatalog, includeTable.table(), tableFilter,
                     columnFilter, schemaPB, schemaNamePattern);
             columnsByTable.putAll(cols);
         }
@@ -186,9 +185,7 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
         }
 
         if (removeTablesNotFoundInJdbc) {
-            // Remove any definitions for tables that were not found in the database metadata ...
-            // tableIdsBefore.removeAll(columnsByTable.keySet());
-            // tableIdsBefore.forEach(tables::removeTable);
+            // todo: can be used in future releases
         }
     }
 
@@ -198,6 +195,12 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
         return pkColumnNames;
     }
 
+    /**
+     *
+     * @param schemaPB The {@link org.yb.cdc.CdcService.CDCSDKSchemaPB} to read the primary keys from
+     * @param id The fully qualified name for a table e.g. databaseName.schemaName.tableName
+     * @return A {@link List} of the primary key column names
+     */
     public List<String> readPrimaryKeyNames(CdcService.CDCSDKSchemaPB schemaPB, TableId id) {
         final List<String> pkColumnNames = new ArrayList<>();
         int columnIndex = 1;
@@ -212,38 +215,7 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
         return pkColumnNames;
     }
 
-    private Map<TableId, List<Column>> getColumnsDetails(String databaseCatalog,
-                                                         String schemaNamePattern,
-                                                         String tableName,
-                                                         Tables.TableFilter tableFilter,
-                                                         Tables.ColumnNameFilter columnFilter,
-                                                         CdcService.CDCSDKSchemaPB schemaPB) {
-        Map<TableId, List<Column>> columnsByTable = new HashMap<>();
-
-        int position = 1;
-        for (CdcService.CDCSDKColumnInfoPB columnMetadata : schemaPB.getColumnInfoList()) {
-            // final String catalogName = "yugabyte";
-            final String schemaName = "public";
-            // final String tableName = "test1";
-            TableId tableId = new TableId(null, schemaName, tableName);
-
-            // exclude views and non-captured tables
-            if ((tableFilter != null && !tableFilter.isIncluded(tableId))) {
-                continue;
-            }
-
-            // add all included columns
-            readTableColumn(columnMetadata, tableId, columnFilter, position).ifPresent(column -> {
-                columnsByTable.computeIfAbsent(tableId, t -> new ArrayList<>())
-                        .add(column.create());
-            });
-            position++;
-        }
-        return columnsByTable;
-    }
-
     private Map<TableId, List<Column>> getColumnsDetailsWithSchema(String databaseCatalog,
-                                                                   String schemaNamePattern,
                                                                    String tableName,
                                                                    Tables.TableFilter tableFilter,
                                                                    Tables.ColumnNameFilter columnFilter,
@@ -253,9 +225,8 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
 
         int position = 1;
         for (CdcService.CDCSDKColumnInfoPB columnMetadata : schemaPB.getColumnInfoList()) {
-            // final String catalogName = "yugabyte";
+            // todo: can there be a case where schemaNameFromYb and the pgschema_name in schemaPB can be different?
             final String schemaName = schemaNameFromYb;
-            // final String tableName = "test1";
             TableId tableId = new TableId(databaseCatalog, schemaName, tableName);
 
             // exclude views and non-captured tables
@@ -333,34 +304,12 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
     /**
      * Refreshes this schema's content for a particular table
      *
-     * @param connection              a {@link JdbcConnection} instance, never {@code null}
+     * @param connection              a {@link YugabyteDBConnection} instance, never {@code null}
      * @param tableId                 the table identifier; may not be null
      * @param refreshToastableColumns refreshes the cache of toastable columns for `tableId`, if {@code true}
+     * @param schemaPB the schema taken from a DDL change record
      * @throws SQLException if there is a problem refreshing the schema from the database server
      */
-    protected void refresh(YugabyteDBConnection connection, TableId tableId,
-                           boolean refreshToastableColumns)
-            throws SQLException {
-        Tables temp = new Tables();
-        readSchema(temp, null, tableId.schema(), tableId::equals,
-                null, true, null, tableId);
-
-        // the table could be deleted before the event was processed
-        if (temp.size() == 0) {
-            LOGGER.warn("Refresh of {} was requested but the table no longer exists", tableId);
-            return;
-        }
-        // overwrite (add or update) or views of the tables
-        tables().overwriteTable(temp.forTable(tableId));
-        // refresh the schema
-        refreshSchema(tableId);
-
-        if (refreshToastableColumns) {
-            // and refresh toastable columns info
-            refreshToastableColumnsMap(connection, tableId);
-        }
-    }
-
     protected void refresh(YugabyteDBConnection connection, TableId tableId,
                            boolean refreshToastableColumns, CdcService.CDCSDKSchemaPB schemaPB)
             throws SQLException {
@@ -392,7 +341,6 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
      * Discard any currently-cached schemas and rebuild them using the filters.
      */
     protected void refreshSchemas(TableId id) {
-        // clearSchemas();
         removeSchema(id);
         // Create TableSchema instances for any existing table ...
         tableIds().forEach(this::refreshSchema);
@@ -400,7 +348,7 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
 
     protected void refreshSchemas() {
         clearSchemas();
-        // removeSchema(id);
+
         // Create TableSchema instances for any existing table ...
         tableIds().forEach(this::refreshSchema);
     }
@@ -521,11 +469,11 @@ public class YugabyteDBSchema extends RelationalDatabaseSchema {
 
     @Override
     public boolean tableInformationComplete() {
-        // PostgreSQL does not support HistorizedDatabaseSchema - so no tables are recovered
+        // YugabyteDB does not support HistorizedDatabaseSchema - so no tables are recovered
         return false;
     }
 
     public void dumpTableId() {
-        LOGGER.info("The relationid to tableid in YugabyteDBSchema is " + this.relationIdToTableId);
+        LOGGER.debug("The relation Id to table Id in YugabyteDBSchema is " + this.relationIdToTableId);
     }
 }

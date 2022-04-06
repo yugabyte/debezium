@@ -343,7 +343,6 @@ public class YugabyteDBValueConverter extends JdbcValueConverters {
         }
 
         return SpecialValueDecimal.builder(decimalMode, column.length(), column.scale().orElseGet(() -> 0));
-        // return SpecialValueDecimal.builder(decimalMode, 1000, 0);
     }
 
     private SchemaBuilder hstoreSchema() {

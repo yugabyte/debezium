@@ -69,7 +69,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
-        LOGGER.debug("Props " + props);
+        LOGGER.debug("Initializing YugabyteDB connector with properties:  " + props);
         Configuration config = Configuration.from(this.props);
         this.yugabyteDBConnectorConfig = new YugabyteDBConnectorConfig(config);
     }
@@ -77,8 +77,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     @Override
     public List<Map<String, String>> taskConfigs(int maxTasks) {
         if (props == null) {
-            LOGGER.error("Configuring a maximum of {} tasks with no connector configuration" +
-                    " available", maxTasks);
+            LOGGER.error("Configuring a maximum of {} tasks with no connector configuration available", maxTasks);
             return Collections.emptyList();
         }
 
@@ -115,30 +114,30 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
         validateTServerConnection(results, config);
         String streamIdValue = this.yugabyteDBConnectorConfig.streamId();
-        LOGGER.debug("The streamid in config is" + this.yugabyteDBConnectorConfig.streamId());
 
         if (streamIdValue == null) {
             streamIdValue = results.get(YugabyteDBConnectorConfig.STREAM_ID.name()).value().toString();
         }
 
-        LOGGER.debug("The streamid being used is " + streamIdValue);
+        LOGGER.debug("DB stream Id being used is " + streamIdValue);
 
         int numGroups = Math.min(this.tabletIds.size(), maxTasks);
-        LOGGER.debug("The tabletIds size are " + tabletIds.size() + " maxTasks" + maxTasks);
+        LOGGER.debug("Number of tablet Ids: " + tabletIds.size() + " with maximum number of tasks" + maxTasks);
 
         List<List<Pair<String, String>>> tabletIdsGrouped = ConnectorUtils.groupPartitions(this.tabletIds, numGroups);
-        LOGGER.debug("The grouped tabletIds are " + tabletIdsGrouped.size());
+        LOGGER.debug("Size of grouped tablet Ids: " + tabletIdsGrouped.size());
         List<Map<String, String>> taskConfigs = new ArrayList<>(tabletIdsGrouped.size());
 
         for (List<Pair<String, String>> taskTables : tabletIdsGrouped) {
-            LOGGER.debug("The taskTables are " + taskTables);
+            LOGGER.debug("Tables for the task: " + taskTables);
             Map<String, String> taskProps = new HashMap<>(this.props);
             int taskId = taskConfigs.size();
             taskProps.put(YugabyteDBConnectorConfig.TASK_ID.toString(), String.valueOf(taskId));
             String taskTablesSerialized = "";
             try {
                 taskTablesSerialized = ObjectUtil.serializeObjectToString(taskTables);
-                LOGGER.debug("The taskTablesSerialized " + taskTablesSerialized);
+                // todo: even in the debug logs, the serialized format would not make much sense to the user
+                LOGGER.debug("Serialized task tables: " + taskTablesSerialized);
             }
             catch (IOException e) {
                 e.printStackTrace();
@@ -165,6 +164,18 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
     }
 
+    /**
+     * Get a YBClient instance to perform operations on the YugabyteDB server
+     * @param hostAddress Comma separated master addresses of the server
+     * @param adminTimeout Timeout for admin operations
+     * @param operationTimeout Timeout for user operations
+     * @param socketReadTimeout Timeout for waiting on data from a socket
+     * @param maxNumTablets The maximum number of tablets yb-client can poll for
+     * @param certFile Path to root certificate
+     * @param clientCert Path to client certificate
+     * @param clientKey Path to client's private key
+     * @return A {@link YBClient} instance
+     */
     private YBClient getYBClientBase(String hostAddress, long adminTimeout, long operationTimeout, long socketReadTimeout,
                                      int maxNumTablets, String certFile, String clientCert, String clientKey) {
         if (maxNumTablets == -1) {
@@ -195,17 +206,6 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         return new YBClient(asyncClient);
     }
 
-    private YBClient getYBClient(String hostAddress, long adminTimeout, long opTimeout,
-                                 long socketTimeout) {
-        return getYBClient(hostAddress, adminTimeout, opTimeout, socketTimeout, -1);
-    }
-
-    // over loaded function
-    private YBClient getYBClient(String hostAddress, long adminTimeout, long opTimeout,
-                                 long socketTimeout, int numTablets) {
-        return getYBClientBase(hostAddress, adminTimeout, opTimeout, socketTimeout, numTablets, null, null, null);
-    }
-
     @Override
     public void stop() {
         this.props = null;
@@ -232,6 +232,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         this.yugabyteDBConnectorConfig = new YugabyteDBConnectorConfig(config);
         final ConfigValue hostnameValue = configValues.get(RelationalDatabaseConnectorConfig.HOSTNAME.name());
         // Try to connect to the database ...
+        // todo: if this is the only section which accesses the tservers, looks like it can be removed in future releases
         try (YugabyteDBConnection connection = new YugabyteDBConnection(yugabyteDBConnectorConfig
                 .getJdbcConfig())) {
             try {
@@ -270,20 +271,18 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 yugabyteDBConnectorConfig.maxNumTablets(),
                 yugabyteDBConnectorConfig.sslRootCert(),
                 yugabyteDBConnectorConfig.sslClientCert(),
-                yugabyteDBConnectorConfig.sslClientKey()); // always passing the ssl root certs,
-        // so whenever they are null, they will just be ignored
-        LOGGER.debug("The master host address is " + hostAddress);
+                yugabyteDBConnectorConfig.sslClientKey()); // always passing the ssl root certs and whenever they are null, they will just be ignored
+        LOGGER.debug("Master host addresses: " + hostAddress);
         HostAndPort masterHostPort = ybClient.getLeaderMasterHostAndPort();
         if (masterHostPort == null) {
-            LOGGER.error("Failed testing connection at {}", yugabyteDBConnectorConfig.hostname());
+            LOGGER.error("No leader master present, failed to obtain leader master host and port at {}", yugabyteDBConnectorConfig.hostname());
         }
 
         // Do a get and check if the streamid exists.
-        // TODO: Suranjan check the db stream info and verify if the tableIds are present
         // TODO: Find out where to do validation for table whitelist
         String streamId = yugabyteDBConnectorConfig.streamId();
         final ConfigValue streamIdConfig = configValues.get(YugabyteDBConnectorConfig.STREAM_ID.name());
-        this.tableIds = fetchTabletList();
+        this.tableIds = fetchTables();
 
         if (tableIds.isEmpty()) {
             LOGGER.info(String.format("The table id is empty."));
@@ -291,14 +290,14 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
 
         if (yugabyteDBConnectorConfig.autoCreateStream()) {
-            LOGGER.info("auto.create.stream set to true");
+            LOGGER.warn("auto.create.stream set to true, this is unstable and might yield unexpected results, use yb-admin to create a DB stream Id");
             // Create stream.
             String tableid = tableIds.stream().findFirst().get();
             try {
                 YBTable t = this.ybClient.openTableByUUID(tableid);
                 streamId = this.ybClient.createCDCStream(t, yugabyteDBConnectorConfig.databaseName(), "PROTO", "IMPLICIT").getStreamId();
 
-                LOGGER.info(String.format("Created a new stream ID: %s", streamId));
+                LOGGER.info(String.format("Created a new DB stream ID: %s", streamId));
 
                 configValues.put(YugabyteDBConnectorConfig.STREAM_ID.name(),
                         new ConfigValue(YugabyteDBConnectorConfig.STREAM_ID.name(), streamId, new ArrayList<>(), new ArrayList<>()));
@@ -309,19 +308,20 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             }
         }
         else if (streamId == null || streamId.isEmpty()) {
-            // Coming to this block means the auto.create.stream is set to false and no stream ID is provided, the connector should not proceed forward.
+            // Coming to this block means the auto.create.stream is set to false and no stream ID is provided, the connector will not proceed forward.
             throw new DebeziumException("DB Stream ID not provided, please provide a DB stream ID to proceed...");
         }
 
         try {
+            // Get the list of tables associated with the provided DB stream Id.
             GetDBStreamInfoResponse res = this.ybClient.getDBStreamInfo(streamId);
             if (res.getTableInfoList().isEmpty()) {
-                LOGGER.info("The table info is empty!");
+                LOGGER.warn("The table info is empty!");
             }
         }
         catch (Exception e) {
-            LOGGER.error("Failed fetching all tables for the streamid {} ", streamIdConfig, e);
-            streamIdConfig.addErrorMessage("Failed fetching all tables for the streamid: " + e.getMessage());
+            LOGGER.error("Failed fetching all tables for the DB stream Id {} ", streamIdConfig, e);
+            streamIdConfig.addErrorMessage("Failed fetching all tables for the DB stream Id: " + e.getMessage());
         }
 
         this.tabletIds = new ArrayList<>();
@@ -338,8 +338,17 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
     }
 
-    private Set<String> fetchTabletList() {
-        LOGGER.debug("Fetching tables");
+    /**
+     * Get the list of tables eligible for streaming. The tables being ignored are:
+     * <ul>
+     *     <li>the index tables</li>
+     *     <li>the system tables</li>
+     *     <li>the ones not having a pgschema_name parameter (signifying that they were created using older versions of YB)</li>
+     * </ul>
+     * @return A {@link Set<String>} of table Ids
+     */
+    private Set<String> fetchTables() {
+        LOGGER.debug("Fetching the tables present in the database");
         Set<String> tIds = new HashSet<>();
         try {
             ListTablesResponse tablesResp = this.ybClient.getTablesList();

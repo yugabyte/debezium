@@ -250,15 +250,17 @@ public class YugabyteDBType implements Serializable {
             return false;
         }
         YugabyteDBType other = (YugabyteDBType) obj;
+
         if (oid != other.oid) {
             return false;
         }
+
         return true;
     }
 
     @Override
     public String toString() {
-        return "PostgresType [name=" + name + ", oid=" + oid + ", jdbcId=" + jdbcId + "," +
+        return "YugabyteDBType [name=" + name + ", oid=" + oid + ", jdbcId=" + jdbcId + "," +
                 " modifiers=" + modifiers + ", defaultLength=" + getDefaultLength() +
                 ", defaultScale=" + getDefaultScale() + ", parentType=" + parentType +
                 ", elementType=" + elementType + "]";

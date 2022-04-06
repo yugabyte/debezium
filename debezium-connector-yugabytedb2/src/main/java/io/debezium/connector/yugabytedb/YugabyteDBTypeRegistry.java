@@ -58,6 +58,7 @@ public class YugabyteDBTypeRegistry {
     public static final int NO_TYPE_MODIFIER = -1;
     public static final int UNKNOWN_LENGTH = -1;
 
+    // todo: change comment if YugabyteDB driver does the same
     // PostgreSQL driver reports user-defined Domain types as Types.DISTINCT
     public static final int DOMAIN_TYPE = Types.DISTINCT;
 
@@ -107,7 +108,6 @@ public class YugabyteDBTypeRegistry {
         return oidToType;
     }
 
-    // CDCSDK Suranjan just send this to TaskConfig.
     private final Map<String, YugabyteDBType> nameToType;
     private final Map<Integer, YugabyteDBType> oidToType;
 
@@ -164,7 +164,6 @@ public class YugabyteDBTypeRegistry {
         nameToType.put(type.getName(), type);
 
         updateType(type);
-        // updateType(type.getOid());
     }
 
     private void updateType(YugabyteDBType type) {
@@ -247,7 +246,7 @@ public class YugabyteDBTypeRegistry {
                 r = YugabyteDBType.UNKNOWN;
             }
         }
-        // new IllegalArgumentException().printStackTrace();
+
         return r;
     }
 
