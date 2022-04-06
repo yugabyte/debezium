@@ -8,7 +8,6 @@ package io.debezium.connector.yugabytedb;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -31,7 +30,6 @@ import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 import io.debezium.util.Clock;
 import io.debezium.util.DelayStrategy;
-import io.debezium.util.ElapsedTimeStrategy;
 
 /**
  *
@@ -39,9 +37,6 @@ import io.debezium.util.ElapsedTimeStrategy;
  */
 public class YugabyteDBStreamingChangeEventSource implements
         StreamingChangeEventSource<YugabyteDBPartition, YugabyteDBOffsetContext> {
-
-    private static final String KEEP_ALIVE_THREAD_NAME = "keep-alive";
-
     /**
      * Number of received events without sending anything to Kafka which will
      * trigger a "WAL backlog growing" warning.
@@ -50,8 +45,6 @@ public class YugabyteDBStreamingChangeEventSource implements
 
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBStreamingChangeEventSource.class);
 
-    // PGOUTPUT decoder sends the messages with larger time gaps than other decoders
-    // We thus try to read the message multiple times before we make poll pause
     private static final int THROTTLE_NO_MESSAGE_BEFORE_PAUSE = 5;
 
     private final YugabyteDBConnection connection;
@@ -60,11 +53,9 @@ public class YugabyteDBStreamingChangeEventSource implements
     private final Clock clock;
     private final YugabyteDBSchema schema;
     private final YugabyteDBConnectorConfig connectorConfig;
-    private final YugabyteDBTaskContext taskContext; // todo vk: remove if not used
 
     private final Snapshotter snapshotter;
     private final DelayStrategy pauseNoMessage;
-    private final ElapsedTimeStrategy connectionProbeTimer; // todo vk: remove if not used
 
     /**
      * The minimum of (number of event received since the last event sent to Kafka,
@@ -76,7 +67,6 @@ public class YugabyteDBStreamingChangeEventSource implements
     private final AsyncYBClient asyncYBClient;
     private final YBClient syncClient;
     private YugabyteDBTypeRegistry yugabyteDBTypeRegistry;
-    private final Map<String, OpId> checkPointMap; // todo vk: remove if not used
 
     public YugabyteDBStreamingChangeEventSource(YugabyteDBConnectorConfig connectorConfig, Snapshotter snapshotter,
                                                 YugabyteDBConnection connection, EventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
@@ -88,10 +78,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         this.clock = clock;
         this.schema = schema;
         pauseNoMessage = DelayStrategy.constant(taskContext.getConfig().getPollInterval().toMillis());
-        this.taskContext = taskContext;
         this.snapshotter = snapshotter;
-        checkPointMap = new ConcurrentHashMap<>();
-        this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
 
         String masterAddress = connectorConfig.masterAddresses();
         asyncYBClient = new AsyncYBClient.AsyncYBClientBuilder(masterAddress)
@@ -126,11 +113,6 @@ public class YugabyteDBStreamingChangeEventSource implements
                 offsetContext = YugabyteDBOffsetContext.initialContext(connectorConfig, connection, clock, partitions);
             }
         }
-        /*
-         * if (snapshotter.shouldSnapshot()) {
-         * getSnapshotChanges();
-         * }
-         */
 
         try {
             final WalPositionLocator walPosition;

@@ -216,13 +216,14 @@ public class YugabyteDBOffsetContext implements OffsetContext {
     public void updateWalPosition(String tabletId, OpId lsn, OpId lastCompletelyProcessedLsn,
                                   Instant commitTime,
                                   String txId, TableId tableId, Long xmin) {
-        LOGGER.debug("Updated the WAL position with ");
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
 
         sourceInfo.update(tabletId, lsn, commitTime, txId, tableId, xmin);
         SourceInfo info = this.tabletSourceInfo.get(tabletId);
         info.update(tabletId, lsn, commitTime, txId, tableId, xmin);
         this.tabletSourceInfo.put(tabletId, info);
+
+        LOGGER.debug("Updated the WAL position for tablet {} with {} at commitTime {}", tabletId, lsn.toString(), commitTime.toString());
     }
 
     public void initSourceInfo(String tabletId, YugabyteDBConnectorConfig connectorConfig) {
@@ -234,7 +235,6 @@ public class YugabyteDBOffsetContext implements OffsetContext {
     }
 
     public void updateCommitPosition(OpId lsn, OpId lastCompletelyProcessedLsn) {
-        // todo vk: put log
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
         this.lastCommitLsn = lsn;
         sourceInfo.updateLastCommit(lsn);
