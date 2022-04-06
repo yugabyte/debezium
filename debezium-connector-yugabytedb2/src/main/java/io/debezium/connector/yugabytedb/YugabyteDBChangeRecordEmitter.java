@@ -111,6 +111,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
 
     @Override
     protected Object[] getOldColumnValues() {
+        LOGGER.debug("Retrieving old column values from the message");
 
         try {
             switch (getOperation()) {
@@ -134,6 +135,8 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
 
     @Override
     protected Object[] getNewColumnValues() {
+        LOGGER.debug("Retrieving new column values from the message");
+
         try {
             switch (getOperation()) {
                 case CREATE:
@@ -155,21 +158,11 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         if (getOperation() == Operation.DELETE || !message.shouldSchemaBeSynchronized()) {
             return tableSchema;
         }
-        final boolean metadataInMessage = message.hasTypeMetadata();
+        final boolean metadataInMessage = message.hasTypeMetadata(); // todo vk: remove unused lines
         final TableId tableId = (TableId) tableSchema.id();
         final Table table = schema.tableFor(tableId);
         final List<ReplicationMessage.Column> columns = message.getNewTupleList();
-        // CDCSDK we don't need to, as we will get DDL as part of change stream
-        // keep updating that.
-        // check if we need to refresh our local schema due to DB schema changes for this table
-        // if (schemaChanged(columns, table, metadataInMessage)) {
-        // // Refresh the schema so we get information about primary keys
-        // refreshTableFromDatabase(tableId);
-        // // Update the schema with metadata coming from decoder message
-        // if (metadataInMessage) {
-        // schema.refresh(tableFromFromMessage(columns, schema.tableFor(tableId)));
-        // }
-        // }
+
         return schema.schemaFor(tableId);
     }
 
@@ -186,18 +179,17 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         }
         Objects.requireNonNull(table);
 
-        // based on the schema columns, create the values on the same position as the columns
+        // Based on the schema columns, create the values on the same position as the columns
         List<Column> schemaColumns = table.columns();
-        // based on the replication message without toasted columns for now
+
+        // Based on the replication message without toasted columns for now
         List<ReplicationMessage.Column> columnsWithoutToasted = columns.stream().filter(Predicates.not(ReplicationMessage.Column::isToastedColumn))
                 .collect(Collectors.toList());
-        // JSON does not deliver a list of all columns for REPLICA IDENTITY DEFAULT
-        Object[] values = new Object[columnsWithoutToasted.size() < schemaColumns.size()
-                ? schemaColumns.size()
-                : columnsWithoutToasted.size()];
 
-        final Set<String> undeliveredToastableColumns = new HashSet<>(schema
-                .getToastableColumnsForTableId(table.id()));
+        // JSON does not deliver a list of all columns for REPLICA IDENTITY DEFAULT
+        Object[] values = new Object[Math.max(columnsWithoutToasted.size(), schemaColumns.size())];
+
+        final Set<String> undeliveredToastableColumns = new HashSet<>(schema.getToastableColumnsForTableId(table.id()));
         for (ReplicationMessage.Column column : columns) {
             // DBZ-298 Quoted column names will be sent like that in messages,
             // but stored unquoted in the column names
@@ -206,8 +198,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
 
             int position = getPosition(columnName, table, values);
             if (position != -1) {
-                Object value = column.getValue(() -> (BaseConnection) connection.connection(),
-                        connectorConfig.includeUnknownDatatypes());
+                Object value = column.getValue(() -> (BaseConnection) connection.connection(), connectorConfig.includeUnknownDatatypes());
                 // values[position] = value;
                 values[position] = new Object[]{ value, Boolean.TRUE };
             }
@@ -228,20 +219,18 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         }
         Objects.requireNonNull(table);
 
-        // based on the schema columns, create the values on the same position as the columns
+        // Based on the schema columns, create the values on the same position as the columns
         List<Column> schemaColumns = table.columns();
-        // based on the replication message without toasted columns for now
+
+        // Based on the replication message without toasted columns for now
         List<ReplicationMessage.Column> columnsWithoutToasted = columns.stream().filter(Predicates.not(ReplicationMessage.Column::isToastedColumn))
                 .collect(Collectors.toList());
+
         // JSON does not deliver a list of all columns for REPLICA IDENTITY DEFAULT
-        Object[] values = new Object[columnsWithoutToasted.size() < schemaColumns.size()
-                ? schemaColumns.size()
-                : columnsWithoutToasted.size()];
+        Object[] values = new Object[Math.max(columnsWithoutToasted.size(), schemaColumns.size())];
 
         // initialize to unset
-
-        final Set<String> undeliveredToastableColumns = new HashSet<>(schema
-                .getToastableColumnsForTableId(table.id()));
+        final Set<String> undeliveredToastableColumns = new HashSet<>(schema.getToastableColumnsForTableId(table.id()));
         for (ReplicationMessage.Column column : columns) {
             // DBZ-298 Quoted column names will be sent like that in messages,
             // but stored unquoted in the column names
@@ -250,8 +239,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
 
             int position = getPosition(columnName, table, values);
             if (position != -1) {
-                Object value = column.getValue(() -> (BaseConnection) connection.connection(),
-                        connectorConfig.includeUnknownDatatypes());
+                Object value = column.getValue(() -> (BaseConnection) connection.connection(), connectorConfig.includeUnknownDatatypes());
 
                 values[position] = new Object[]{ value, Boolean.TRUE };
             }
@@ -263,32 +251,28 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
         final Column tableColumn = table.columnWithName(columnName);
 
         if (tableColumn == null) {
-            logger.warn(
-                    "Internal schema is out-of-sync with incoming decoder events; column {} will be omitted from the change event.",
-                    columnName);
+            logger.warn("Internal schema is out-of-sync with incoming decoder events; column {} will be omitted from the change event.", columnName);
             return -1;
         }
         int position = tableColumn.position() - 1;
         if (position < 0 || position >= values.length) {
-            logger.warn(
-                    "Internal schema is out-of-sync with incoming decoder events; column {} will be omitted from the change event.",
-                    columnName);
+            logger.warn("Internal schema is out-of-sync with incoming decoder events; column {} will be omitted from the change event.", columnName);
             return -1;
         }
         return position;
     }
 
     private Optional<DataCollectionSchema> newTable(TableId tableId) {
-        logger.info("Schema for table '{}' is missing", tableId);
+        logger.info("Schema for table '{}' is missing, loading schema now", tableId);
         refreshTableFromDatabase(tableId);
         final TableSchema tableSchema = schema.schemaFor(tableId);
 
         if (tableSchema == null) {
-            logger.warn("cannot load schema for table '{}'", tableId);
+            logger.warn("Cannot load schema for table '{}'", tableId);
             return Optional.empty();
         }
         else {
-            logger.debug("refreshed DB schema to include table '{}'", tableId);
+            logger.debug("Refreshed DB schema to include table '{}'", tableId);
             return Optional.of(tableSchema);
         }
     }
@@ -300,7 +284,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
             schema.refresh(connection, tableId, connectorConfig.skipRefreshSchemaOnMissingToastableData(), schema.getSchemaPB());
         }
         catch (SQLException e) {
-            throw new ConnectException("Database error while refresing table schema", e);
+            throw new ConnectException("Database error while refreshing table schema", e);
         }
     }
 
@@ -454,6 +438,7 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
     @Override
     protected void emitUpdateRecord(Receiver receiver, TableSchema tableSchema)
             throws InterruptedException {
+        LOGGER.debug("Emitting an update record");
 
         Object[] oldColumnValues = getOldColumnValues();
         Object[] newColumnValues = getNewColumnValues();
@@ -492,6 +477,8 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
 
     @Override
     protected void emitDeleteRecord(Receiver receiver, TableSchema tableSchema) throws InterruptedException {
+        LOGGER.debug("Emitting delete record");
+
         Object[] oldColumnValues = getOldColumnValues();
         Struct oldKey = tableSchema.keyFromColumnData(oldColumnValues);
         Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);

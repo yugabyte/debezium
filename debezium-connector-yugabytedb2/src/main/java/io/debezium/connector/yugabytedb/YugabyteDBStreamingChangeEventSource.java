@@ -91,7 +91,6 @@ public class YugabyteDBStreamingChangeEventSource implements
         this.taskContext = taskContext;
         this.snapshotter = snapshotter;
         checkPointMap = new ConcurrentHashMap<>();
-        // this.replicationConnection = replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
 
         String masterAddress = connectorConfig.masterAddresses();
@@ -401,8 +400,6 @@ public class YugabyteDBStreamingChangeEventSource implements
                         response.getSnapshotTime());
                 offsetContext.getSourceInfo(tabletId).updateLastCommit(finalOpid);
 
-                probeConnectionIfNeeded();
-
                 if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
                     // During catch up streaming, the streaming phase needs to hold a transaction open so that
                     // the phase can stream event up to a specific lsn and the snapshot that occurs after the catch up
@@ -439,17 +436,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                 }
             }
 
-            probeConnectionIfNeeded();
         }
         LOGGER.info("WAL resume position '{}' discovered", resumeLsn.get());
-    }
-
-    private void probeConnectionIfNeeded() throws SQLException {
-        // CDCSDK Find out why it fails.
-        // if (connectionProbeTimer.hasElapsed()) {
-        // connection.prepareQuery("SELECT 1");
-        // connection.commit();
-        // }
     }
 
     private void commitMessage(YBPartition partition, YugabyteDBOffsetContext offsetContext,
@@ -499,10 +487,9 @@ public class YugabyteDBStreamingChangeEventSource implements
 
     @Override
     public void commitOffset(Map<String, ?> offset) {
-        // try {
         LOGGER.debug("Commit offset: " + offset);
-        ReplicationStream replicationStream = null; // this.replicationStream.get();
-        final OpId commitLsn = null; // OpId.valueOf((String) offset.get(PostgresOffsetContext.LAST_COMMIT_LSN_KEY));
+        ReplicationStream replicationStream = null;
+        final OpId commitLsn = null;
         final OpId changeLsn = OpId.valueOf((String) offset.get(YugabyteDBOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
         final OpId lsn = (commitLsn != null) ? commitLsn : changeLsn;
 
@@ -514,12 +501,6 @@ public class YugabyteDBStreamingChangeEventSource implements
         else {
             LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
         }
-        // }
-        /*
-         * catch (SQLException e) {
-         * throw new ConnectException(e);
-         * }
-         */
     }
 
     /**

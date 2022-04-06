@@ -76,8 +76,6 @@ public class YugabyteDBChangeEventSourceCoordinator extends ChangeEventSourceCoo
     private void setSnapshotStartLsn(YugabyteDBSnapshotChangeEventSource snapshotSource,
                                      YugabyteDBOffsetContext offsetContext)
             throws SQLException {
-        // snapshotSource.createSnapshotConnection();
-        // snapshotSource.setSnapshotTransactionIsolationLevel();
         snapshotSource.updateOffsetForPreSnapshotCatchUpStreaming(offsetContext);
     }
 

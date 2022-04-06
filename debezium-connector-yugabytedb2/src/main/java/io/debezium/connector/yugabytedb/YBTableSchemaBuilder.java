@@ -100,7 +100,7 @@ public class YBTableSchemaBuilder extends TableSchemaBuilder {
         final TableId tableId = table.id();
         final String tableIdStr = tableSchemaName(tableId);
         final String schemaNamePrefix = schemaPrefix + tableIdStr;
-        LOGGER.info("Mapping table '{}' to schemas under '{}'", tableId, schemaNamePrefix);
+        LOGGER.debug("Mapping table '{}' to schemas under '{}'", tableId, schemaNamePrefix);
         SchemaBuilder valSchemaBuilder = SchemaBuilder.struct().name(schemaNameAdjuster.adjust(schemaNamePrefix + ".Value"));
         SchemaBuilder keySchemaBuilder = SchemaBuilder.struct().name(schemaNameAdjuster.adjust(schemaNamePrefix + ".Key"));
         AtomicBoolean hasPrimaryKey = new AtomicBoolean(false);
