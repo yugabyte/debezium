@@ -46,7 +46,7 @@ import io.debezium.util.Strings;
 /**
  * The configuration properties for the {@link YugabyteDBConnector}
  *
- * @author Horia Chiorean
+ * @author Suranjan Kumar (skumar@yugabyte.com)
  */
 public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig {
 

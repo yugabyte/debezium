@@ -119,9 +119,9 @@ public class YugabyteDBOffsetContext implements OffsetContext {
                                                          OpId lastCompletelyProcessedLsn,
                                                          Set<YBPartition> partitions) {
         LOGGER.debug("Creating initial offset context");
-        final OpId lsn = null; // OpId.valueOf(jdbcConnection.currentXLogLocation());
+        final OpId lsn = null;
         // TODO:Suranjan read the offset for each of the tablet
-        final long txId = 0L;// new OpId(0,0,"".getBytes(), 0);
+        final long txId = 0L;
         LOGGER.debug("Read checkpoint at '{}' ", lsn, txId);
         YugabyteDBOffsetContext context = new YugabyteDBOffsetContext(
                 connectorConfig,

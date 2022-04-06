@@ -50,18 +50,15 @@ public class YugabyteDBPartition implements Partition {
                 tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
                 LOGGER.debug("The tablet list is " + tabletPairList);
             }
-            catch (IOException e) {
+            catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
             }
-            catch (ClassNotFoundException e) {
-                e.printStackTrace();
-            }
-            Set<YBPartition> partititons = new HashSet<>();
+            Set<YBPartition> partitions = new HashSet<>();
             for (Pair<String, String> tabletPair : tabletPairList) {
-                partititons.add(new YBPartition(tabletPair.getRight()));
+                partitions.add(new YBPartition(tabletPair.getRight()));
             }
-            LOGGER.debug("The partition being returned is " + partititons);
-            return partititons;
+            LOGGER.debug("The partition being returned is " + partitions);
+            return partitions;
         }
     }
 }

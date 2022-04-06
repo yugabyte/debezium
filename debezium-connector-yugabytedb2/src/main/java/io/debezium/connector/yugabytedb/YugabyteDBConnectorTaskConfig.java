@@ -10,7 +10,7 @@ public class YugabyteDBConnectorTaskConfig extends YugabyteDBConnectorConfig {
         super(config);
     }
 
-    public static final Field TABLET_LSIT = Field.create("TASK." + "tabletList")
+    public static final Field TABLET_LIST = Field.create("TASK." + "tabletList")
             .withDisplayName("YugabyteDB Tablet LIST for a Task ")
             .withType(ConfigDef.Type.STRING)
             .withWidth(ConfigDef.Width.MEDIUM)

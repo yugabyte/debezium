@@ -77,14 +77,12 @@ public class YugabyteDBConnectorTask
 
         String tabletList = config.getString(YugabyteDBConnectorConfig.TABLET_LIST);
         List<Pair<String, String>> tabletPairList = null;
+
         try {
             tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
             LOGGER.debug("The tablet list is " + tabletPairList);
         }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
-        catch (ClassNotFoundException e) {
+        catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
 
@@ -102,24 +100,18 @@ public class YugabyteDBConnectorTask
 
         Map<String, YugabyteDBType> nameToType = null;
         Map<Integer, YugabyteDBType> oidToType = null;
+
         try {
-            nameToType = (Map<String, YugabyteDBType>) ObjectUtil
-                    .deserializeObjectFromString(nameToTypeStr);
+            nameToType = (Map<String, YugabyteDBType>) ObjectUtil.deserializeObjectFromString(nameToTypeStr);
         }
-        catch (IOException e) {
+        catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
-        catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        }
+
         try {
-            oidToType = (Map<Integer, YugabyteDBType>) ObjectUtil
-                    .deserializeObjectFromString(oidToTypeStr);
+            oidToType = (Map<Integer, YugabyteDBType>) ObjectUtil.deserializeObjectFromString(oidToTypeStr);
         }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
-        catch (ClassNotFoundException e) {
+        catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
 
@@ -131,29 +123,15 @@ public class YugabyteDBConnectorTask
 
         // Global JDBC connection used both for snapshotting and streaming.
         // Must be able to resolve datatypes.
-        // connection = new YugabyteDBConnection(connectorConfig.getJdbcConfig());
-        jdbcConnection = new YugabyteDBConnection(connectorConfig.getJdbcConfig(),
-                valueConverterBuilder);
-        // try {
-        // jdbcConnection.setAutoCommit(false);
-        // }
-        // catch (SQLException e) {
-        // throw new DebeziumException(e);
-        // }
+        jdbcConnection = new YugabyteDBConnection(connectorConfig.getJdbcConfig(), valueConverterBuilder);
 
         // CDCSDK We can just build the type registry on the co-ordinator and then send the
-        // map of Postgres Type and Oid to the Task using Config
-        final YugabyteDBTypeRegistry yugabyteDBTypeRegistry = new YugabyteDBTypeRegistry(taskConnection,
-                nameToType, oidToType);
-        // jdbcConnection.getTypeRegistry();
+        // map of YugabyteDB Type and Oid to the Task using Config
+        final YugabyteDBTypeRegistry yugabyteDBTypeRegistry = new YugabyteDBTypeRegistry(taskConnection, nameToType, oidToType);
 
         schema = new YugabyteDBSchema(connectorConfig, yugabyteDBTypeRegistry, topicSelector,
                 valueConverterBuilder.build(yugabyteDBTypeRegistry));
         this.taskContext = new YugabyteDBTaskContext(connectorConfig, schema, topicSelector);
-        // get the tablet ids and load the offsets
-        // final Offsets<YugabyteDBPartition, YugabyteDBOffsetContext> previousOffsets =
-        // getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
-        // new YugabyteDBOffsetContext.Loader(connectorConfig));
 
         final Map<YBPartition, YugabyteDBOffsetContext> previousOffsets = getPreviousOffsetss(new YugabyteDBPartition.Provider(connectorConfig),
                 new YugabyteDBOffsetContext.Loader(connectorConfig));
@@ -163,12 +141,8 @@ public class YugabyteDBConnectorTask
 
         LoggingContext.PreviousContext previousContext = taskContext
                 .configureLoggingContext(CONTEXT_NAME);
+
         try {
-            // Print out the server information
-            // CDCSDK Get the table,
-
-            ReplicationConnection replicationConnection = null;
-
             queue = new ChangeEventQueue.Builder<DataChangeEvent>()
                     .pollInterval(connectorConfig.getPollInterval())
                     .maxBatchSize(connectorConfig.getMaxBatchSize())
@@ -177,8 +151,7 @@ public class YugabyteDBConnectorTask
                     .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
                     .build();
 
-            ErrorHandler errorHandler = new YugabyteDBErrorHandler(connectorConfig.getLogicalName(),
-                    queue);
+            ErrorHandler errorHandler = new YugabyteDBErrorHandler(connectorConfig.getLogicalName(), queue);
 
             final YugabyteDBEventMetadataProvider metadataProvider = new YugabyteDBEventMetadataProvider();
 
@@ -237,7 +210,7 @@ public class YugabyteDBConnectorTask
                     dispatcher,
                     schema,
                     snapshotter,
-                    null/* slotInfo */);
+                    null /* slotInfo */);
 
             coordinator.start(taskContext, this.queue, metadataProvider);
 
@@ -248,10 +221,8 @@ public class YugabyteDBConnectorTask
         }
     }
 
-    Map<YBPartition, YugabyteDBOffsetContext> getPreviousOffsetss(
-                                                                  Partition.Provider<YBPartition> provider,
+    Map<YBPartition, YugabyteDBOffsetContext> getPreviousOffsetss(Partition.Provider<YBPartition> provider,
                                                                   OffsetContext.Loader<YugabyteDBOffsetContext> loader) {
-        // return super.getPreviousOffsets(provider, loader);
         Set<YBPartition> partitions = provider.getPartitions();
         LOGGER.debug("The size of partitions is " + partitions.size());
         OffsetReader<YBPartition, YugabyteDBOffsetContext, OffsetContext.Loader<YugabyteDBOffsetContext>> reader = new OffsetReader<>(
@@ -272,14 +243,12 @@ public class YugabyteDBConnectorTask
             LOGGER.info("No previous offsets found");
         }
         return offsets;
-        // return new Offsets<>(offsets);
     }
 
     public ReplicationConnection createReplicationConnection(YugabyteDBTaskContext taskContext,
                                                              boolean doSnapshot,
                                                              int maxRetries,
-                                                             Duration retryDelay)
-            throws ConnectException {
+                                                             Duration retryDelay) throws ConnectException {
         final Metronome metronome = Metronome.parker(retryDelay, Clock.SYSTEM);
         short retryCount = 0;
         ReplicationConnection replicationConnection = null;
@@ -312,7 +281,6 @@ public class YugabyteDBConnectorTask
 
     @Override
     public List<SourceRecord> doPoll() throws InterruptedException {
-
         // if all the tablets have been polled in a loop
         // the poll the queue
         // and notify.
