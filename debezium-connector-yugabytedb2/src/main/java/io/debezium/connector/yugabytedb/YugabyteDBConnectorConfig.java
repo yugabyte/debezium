@@ -530,7 +530,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 9))
             .withWidth(Width.MEDIUM)
             .withImportance(Importance.HIGH)
-            .withDescription("ID of the Stream created in YugabyteDB");
+            .withDescription("DB stream Id created using the yb-admin tool of YugabyteDB");
 
     protected static final Field TASK_ID = Field.create("yugabytedb.task.id")
             .withDescription("Internal use only")
@@ -548,7 +548,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withType(Type.INT)
             .withImportance(Importance.LOW)
             .withDefault(DEFAULT_MAX_NUM_TABLETS)
-            .withDescription("Specify the maximum number of tablets that the client can poll for");
+            .withDescription("Specify the maximum number of tablets that the client can poll for")
+            .withValidation(Field::isPositiveInteger);
 
     public static final Field ADMIN_OPERATION_TIMEOUT_MS = Field.create("admin.operation.timeout.ms")
             .withDisplayName("Admin operation timeout in milliseconds")
@@ -558,13 +559,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDescription("Timeout after which the admin operations for the yb-client would fail");
 
     public static final Field OPERATION_TIMEOUT_MS = Field.create("operation.timeout.ms")
-            .withDisplayName("Operation timeout in milliseconds")
+            .withDisplayName("User operation timeout in milliseconds")
             .withType(Type.LONG)
             .withImportance(Importance.LOW)
             .withDefault(DEFAULT_OPERATION_TIMEOUT_MS);
 
     public static final Field SOCKET_READ_TIMEOUT_MS = Field.create("socket.read.timeout.ms")
-            .withDisplayName("Socket read timeout in milliseconds")
+            .withDisplayName("Timeout for waiting for data from a socket in milliseconds")
             .withType(Type.LONG)
             .withImportance(Importance.LOW)
             .withDefault(DEFAULT_SOCKET_READ_TIMEOUT_MS);
@@ -574,14 +575,16 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withType(Type.LONG)
             .withImportance(Importance.LOW)
             .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
-            .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
+            .withDescription("The poll interval in milliseconds at which the client will request for changes from the database")
+            .withValidation(Field::isPositiveLong);
 
     public static final Field AUTO_CREATE_STREAM = Field.create("auto.create.stream")
             .withDisplayName("Specify whether to create a stream by default")
             .withType(Type.BOOLEAN)
             .withImportance(Importance.LOW)
             .withDefault(false)
-            .withDescription("This will be enabled for testing purposes only, if set to true, the connector will create a DB stream ID");
+            .withDescription("Can be enabled for testing purposes only, if set to true, the connector will create a DB stream ID")
+            .withValidation(Field::isBoolean);
 
     public static final Field CHAR_SET = Field.create(TASK_CONFIG_PREFIX + "charset")
             .withDisplayName("YugabyteDB charset")
@@ -770,7 +773,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_SSL, 1))
             .withWidth(Width.LONG)
             .withImportance(Importance.MEDIUM)
-            .withDescription("File containing the SSL Certificate for the client. See the Postgres SSL docs for further information");
+            .withDescription("Path to file containing the SSL Certificate for the client. See the Postgres SSL docs for further information");
 
     public static final Field SSL_CLIENT_KEY = Field.create(DATABASE_CONFIG_PREFIX + "sslkey")
             .withDisplayName("SSL Client Key")
@@ -778,7 +781,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_SSL, 4))
             .withWidth(Width.LONG)
             .withImportance(Importance.MEDIUM)
-            .withDescription("File containing the SSL private key for the client. See the Postgres SSL docs for further information");
+            .withDescription("Path to file containing the SSL private key for the client. See the Postgres SSL docs for further information");
 
     public static final Field SSL_CLIENT_KEY_PASSWORD = Field.create(DATABASE_CONFIG_PREFIX + "sslpassword")
             .withDisplayName("SSL Client Key Password")
@@ -794,7 +797,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_SSL, 3))
             .withWidth(Width.LONG)
             .withImportance(Importance.MEDIUM)
-            .withDescription("File containing the root certificate(s) against which the server is validated. See the Postgres JDBC SSL docs for further information");
+            .withDescription("Path to file containing the root certificate(s) against which the server is validated. See the Postgres JDBC SSL docs for further "
+                    + "information");
 
     public static final Field SSL_SOCKET_FACTORY = Field.create(DATABASE_CONFIG_PREFIX + "sslfactory")
             .withDisplayName("SSL Root Certificate")
@@ -920,22 +924,6 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
                     "This setting can improve connector performance significantly if there are frequently-updated tables that " +
                     "have TOASTed data that are rarely part of these updates. However, it is possible for the in-memory schema to " +
                     "become outdated if TOASTable columns are dropped from the table.");
-
-    /*
-     * public static final Field XMIN_FETCH_INTERVAL = Field.create("xmin.fetch.interval.ms")
-     * .withDisplayName("Xmin fetch interval (ms)")
-     * .withType(Type.LONG)
-     * .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 7))
-     * .withWidth(Width.SHORT)
-     * .withDefault(0L)
-     * .withImportance(Importance.MEDIUM)
-     * .withDescription("Specify how often (in ms) the xmin will be fetched from the replication slot. " +
-     * "This xmin value is exposed by the slot which gives a lower bound of where a new replication slot could start from. " +
-     * "The lower the value, the more likely this value is to be the current 'true' value, but the bigger the performance cost. " +
-     * "The bigger the value, the less likely this value is to be the current 'true' value, but the lower the performance penalty. " +
-     * "The default is set to 0 ms, which disables tracking xmin.")
-     * .withValidation(Field::isNonNegativeLong);
-     */
 
     public static final Field TOASTED_VALUE_PLACEHOLDER = Field.create("toasted.value.placeholder")
             .withDisplayName("Toasted value placeholder")
@@ -1074,12 +1062,6 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     protected boolean skipRefreshSchemaOnMissingToastableData() {
         return SchemaRefreshMode.COLUMNS_DIFF_EXCLUDE_UNCHANGED_TOAST == this.schemaRefreshMode;
     }
-
-    /*
-     * protected Duration xminFetchInterval() {
-     * return Duration.ofMillis(getConfig().getLong(PostgresConnectorConfig.XMIN_FETCH_INTERVAL));
-     * }
-     */
 
     protected byte[] toastedValuePlaceholder() {
         final String placeholder = getConfig().getString(TOASTED_VALUE_PLACEHOLDER);

@@ -31,7 +31,7 @@ import io.debezium.util.Strings;
 /**
  * Emits change data based on a logical decoding event coming as protobuf or JSON message.
  *
- * @author Horia Chiorean (hchiorea@redhat.com), Jiri Pechanec
+ * @author Suranjan Kumar (skumar@yugabyte.com)
  */
 public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBChangeRecordEmitter.class);

@@ -43,7 +43,7 @@ import io.debezium.util.Strings;
  * See the <a href="http://docs.oracle.com/javase/6/docs/technotes/guides/jdbc/getstart/mapping.html#table1">Java SE Mapping SQL
  * and Java Types</a> for details about how JDBC {@link Types types} map to Java value types.
  *
- * @author Randall Hauch
+ * @author Suranjan Kumar (skumar@yugabyte.com)
  */
 @ThreadSafe
 @Immutable
@@ -100,7 +100,9 @@ public class YBTableSchemaBuilder extends TableSchemaBuilder {
         final TableId tableId = table.id();
         final String tableIdStr = tableSchemaName(tableId);
         final String schemaNamePrefix = schemaPrefix + tableIdStr;
+
         LOGGER.debug("Mapping table '{}' to schemas under '{}'", tableId, schemaNamePrefix);
+
         SchemaBuilder valSchemaBuilder = SchemaBuilder.struct().name(schemaNameAdjuster.adjust(schemaNamePrefix + ".Value"));
         SchemaBuilder keySchemaBuilder = SchemaBuilder.struct().name(schemaNameAdjuster.adjust(schemaNamePrefix + ".Key"));
         AtomicBoolean hasPrimaryKey = new AtomicBoolean(false);
@@ -250,16 +252,6 @@ public class YBTableSchemaBuilder extends TableSchemaBuilder {
             int numFields = recordIndexes.length;
             ValueConverter[] converters = convertersForColumns(schema, tableId, columnsThatShouldBeAdded, mappers);
             return (row) -> {
-                // columns
-                // .stream()
-                // .filter(column -> filter == null || filter.matches(tableId.catalog(), tableId.schema(), tableId.table(), column.name()))
-                // .forEach(column -> {
-                // ColumnMapper mapper = mappers == null ? null : mappers.mapperFor(tableId, column);
-                // addField(valSchemaBuilder, table, column, mapper);
-                // });
-                //
-                // Schema valSchema = valSchemaBuilder.optional().build();
-
                 Struct result = new Struct(schema);
 
                 for (int i = 0; i != numFields; ++i) {
