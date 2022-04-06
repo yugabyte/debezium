@@ -98,6 +98,7 @@ public class YugabyteDBOffsetContext implements OffsetContext {
                                                                     YugabyteDBConnection jdbcConnection,
                                                                     Clock clock,
                                                                     Set<YBPartition> partitions) {
+        LOGGER.debug("Returning an initial context for snapshotting the table");
         return initialContext(connectorConfig, jdbcConnection, clock, new OpId(-1, -1, "".getBytes(), -1, 0),
                 new OpId(-1, -1, "".getBytes(), -1, 0), partitions);
     }
@@ -106,6 +107,7 @@ public class YugabyteDBOffsetContext implements OffsetContext {
                                                          YugabyteDBConnection jdbcConnection,
                                                          Clock clock,
                                                          Set<YBPartition> partitions) {
+        LOGGER.debug("Returning an initial context for NOT snapshotting the table");
         return initialContext(connectorConfig, jdbcConnection, clock, new OpId(0, 0, "".getBytes(), 0, 0),
                 new OpId(0, 0, "".getBytes(), 0, 0), partitions);
     }
@@ -116,11 +118,11 @@ public class YugabyteDBOffsetContext implements OffsetContext {
                                                          OpId lastCommitLsn,
                                                          OpId lastCompletelyProcessedLsn,
                                                          Set<YBPartition> partitions) {
-        LOGGER.info("Creating initial offset context");
+        LOGGER.debug("Creating initial offset context");
         final OpId lsn = null; // OpId.valueOf(jdbcConnection.currentXLogLocation());
         // TODO:Suranjan read the offset for each of the tablet
         final long txId = 0L;// new OpId(0,0,"".getBytes(), 0);
-        LOGGER.info("Read checkpoint at '{}' ", lsn, txId);
+        LOGGER.debug("Read checkpoint at '{}' ", lsn, txId);
         YugabyteDBOffsetContext context = new YugabyteDBOffsetContext(
                 connectorConfig,
                 lsn,
@@ -214,7 +216,7 @@ public class YugabyteDBOffsetContext implements OffsetContext {
     public void updateWalPosition(String tabletId, OpId lsn, OpId lastCompletelyProcessedLsn,
                                   Instant commitTime,
                                   String txId, TableId tableId, Long xmin) {
-
+        // todo vk: put log
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
 
         sourceInfo.update(tabletId, lsn, commitTime, txId, tableId, xmin);
@@ -232,6 +234,7 @@ public class YugabyteDBOffsetContext implements OffsetContext {
     }
 
     public void updateCommitPosition(OpId lsn, OpId lastCompletelyProcessedLsn) {
+        // todo vk: put log
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
         this.lastCommitLsn = lsn;
         sourceInfo.updateLastCommit(lsn);
