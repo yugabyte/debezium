@@ -159,7 +159,7 @@ public class YugabyteDBStreamingChangeEventSource implements
      *
      * @param snapshotDoneForTablet A map containing the key-value pairs as tabletId-->boolean where the boolean value
      *                              signifies whether the snapshot is complete for that tablet or not
-     * @return true if the snapshot is complete for all the tablets, false otherwise
+     * @return {@code true} if the snapshot is complete for all the tablets, {@code false} otherwise
      */
     private boolean isSnapshotCompleteForAllTablets(Map<String, Boolean> snapshotDoneForTablet) {
         for (Map.Entry<String, Boolean> entry : snapshotDoneForTablet.entrySet()) {

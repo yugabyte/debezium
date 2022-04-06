@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 import io.debezium.annotation.ThreadSafe;
 import io.debezium.connector.common.CdcSourceTaskContext;
 import io.debezium.connector.yugabytedb.connection.ReplicationConnection;
-import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection;
 import io.debezium.relational.TableId;
 import io.debezium.schema.TopicSelector;
 
@@ -56,32 +55,13 @@ public class YugabyteDBTaskContext extends CdcSourceTaskContext {
         return config;
     }
 
-    protected void refreshSchema(YugabyteDBConnection connection,
-                                 boolean printReplicaIdentityInfo)
-            throws SQLException {
-        // schema.refresh(connection, printReplicaIdentityInfo);
-    }
-
     protected ReplicationConnection createReplicationConnection(boolean doSnapshot)
             throws SQLException {
-        /*
-         * final boolean dropSlotOnStop = config.dropSlotOnStop();
-         * if (dropSlotOnStop) {
-         * LOGGER.warn(
-         * "Connector has enabled automated replication slot removal upon restart ({} = true). " +
-         * "This setting is not recommended for production environments, as a new replication slot " +
-         * "will be created after a connector restart, resulting in missed data change events.",
-         * PostgresConnectorConfig.DROP_SLOT_ON_STOP.name());
-         * }
-         */
+        LOGGER.debug("Creating a replication connection");
         return ReplicationConnection.builder(config)
-                // .withSlot(config.slotName())
-                // .withPublication(config.publicationName())
                 .withTableFilter(config.getTableFilters())
-                // .withPublicationAutocreateMode(config.publicationAutocreateMode())
                 .withPlugin(config.plugin())
                 .withTruncateHandlingMode(config.truncateHandlingMode())
-                // .dropSlotOnClose(dropSlotOnStop)
                 .streamParams(config.streamParams())
                 .statusUpdateInterval(config.statusUpdateInterval())
                 .withTypeRegistry(schema.getTypeRegistry())
