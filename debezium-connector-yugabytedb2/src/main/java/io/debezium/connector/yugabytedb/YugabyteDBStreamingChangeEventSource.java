@@ -8,7 +8,6 @@ package io.debezium.connector.yugabytedb;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -29,7 +28,6 @@ import io.debezium.pipeline.source.spi.StreamingChangeEventSource;
 import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 import io.debezium.util.Clock;
-import io.debezium.util.DelayStrategy;
 
 /**
  *
@@ -45,8 +43,6 @@ public class YugabyteDBStreamingChangeEventSource implements
 
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBStreamingChangeEventSource.class);
 
-    private static final int THROTTLE_NO_MESSAGE_BEFORE_PAUSE = 5;
-
     private final YugabyteDBConnection connection;
     private final EventDispatcher<TableId> dispatcher;
     private final ErrorHandler errorHandler;
@@ -55,7 +51,6 @@ public class YugabyteDBStreamingChangeEventSource implements
     private final YugabyteDBConnectorConfig connectorConfig;
 
     private final Snapshotter snapshotter;
-    private final DelayStrategy pauseNoMessage;
 
     /**
      * The minimum of (number of event received since the last event sent to Kafka,
@@ -70,14 +65,13 @@ public class YugabyteDBStreamingChangeEventSource implements
 
     public YugabyteDBStreamingChangeEventSource(YugabyteDBConnectorConfig connectorConfig, Snapshotter snapshotter,
                                                 YugabyteDBConnection connection, EventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
-                                                YugabyteDBSchema schema, YugabyteDBTaskContext taskContext, ReplicationConnection replicationConnection) {
+                                                YugabyteDBSchema schema, YugabyteDBTaskContext taskContext) {
         this.connectorConfig = connectorConfig;
         this.connection = connection;
         this.dispatcher = dispatcher;
         this.errorHandler = errorHandler;
         this.clock = clock;
         this.schema = schema;
-        pauseNoMessage = DelayStrategy.constant(taskContext.getConfig().getPollInterval().toMillis());
         this.snapshotter = snapshotter;
 
         String masterAddress = connectorConfig.masterAddresses();
@@ -100,7 +94,6 @@ public class YugabyteDBStreamingChangeEventSource implements
         // we will stream from the position in the slot
         // instead of the last position in the database
         // Get all partitions
-        // Get
         Set<YBPartition> partitions = new YugabyteDBPartition.Provider(connectorConfig).getPartitions();
         boolean hasStartLsnStoredInContext = offsetContext != null && !offsetContext.getTabletSourceInfo().isEmpty();
 
@@ -115,26 +108,24 @@ public class YugabyteDBStreamingChangeEventSource implements
         }
 
         try {
-            final WalPositionLocator walPosition;
+//            final WalPositionLocator walPosition;
 
             // todo vk: remove commented/dead code
             if (hasStartLsnStoredInContext) {
-                // start streaming from the last recorded position in the offset
+                // Start streaming from the last recorded position in the offset
                 final OpId lsn = offsetContext.lastCompletelyProcessedLsn() != null ? offsetContext.lastCompletelyProcessedLsn() : offsetContext.lsn();
                 LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
-                walPosition = new WalPositionLocator(offsetContext.lastCommitLsn(), lsn);
-                // replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
+                // todo: commented the following to see if there's any side effect, remove if nothing changes at all
+//                walPosition = new WalPositionLocator(offsetContext.lastCommitLsn(), lsn);
             }
             else {
                 LOGGER.info("No previous LSN found in Kafka, streaming from the latest checkpoint" +
                         " in YugabyteDB");
-                walPosition = new WalPositionLocator();
-                // create snpashot offset.
-
-                // replicationStream.compareAndSet(null, replicationConnection.startStreaming(walPosition));
+                // todo: commented the following to see if there's any side effect, remove if nothing changes at all
+//                walPosition = new WalPositionLocator();
             }
 
-            getChanges(context, partition, offsetContext, hasStartLsnStoredInContext);
+            getChanges(context, offsetContext);
         }
         catch (Throwable e) {
             errorHandler.setProducerThrowable(e);
@@ -142,8 +133,9 @@ public class YugabyteDBStreamingChangeEventSource implements
         finally {
 
             if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
-
+                // todo: this block is not relevant now, but can be used in future
             }
+
             if (asyncYBClient != null) {
                 try {
                     asyncYBClient.close();
@@ -163,17 +155,12 @@ public class YugabyteDBStreamingChangeEventSource implements
         }
     }
 
-    private GetChangesResponse getChangeResponse(YugabyteDBOffsetContext offsetContext) throws Exception {
-        return null;
-    }
-
-    private void getSnapshotChanges(ChangeEventSourceContext context,
-                                    YugabyteDBPartition partitionn,
-                                    YugabyteDBOffsetContext offsetContext,
-                                    boolean previousOffsetPresent) {
-
-    }
-
+    /**
+     *
+     * @param snapshotDoneForTablet A map containing the key-value pairs as tabletId-->boolean where the boolean value
+     *                              signifies whether the snapshot is complete for that tablet or not
+     * @return true if the snapshot is complete for all the tablets, false otherwise
+     */
     private boolean isSnapshotCompleteForAllTablets(Map<String, Boolean> snapshotDoneForTablet) {
         for (Map.Entry<String, Boolean> entry : snapshotDoneForTablet.entrySet()) {
             if (entry.getValue() == Boolean.FALSE) {
@@ -186,15 +173,15 @@ public class YugabyteDBStreamingChangeEventSource implements
         return true;
     }
 
+    /**
+     * This function pulls the changes from the YugabyteDB server.
+     */
     private void getChanges(ChangeEventSourceContext context,
-                            YugabyteDBPartition partitionn,
-                            YugabyteDBOffsetContext offsetContext,
-                            boolean previousOffsetPresent)
+                            YugabyteDBOffsetContext offsetContext)
             throws Exception {
         LOGGER.debug("The offset is " + offsetContext.getOffset());
 
         LOGGER.info("Proceeding to process change records now");
-        ListTablesResponse tablesResp = syncClient.getTablesList();
 
         // todo vk: we have never used/tested this before
         String tabletList = this.connectorConfig.getConfig().getString(YugabyteDBConnectorConfig.TABLET_LIST);
@@ -203,10 +190,7 @@ public class YugabyteDBStreamingChangeEventSource implements
             tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
             LOGGER.debug("The tablet list is " + tabletPairList);
         }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
-        catch (ClassNotFoundException e) {
+        catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
 
@@ -215,31 +199,36 @@ public class YugabyteDBStreamingChangeEventSource implements
 
         LOGGER.info("Using DB stream ID: " + streamId);
 
-        Set<String> tIds = tabletPairList.stream().map(pair -> pair.getLeft()).collect(Collectors.toSet());
+        if (tabletPairList == null) {
+            LOGGER.warn("The tablet pair list is null, it may cause issues eg. NullPointerException");
+        }
+
+        Set<String> tIds = tabletPairList.stream().map(Pair::getLeft).collect(Collectors.toSet());
         for (String tId : tIds) {
             LOGGER.debug("Table UUID: " + tIds);
             YBTable table = this.syncClient.openTableByUUID(tId);
             tableIdToTable.put(tId, table);
         }
 
-        // todo: rename schemaStreamed to something else
-        Map<String, Boolean> schemaStreamed = new HashMap<>();
-        Map<String, Boolean> snapshotDoneForTablet = new HashMap<>();
 
-        // Initialize all the tabletIds with true signifying we need schemas for all the tablets.
-        // Also initialize the snapshot flags for each tablet.
+        // Create and initialize all the tabletIds with true signifying we need schemas for all the tablets in the beginning of the streaming.
+        // This is helpful in case the connector or Kafka connect is restarted, so then we will explicitly request the server to send a DDL record
+        // to make sure that we are caching the correct schema on the Debezium side.
+        //
+        // The second map is relevant to the snapshots for the tablets and signifies whether the snapshot for a tablet is complete. So in case of
+        // the initial_only mode, once the snapshot is streamed for all the tablets, we will stop streaming by utilizing this map itself.
+        Map<String, Boolean> needSchemaFromServer = new HashMap<>();
+        Map<String, Boolean> snapshotCompleteForTablet = new HashMap<>();
         for (Pair<String, String> entry : tabletPairList) {
-            schemaStreamed.put(entry.getValue(), Boolean.TRUE);
-            snapshotDoneForTablet.put(entry.getValue(), Boolean.FALSE);
+            needSchemaFromServer.put(entry.getValue(), Boolean.TRUE);
+            snapshotCompleteForTablet.put(entry.getValue(), Boolean.FALSE);
         }
 
-        // todo vk: add javadoc for the function getTabletSourceInfo
         LOGGER.info("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
 
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                 (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
-            // The following will specify the connector polling interval at which
-            // yb-client will ask the database for changes
+            // The following will specify the connector polling interval at which yb-client will ask the database for changes.
             LOGGER.debug("Sleeping for {} milliseconds before polling further", connectorConfig.cdcPollIntervalms());
             Thread.sleep(connectorConfig.cdcPollIntervalms());
 
@@ -248,19 +237,17 @@ public class YugabyteDBStreamingChangeEventSource implements
                 YBPartition part = new YBPartition(tabletId);
 
                 // Ignore this tablet if the snapshot is already complete for it.
-                if (!snapshotter.shouldStream() && snapshotDoneForTablet.get(tabletId)) {
+                if (!snapshotter.shouldStream() && snapshotCompleteForTablet.get(tabletId)) {
                     continue;
                 }
 
                 YBTable table = tableIdToTable.get(entry.getKey());
                 OpId cp = offsetContext.lsn(tabletId);
 
-                // GetChangesResponse response = getChangeResponse(offsetContext);
                 LOGGER.debug("Fetching changes for the tablet {} from OpId {} for table {}", tabletId, cp, table.getName());
 
-                GetChangesResponse response = this.syncClient.getChangesCDCSDK(
-                        table, streamId, tabletId,
-                        cp.getTerm(), cp.getIndex(), cp.getKey(), cp.getWrite_id(), cp.getTime(), schemaStreamed.get(tabletId));
+                GetChangesResponse response = this.syncClient.getChangesCDCSDK(table, streamId, tabletId, cp.getTerm(), cp.getIndex(),
+                        cp.getKey(), cp.getWrite_id(), cp.getTime(), needSchemaFromServer.get(tabletId));
 
                 for (CdcService.CDCSDKProtoRecordPB record : response.getResp().getCdcSdkProtoRecordsList()) {
                     CdcService.RowMessage m = record.getRowMessage();
@@ -273,7 +260,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                             record.getCdcSdkOpId().getIndex(),
                             record.getCdcSdkOpId().getWriteIdKey().toByteArray(),
                             record.getCdcSdkOpId().getWriteId(),
-                            response.getSnapshotTime()); // stream.lastReceivedLsn();
+                            response.getSnapshotTime());
 
                     if (message.isLastEventForLsn()) {
                         lastCompletelyProcessedLsn = lsn;
@@ -317,7 +304,8 @@ public class YugabyteDBStreamingChangeEventSource implements
 
                             // Set schema received for this tablet ID which means that if a DDL message is received for a tablet,
                             // we do not need its schema again.
-                            schemaStreamed.put(tabletId, Boolean.FALSE);
+                            LOGGER.debug("Got a DDL record for tablet {}", tabletId);
+                            needSchemaFromServer.put(tabletId, Boolean.FALSE);
 
                             TableId tableId = null;
                             if (message.getOperation() != Operation.NOOP) {
@@ -355,22 +343,19 @@ public class YugabyteDBStreamingChangeEventSource implements
                             maybeWarnAboutGrowingWalBacklog(dispatched);
                         }
                     }
-                    catch (InterruptedException ie) {
-                        ie.printStackTrace();
-                    }
-                    catch (SQLException se) {
-                        se.printStackTrace();
+                    catch (InterruptedException | SQLException ex) {
+                        ex.printStackTrace();
                     }
                 }
 
                 if (!snapshotter.shouldStream() && response.getResp().getCdcSdkCheckpoint().getWriteId() != -1) {
                     LOGGER.debug("Marking snapshot complete for tablet: " + tabletId);
-                    snapshotDoneForTablet.put(tabletId, Boolean.TRUE);
+                    snapshotCompleteForTablet.put(tabletId, Boolean.TRUE);
                 }
 
-                // End the snapshot in case the snapshot is complete.
-                if (isSnapshotCompleteForAllTablets(snapshotDoneForTablet) && !snapshotter.shouldStream()) {
-                    LOGGER.debug("Snapshot completed for all the tablets, the connector will not stop streaming as per the configuration");
+                // End the streaming in case the snapshot is complete and no further streaming is required i.e. snapshot.mode == initial_only
+                if (isSnapshotCompleteForAllTablets(snapshotCompleteForTablet) && !snapshotter.shouldStream()) {
+                    LOGGER.debug("Snapshot completed for all the tablets, the connector will now stop streaming as per the configuration");
                     return;
                 }
 
@@ -391,35 +376,6 @@ public class YugabyteDBStreamingChangeEventSource implements
                 }
             }
         }
-    }
-
-    // todo vk: this function is not being used
-    private void searchWalPosition(ChangeEventSourceContext context, final ReplicationStream stream, final WalPositionLocator walPosition)
-            throws SQLException, InterruptedException {
-        AtomicReference<OpId> resumeLsn = new AtomicReference<>();
-        int noMessageIterations = 0;
-
-        LOGGER.debug("Searching for WAL resume position");
-        while (context.isRunning() && resumeLsn.get() == null) {
-
-            boolean receivedMessage = stream.readPending(message -> {
-                final OpId lsn = stream.lastReceivedLsn();
-                resumeLsn.set(walPosition.resumeFromLsn(lsn, message).orElse(null));
-            });
-
-            if (receivedMessage) {
-                noMessageIterations = 0;
-            }
-            else {
-                noMessageIterations++;
-                if (noMessageIterations >= THROTTLE_NO_MESSAGE_BEFORE_PAUSE) {
-                    noMessageIterations = 0;
-                    pauseNoMessage.sleepWhen(true);
-                }
-            }
-
-        }
-        LOGGER.info("WAL resume position '{}' discovered", resumeLsn.get());
     }
 
     private void commitMessage(YBPartition partition, YugabyteDBOffsetContext offsetContext,

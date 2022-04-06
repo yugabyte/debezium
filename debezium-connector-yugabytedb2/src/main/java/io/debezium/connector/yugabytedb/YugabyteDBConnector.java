@@ -164,6 +164,18 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
     }
 
+    /**
+     * Get a YBClient instance to perform operations on the YugabyteDB server
+     * @param hostAddress Comma separated master addresses of the server
+     * @param adminTimeout Timeout for admin operations
+     * @param operationTimeout Timeout for user operations
+     * @param socketReadTimeout Timeout for waiting on data from a socket
+     * @param maxNumTablets The maximum number of tablets yb-client can poll for
+     * @param certFile Path to root certificate
+     * @param clientCert Path to client certificate
+     * @param clientKey Path to client's private key
+     * @return A {@link YBClient} instance
+     */
     private YBClient getYBClientBase(String hostAddress, long adminTimeout, long operationTimeout, long socketReadTimeout,
                                      int maxNumTablets, String certFile, String clientCert, String clientKey) {
         if (maxNumTablets == -1) {
@@ -220,8 +232,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         this.yugabyteDBConnectorConfig = new YugabyteDBConnectorConfig(config);
         final ConfigValue hostnameValue = configValues.get(RelationalDatabaseConnectorConfig.HOSTNAME.name());
         // Try to connect to the database ...
-        // todo Vaibhav: If this is the only section where the connector is connecting to the tservers then
-        //  it looks like it can be removed.
+        // todo: if this is the only section which accesses the tservers, looks like it can be removed in future releases
         try (YugabyteDBConnection connection = new YugabyteDBConnection(yugabyteDBConnectorConfig
                 .getJdbcConfig())) {
             try {
@@ -260,7 +271,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 yugabyteDBConnectorConfig.maxNumTablets(),
                 yugabyteDBConnectorConfig.sslRootCert(),
                 yugabyteDBConnectorConfig.sslClientCert(),
-                yugabyteDBConnectorConfig.sslClientKey()); // always passing the ssl root certs so whenever they are null, they will just be ignored
+                yugabyteDBConnectorConfig.sslClientKey()); // always passing the ssl root certs and whenever they are null, they will just be ignored
         LOGGER.debug("Master host addresses: " + hostAddress);
         HostAndPort masterHostPort = ybClient.getLeaderMasterHostAndPort();
         if (masterHostPort == null) {
@@ -271,7 +282,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         // TODO: Find out where to do validation for table whitelist
         String streamId = yugabyteDBConnectorConfig.streamId();
         final ConfigValue streamIdConfig = configValues.get(YugabyteDBConnectorConfig.STREAM_ID.name());
-        this.tableIds = fetchTabletList();
+        this.tableIds = fetchTables();
 
         if (tableIds.isEmpty()) {
             LOGGER.info(String.format("The table id is empty."));
@@ -327,7 +338,16 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
     }
 
-    private Set<String> fetchTabletList() {
+    /**
+     * Get the list of tables eligible for streaming. The tables being ignored are:
+     * <ul>
+     *     <li>the index tables</li>
+     *     <li>the system tables</li>
+     *     <li>the ones not having a pgschema_name parameter (signifying that they were created using older versions of YB)</li>
+     * </ul>
+     * @return A {@link Set<String>} of table Ids
+     */
+    private Set<String> fetchTables() {
         LOGGER.debug("Fetching the tables present in the database");
         Set<String> tIds = new HashSet<>();
         try {
