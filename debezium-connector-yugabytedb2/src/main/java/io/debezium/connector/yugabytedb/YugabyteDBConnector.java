@@ -129,14 +129,15 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         List<Map<String, String>> taskConfigs = new ArrayList<>(tabletIdsGrouped.size());
 
         for (List<Pair<String, String>> taskTables : tabletIdsGrouped) {
-            LOGGER.debug("The taskTables are " + taskTables); // todo vaibhav: ask Suranjan what this means
+            LOGGER.debug("Tables for the task: " + taskTables);
             Map<String, String> taskProps = new HashMap<>(this.props);
             int taskId = taskConfigs.size();
             taskProps.put(YugabyteDBConnectorConfig.TASK_ID.toString(), String.valueOf(taskId));
             String taskTablesSerialized = "";
             try {
                 taskTablesSerialized = ObjectUtil.serializeObjectToString(taskTables);
-                LOGGER.debug("The taskTablesSerialized " + taskTablesSerialized); // todo Vaibhav: what does this mean?
+                // todo: even in the debug logs, the serialized format would not make much sense to the user
+                LOGGER.debug("Serialized task tables: " + taskTablesSerialized);
             }
             catch (IOException e) {
                 e.printStackTrace();
@@ -191,18 +192,6 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 .build();
 
         return new YBClient(asyncClient);
-    }
-
-    // todo Vaibhav: remove if not needed
-    private YBClient getYBClient(String hostAddress, long adminTimeout, long opTimeout,
-                                 long socketTimeout) {
-        return getYBClient(hostAddress, adminTimeout, opTimeout, socketTimeout, -1);
-    }
-
-    // over loaded function
-    private YBClient getYBClient(String hostAddress, long adminTimeout, long opTimeout,
-                                 long socketTimeout, int numTablets) {
-        return getYBClientBase(hostAddress, adminTimeout, opTimeout, socketTimeout, numTablets, null, null, null);
     }
 
     @Override
@@ -279,7 +268,6 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
 
         // Do a get and check if the streamid exists.
-        // TODO: Suranjan check the db stream info and verify if the tableIds are present
         // TODO: Find out where to do validation for table whitelist
         String streamId = yugabyteDBConnectorConfig.streamId();
         final ConfigValue streamIdConfig = configValues.get(YugabyteDBConnectorConfig.STREAM_ID.name());

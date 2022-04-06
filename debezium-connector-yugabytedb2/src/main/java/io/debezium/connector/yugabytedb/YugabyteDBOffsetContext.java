@@ -216,7 +216,7 @@ public class YugabyteDBOffsetContext implements OffsetContext {
     public void updateWalPosition(String tabletId, OpId lsn, OpId lastCompletelyProcessedLsn,
                                   Instant commitTime,
                                   String txId, TableId tableId, Long xmin) {
-        // todo vk: put log
+        LOGGER.debug("Updated the WAL position with ");
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
 
         sourceInfo.update(tabletId, lsn, commitTime, txId, tableId, xmin);
