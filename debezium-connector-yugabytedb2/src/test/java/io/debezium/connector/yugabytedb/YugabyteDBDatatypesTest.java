@@ -41,6 +41,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
             for (int i = 0; i < numOfRowsToBeInserted; i++) {
                 TestHelper.execute(String.format(formatInsertString, i));
             }
+
         }).exceptionally(throwable -> {
             throw new RuntimeException(throwable);
         });
@@ -70,9 +71,11 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
     }
 
     private void verifyPrimaryKeyOnly(long recordsCount) {
+        System.out.println("verifyPrimaryKeyOnly ");
         int totalConsumedRecords = 0;
         long start = System.currentTimeMillis();
         List<SourceRecord> records = new ArrayList<>();
+        recordsCount = 100;
         while (totalConsumedRecords < recordsCount) {
             int consumed = super.consumeAvailableRecords(record -> {
                 System.out.println("The record being consumed is " + record);
@@ -90,6 +93,7 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
             // verify the records
             assertInsert(records.get(i), "id", i);
         }
+
     }
 
     private void verifyValue(long recordsCount) {
@@ -145,10 +149,12 @@ public class YugabyteDBDatatypesTest extends AbstractConnectorTest {
         Configuration.Builder configBuilder = getConfigBuilder("public.t1");
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
-        final long recordsCount = 2;
+        final long recordsCount = 1;
 
+        System.out.println("testRecordConsumption");
         // insert rows in the table t1 with values <some-pk, 'Vaibhav', 'Kushwaha', 30>
         insertRecords(recordsCount);
+        System.out.println("testRecordConsumption");
 
         CompletableFuture.runAsync(() -> verifyPrimaryKeyOnly(recordsCount))
                 .exceptionally(throwable -> {
