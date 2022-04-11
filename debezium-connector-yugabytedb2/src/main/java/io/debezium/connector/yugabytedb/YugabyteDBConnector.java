@@ -350,6 +350,16 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                     continue;
                 }
 
+                // Ignore the tables without a pgschema_name, these tables are the ones created with the older versions of YugabyteDB where
+                // the changes for CDCSDK were not present. For more details, visit https://github.com/yugabyte/yugabyte-db/issues/11976
+                if (tableInfo.getPgschemaName() == null || tableInfo.getPgschemaName().isEmpty()) {
+                    LOGGER.warn(String.format("Ignoring the table %s.%s since it does not have a pgschema_name value (possibly because it was created using an older "
+                                    + "YugabyteDB version)",
+                            tableInfo.getNamespace().getName(),
+                            tableInfo.getName()));
+                    continue;
+                }
+
                 String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName() + "." + tableInfo.getName();
                 TableId tableId = YugabyteDBSchema.parseWithSchema(fqlTableName, tableInfo.getPgschemaName());
                 if (yugabyteDBConnectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
