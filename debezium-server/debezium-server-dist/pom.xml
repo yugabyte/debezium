@@ -65,6 +65,11 @@
                     <artifactId>debezium-connector-sqlserver</artifactId>
                 </dependency>
                 <dependency>
+                  <groupId>io.debezium</groupId>
+                  <artifactId>debezium-connector-yugabytedb2</artifactId>
+                  <version>1.7.0-SNAPSHOT</version>
+                </dependency>
+                <dependency>
                     <groupId>io.debezium</groupId>
                     <artifactId>debezium-server-core</artifactId>
                 </dependency>
