@@ -390,8 +390,8 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             }
         }
         catch (DebeziumException de) {
-            // We do not want to catch this exception since this will be thrown while initializing the connector
-            // and at this point if this exception is thrown, we should not proceed forward with the connector
+            // We are ultimately throwing this exception since this will be thrown while initializing the connector
+            // and at this point if this exception is thrown, we should not proceed forward with the connector.
             throw de;
         }
         catch (Exception e) {
