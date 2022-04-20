@@ -436,8 +436,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                 }
 
                 // If there are retries left, perform them after the specified delay.
-                LOGGER.warn("Error while trying to get the changes from the server; will attempt retry {} of {} after {} milli-seconds. Exception message: {} and stacktrace: {}",
-                        retryCount, connectorConfig.maxConnectorRetries(), connectorConfig.connectorRetryDelayMs(), e.getMessage(), e.printStackTrace());
+                LOGGER.warn("Error while trying to get the changes from the server; will attempt retry {} of {} after {} milli-seconds. Exception message: {}",
+                        retryCount, connectorConfig.maxConnectorRetries(), connectorConfig.connectorRetryDelayMs(), e.getMessage());
                 
                 try {
                     metronome.pause();
