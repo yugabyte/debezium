@@ -1018,7 +1018,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     }
 
     public boolean ignoreExceptions() {
-        return getConfig().getBoolean(IGNORE_EXCEPTIONS;
+        return getConfig().getBoolean(IGNORE_EXCEPTIONS);
     }
 
     public int maxNumTablets() {
