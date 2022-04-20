@@ -507,6 +507,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     protected static final long DEFAULT_OPERATION_TIMEOUT_MS = 60000;
     protected static final long DEFAULT_SOCKET_READ_TIMEOUT_MS = 60000;
     protected static final long DEFAULT_CDC_POLL_INTERVAL_MS = 500;
+    protected static final int DEFAULT_MAX_CONNECTOR_RETRIES = 5;
+    protected static final long DEFAULT_CONNECTOR_RETRY_DELAY_MS = 10000;
 
     @Override
     public Configuration getJdbcConfig() {
@@ -575,6 +577,20 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withImportance(Importance.LOW)
             .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
             .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
+
+    public static final Field MAX_CONNECTOR_RETRIES = Field.create("max.connector.retries")
+            .withDisplayName("Maximum number of retries a connector can have")
+            .withType(Type.INT)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_MAX_CONNECTOR_RETRIES)
+            .withDescription("The maximum number of times a connector can retry to get the changes from the server.");
+
+    public static final Field CONNECTOR_RETRY_DELAY_MS = Field.create("connector.retry.delay.ms")
+            .withDisplayName("Delay after which connector will attempt a retry")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_CONNECTOR_RETRY_DELAY_MS)
+            .withDescription("The amount of time after which the connector will attempt to retry to get the changes from the server.");
 
     public static final Field IGNORE_EXCEPTIONS = Field.create("ignore.exceptions")
             .withDisplayName("Flag to ignore exceptions which do not cause an issue while execution")
@@ -1023,6 +1039,14 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
     public long cdcPollIntervalms() {
         return getConfig().getLong(CDC_POLL_INTERVAL_MS);
+    }
+
+    public int maxConnectorRetries() {
+        return getConfig().getInteger(MAX_CONNECTOR_RETRIES);
+    }
+
+    public long connectorRetryDelayMs() {
+        return getConfig().getLong(CONNECTOR_RETRY_DELAY_MS);
     }
 
     public String sslRootCert() {
