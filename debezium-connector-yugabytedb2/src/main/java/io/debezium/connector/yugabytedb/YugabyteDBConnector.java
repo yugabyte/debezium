@@ -381,7 +381,12 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 if (yugabyteDBConnectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
                     // Throw an exception if the table in the include list is not a part of DB stream ID
                     if (!isTableIncludedInStreamId(dbStreamInfoResponse, tableInfo.getId().toStringUtf8())) {
-                        throw new DebeziumException("The table " + tableId + " is not a part of the stream ID " + yugabyteDBConnectorConfig.streamId());
+                        String warningMessage = "The table " + tableId + " is not a part of the stream ID " + yugabyteDBConnectorConfig.streamId();
+                        if (yugabyteDBConnectorConfig.ignoreExceptions()) {
+                            LOGGER.warn(warningMessage + ". Ignoring the table.");
+                            continue;
+                        }
+                        throw new DebeziumException(warningMessage);
                     }
 
                     LOGGER.info(String.format("Adding table %s for streaming (%s)", tableInfo.getId().toStringUtf8(), fqlTableName));

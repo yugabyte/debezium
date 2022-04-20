@@ -576,6 +576,12 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
             .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
 
+    public static final Field IGNORE_EXCEPTIONS = Field.create("ignore.exceptions")
+            .withDisplayName("Flag to ignore exceptions which do not cause an issue while execution")
+            .withType(Type.BOOLEAN)
+            .withImportance(Importance.LOW)
+            .withDefault(false);
+
     public static final Field AUTO_CREATE_STREAM = Field.create("auto.create.stream")
             .withDisplayName("Specify whether to create a stream by default")
             .withType(Type.BOOLEAN)
@@ -993,6 +999,10 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
     public boolean autoCreateStream() {
         return getConfig().getBoolean(AUTO_CREATE_STREAM);
+    }
+
+    public boolean ignoreExceptions() {
+        return getConfig().getBoolean(IGNORE_EXCEPTIONS;
     }
 
     public int maxNumTablets() {
