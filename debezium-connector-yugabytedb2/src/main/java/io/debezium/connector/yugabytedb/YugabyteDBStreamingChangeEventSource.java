@@ -425,6 +425,10 @@ public class YugabyteDBStreamingChangeEventSource implements
                             // CDCSDK Find out why this fails : connection.commit();
                         }
                     }
+                
+                    // Reset the retry count, because if flow reached at this point, it means that the connection
+                    // has succeeded
+                    retryCount = 0;
                 }
             } catch (Exception e) {
                 ++retryCount;
