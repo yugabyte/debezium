@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yb.client.*;
 import org.yb.master.MasterDdlOuterClass;
+import org.yb.master.MasterReplicationOuterClass;
 import org.yb.master.MasterTypes;
 
 import com.google.common.net.HostAndPort;
@@ -338,6 +339,17 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
     }
 
+    private boolean isTableIncludedInStreamId(GetDBStreamInfoResponse resp, String tableId) {
+        for (MasterReplicationOuterClass.GetCDCDBStreamInfoResponsePB.TableInfo tableInfo : resp.getTableInfoList()) {
+            if (Objects.equals(tableId, tableInfo.getTableId().toStringUtf8())) {
+                return true;
+            }
+        }
+
+        // This signifies that the table ID we have provided is not a part of the stream ID
+        return false;
+    }
+
     private Set<String> fetchTabletList() {
         LOGGER.debug("Fetching tables");
         Set<String> tIds = new HashSet<>();
@@ -362,11 +374,30 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
                 String fqlTableName = tableInfo.getNamespace().getName() + "." + tableInfo.getPgschemaName() + "." + tableInfo.getName();
                 TableId tableId = YugabyteDBSchema.parseWithSchema(fqlTableName, tableInfo.getPgschemaName());
+
+                // Retrieve the list of tables in the stream ID,
+                GetDBStreamInfoResponse dbStreamInfoResponse = this.ybClient.getDBStreamInfo(yugabyteDBConnectorConfig.streamId());
+
                 if (yugabyteDBConnectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
+                    // Throw an exception if the table in the include list is not a part of DB stream ID
+                    if (!isTableIncludedInStreamId(dbStreamInfoResponse, tableInfo.getId().toStringUtf8())) {
+                        String warningMessage = "The table " + tableId + " is not a part of the stream ID " + yugabyteDBConnectorConfig.streamId();
+                        if (yugabyteDBConnectorConfig.ignoreExceptions()) {
+                            LOGGER.warn(warningMessage + ". Ignoring the table.");
+                            continue;
+                        }
+                        throw new DebeziumException(warningMessage);
+                    }
+
                     LOGGER.info(String.format("Adding table %s for streaming (%s)", tableInfo.getId().toStringUtf8(), fqlTableName));
                     tIds.add(tableInfo.getId().toStringUtf8());
                 }
             }
+        }
+        catch (DebeziumException de) {
+            // We are ultimately throwing this exception since this will be thrown while initializing the connector
+            // and at this point if this exception is thrown, we should not proceed forward with the connector.
+            throw de;
         }
         catch (Exception e) {
             e.printStackTrace();
