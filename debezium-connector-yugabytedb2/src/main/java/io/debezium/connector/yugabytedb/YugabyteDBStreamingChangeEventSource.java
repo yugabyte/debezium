@@ -298,6 +298,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                 while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                         (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
                     // Pause for the specified duration before asking for a new set of changes from the server
+                    LOGGER.debug("Pausing for {} milliseconds before polling further", connectorConfig.cdcPollIntervalms());
                     pollIntervalMetronome.pause();
 
                     for (Pair<String, String> entry : tabletPairList) {
