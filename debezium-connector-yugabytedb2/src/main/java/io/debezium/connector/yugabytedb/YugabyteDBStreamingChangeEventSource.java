@@ -289,15 +289,17 @@ public class YugabyteDBStreamingChangeEventSource implements
         }
         LOGGER.debug("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
 
-        final Metronome metronome = Metronome.parker(Duration.ofMillis(connectorConfig.connectorRetryDelayMs()), Clock.SYSTEM);
+        final Metronome pollIntervalMetronome = Metronome.parker(Duration.ofMillis(connectorConfig.cdcPollIntervalms()), Clock.SYSTEM);
+        final Metronome retryMetronome = Metronome.parker(Duration.ofMillis(connectorConfig.connectorRetryDelayMs()), Clock.SYSTEM);
+        
         short retryCount = 0;
         while (retryCount <= connectorConfig.maxConnectorRetries()) {
             try { 
                 while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                         (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
-                    // The following will specify the connector polling interval at which
-                    // yb-client will ask the database for changes
-                    Thread.sleep(connectorConfig.cdcPollIntervalms());
+                    // Pause for the specified duration before asking for a new set of changes from the server
+                    LOGGER.debug("Pausing for {} milliseconds before polling further", connectorConfig.cdcPollIntervalms());
+                    pollIntervalMetronome.pause();
 
                     for (Pair<String, String> entry : tabletPairList) {
                         final String tabletId = entry.getValue();
@@ -444,7 +446,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                         retryCount, connectorConfig.maxConnectorRetries(), connectorConfig.connectorRetryDelayMs(), e.getMessage());
                 
                 try {
-                    metronome.pause();
+                    retryMetronome.pause();
                 } catch (InterruptedException ie) {
                     LOGGER.warn("Connector retry sleep interrupted by exception: {}", ie);
                     Thread.currentThread().interrupt();
