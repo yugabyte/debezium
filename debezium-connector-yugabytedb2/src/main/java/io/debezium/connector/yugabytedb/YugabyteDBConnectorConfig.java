@@ -1234,7 +1234,6 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     private class DatabasePredicate implements TableFilter {
         @Override
         public boolean isIncluded(TableId tableId) {
-            // todo: see if this can be used to handle database.include.list in future
             return Objects.equals(tableId.catalog(), getConfig().getString(DATABASE_NAME));
         }
     }
