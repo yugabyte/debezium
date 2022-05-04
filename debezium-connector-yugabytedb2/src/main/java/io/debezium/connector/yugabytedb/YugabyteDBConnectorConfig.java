@@ -977,7 +977,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     private final SnapshotMode snapshotMode;
     private final SchemaRefreshMode schemaRefreshMode;
 
-    private final TableFilter databaseFilterPredicate;
+    private final TableFilter databaseFilter;
 
     public YugabyteDBConnectorConfig(Configuration config) {
         super(
@@ -995,7 +995,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         this.snapshotMode = SnapshotMode.parse(config.getString(SNAPSHOT_MODE));
         this.schemaRefreshMode = SchemaRefreshMode.parse(config.getString(SCHEMA_REFRESH_MODE));
 
-        this.databaseFilterPredicate = new DatabasePredicate();
+        this.databaseFilter = new DatabasePredicate();
     }
 
     protected String hostname() {
@@ -1115,7 +1115,7 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     }
 
     protected TableFilter databaseFilter() {
-        return this.databaseFilterPredicate;
+        return this.databaseFilter;
     }
 
     /*
@@ -1227,18 +1227,15 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
         @Override
         public boolean isIncluded(TableId t) {
-            LOGGER.info("This is being called: ", new Exception());
             return !SYSTEM_SCHEMAS.contains(t.schema().toLowerCase());
         }
     }
 
-    private static class DatabasePredicate implements TableFilter {
+    private class DatabasePredicate implements TableFilter {
         @Override
         public boolean isIncluded(TableId tableId) {
-            // todo Vaibhav: see how this condition can be modified to cover database.include.list
-            //  if it's possible at all
-            return tableId.catalog() == "api";
-        //   return Objects.equals(tableId.catalog(), );
+            // todo: see if this can be used to handle database.include.list in future
+            return Objects.equals(tableId.catalog(), getConfig().getString(DATABASE_NAME));
         }
     }
 }
