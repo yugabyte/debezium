@@ -58,6 +58,7 @@ public class Filters {
                 .excludeTables(tableExcludeList)
                 .includeSchemas(config.schemaIncludeList())
                 .excludeSchemas(schemaExcludeList)
+                .includeDatabases(config.databaseName())
                 .build());
     }
 

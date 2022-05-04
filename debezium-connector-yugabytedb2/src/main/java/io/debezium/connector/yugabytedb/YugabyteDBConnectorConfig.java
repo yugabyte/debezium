@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.common.config.ConfigDef;
@@ -976,6 +977,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     private final SnapshotMode snapshotMode;
     private final SchemaRefreshMode schemaRefreshMode;
 
+    private final TableFilter databaseFilterPredicate;
+
     public YugabyteDBConnectorConfig(Configuration config) {
         super(
                 config,
@@ -991,6 +994,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         this.intervalHandlingMode = IntervalHandlingMode.parse(config.getString(YugabyteDBConnectorConfig.INTERVAL_HANDLING_MODE));
         this.snapshotMode = SnapshotMode.parse(config.getString(SNAPSHOT_MODE));
         this.schemaRefreshMode = SchemaRefreshMode.parse(config.getString(SCHEMA_REFRESH_MODE));
+
+        this.databaseFilterPredicate = new DatabasePredicate();
     }
 
     protected String hostname() {
@@ -1109,6 +1114,10 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         return SchemaRefreshMode.COLUMNS_DIFF_EXCLUDE_UNCHANGED_TOAST == this.schemaRefreshMode;
     }
 
+    protected TableFilter databaseFilter() {
+        return this.databaseFilterPredicate;
+    }
+
     /*
      * protected Duration xminFetchInterval() {
      * return Duration.ofMillis(getConfig().getLong(PostgresConnectorConfig.XMIN_FETCH_INTERVAL));
@@ -1218,7 +1227,18 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
         @Override
         public boolean isIncluded(TableId t) {
+            LOGGER.info("This is being called: ", new Exception());
             return !SYSTEM_SCHEMAS.contains(t.schema().toLowerCase());
+        }
+    }
+
+    private static class DatabasePredicate implements TableFilter {
+        @Override
+        public boolean isIncluded(TableId tableId) {
+            // todo Vaibhav: see how this condition can be modified to cover database.include.list
+            //  if it's possible at all
+            return tableId.catalog() == "api";
+        //   return Objects.equals(tableId.catalog(), );
         }
     }
 }

@@ -379,6 +379,10 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 GetDBStreamInfoResponse dbStreamInfoResponse = this.ybClient.getDBStreamInfo(yugabyteDBConnectorConfig.streamId());
 
                 if (yugabyteDBConnectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)) {
+                    // just checking
+                    if (!yugabyteDBConnectorConfig.databaseFilter().isIncluded(tableId)) {
+                        LOGGER.info("The table {} is not included in the list", tableId);
+                    }
                     // Throw an exception if the table in the include list is not a part of DB stream ID
                     if (!isTableIncludedInStreamId(dbStreamInfoResponse, tableInfo.getId().toStringUtf8())) {
                         String warningMessage = "The table " + tableId + " is not a part of the stream ID " + yugabyteDBConnectorConfig.streamId();
@@ -391,6 +395,8 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
                     LOGGER.info(String.format("Adding table %s for streaming (%s)", tableInfo.getId().toStringUtf8(), fqlTableName));
                     tIds.add(tableInfo.getId().toStringUtf8());
+                } else {
+                    LOGGER.info("Skipping the table {} because it was not included in the filter", tableId);
                 }
             }
         }
