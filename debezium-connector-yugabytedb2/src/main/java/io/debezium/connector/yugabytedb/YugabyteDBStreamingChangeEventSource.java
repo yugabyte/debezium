@@ -246,10 +246,14 @@ public class YugabyteDBStreamingChangeEventSource implements
     private void bootstrapTablet(YBTable table, String tabletId) throws Exception {
         GetCheckpointResponse getCheckpointResponse = this.syncClient.getCheckpoint(table, connectorConfig.streamId(), tabletId);
 
-        LOGGER.debug("Checkpoint for tablet before bootstrapping: {}.{}", getCheckpointResponse.getTerm(), getCheckpointResponse.getIndex());
-        if (getCheckpointResponse.getTerm() == 0 && getCheckpointResponse.getIndex() == 0) {
-            LOGGER.debug("Bootstrapping the tablet {}", tabletId);
+        long term = getCheckpointResponse.getTerm();
+        long index = getCheckpointResponse.getIndex();
+        LOGGER.info("Checkpoint for tablet {} before going to bootstrap: {}.{}", tabletId, term, index);
+        if (term == 0 && index == 0) {
+            LOGGER.info("Bootstrapping the tablet {}", tabletId);
             this.syncClient.bootstrapTablet(table, connectorConfig.streamId(), tabletId, 0, 0, true, true);
+        } else {
+            LOGGER.info("Skipping bootstrap for tablet {} as it has a checkpoint {}.{}", tabletId, term, index);
         }
     }
 
