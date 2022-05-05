@@ -154,7 +154,7 @@
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.1.1</version>
                 <configuration>
-                    <finalName>debezium-connector-yugabytedb-1.3.4-BETA</finalName>
+                    <finalName>debezium-connector-yugabytedb-1.3.5-BETA</finalName>
                     <appendAssemblyId>false</appendAssemblyId>
                     <descriptorRefs>
                         <descriptorRef>jar-with-dependencies</descriptorRef>
