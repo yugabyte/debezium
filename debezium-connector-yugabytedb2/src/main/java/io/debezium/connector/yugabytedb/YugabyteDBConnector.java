@@ -393,7 +393,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                     LOGGER.info(String.format("Adding table %s for streaming (%s)", tableInfo.getId().toStringUtf8(), fqlTableName));
                     tIds.add(tableInfo.getId().toStringUtf8());
                 } else {
-                    LOGGER.debug("Filtering out the table {} since it was not in the include list", tableId);
+                    LOGGER.warn("Filtering out the table {} since it was not in the include list", tableId);
                 }
             }
         }
