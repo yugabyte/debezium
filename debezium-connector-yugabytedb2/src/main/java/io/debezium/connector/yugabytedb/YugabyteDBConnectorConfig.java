@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.common.config.ConfigDef;
@@ -976,6 +977,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     private final SnapshotMode snapshotMode;
     private final SchemaRefreshMode schemaRefreshMode;
 
+    private final TableFilter databaseFilter;
+
     public YugabyteDBConnectorConfig(Configuration config) {
         super(
                 config,
@@ -991,6 +994,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         this.intervalHandlingMode = IntervalHandlingMode.parse(config.getString(YugabyteDBConnectorConfig.INTERVAL_HANDLING_MODE));
         this.snapshotMode = SnapshotMode.parse(config.getString(SNAPSHOT_MODE));
         this.schemaRefreshMode = SchemaRefreshMode.parse(config.getString(SCHEMA_REFRESH_MODE));
+
+        this.databaseFilter = new DatabasePredicate();
     }
 
     protected String hostname() {
@@ -1109,6 +1114,10 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         return SchemaRefreshMode.COLUMNS_DIFF_EXCLUDE_UNCHANGED_TOAST == this.schemaRefreshMode;
     }
 
+    protected TableFilter databaseFilter() {
+        return this.databaseFilter;
+    }
+
     /*
      * protected Duration xminFetchInterval() {
      * return Duration.ofMillis(getConfig().getLong(PostgresConnectorConfig.XMIN_FETCH_INTERVAL));
@@ -1219,6 +1228,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         @Override
         public boolean isIncluded(TableId t) {
             return !SYSTEM_SCHEMAS.contains(t.schema().toLowerCase());
+        }
+    }
+
+    private class DatabasePredicate implements TableFilter {
+        @Override
+        public boolean isIncluded(TableId tableId) {
+            return Objects.equals(tableId.catalog(), getConfig().getString(DATABASE_NAME));
         }
     }
 }
