@@ -243,6 +243,20 @@ public class YugabyteDBStreamingChangeEventSource implements
         return null;
     }
 
+    private void bootstrapTablet(YBTable table, String tabletId) throws Exception {
+        GetCheckpointResponse getCheckpointResponse = this.syncClient.getCheckpoint(table, connectorConfig.streamId(), tabletId);
+
+        long term = getCheckpointResponse.getTerm();
+        long index = getCheckpointResponse.getIndex();
+        LOGGER.info("Checkpoint for tablet {} before going to bootstrap: {}.{}", tabletId, term, index);
+        if (term == 0 && index == 0) {
+            LOGGER.info("Bootstrapping the tablet {}", tabletId);
+            this.syncClient.bootstrapTablet(table, connectorConfig.streamId(), tabletId, 0, 0, true, true);
+        } else {
+            LOGGER.info("Skipping bootstrap for tablet {} as it has a checkpoint {}.{}", tabletId, term, index);
+        }
+    }
+
     private void getChanges2(ChangeEventSourceContext context,
                              YugabyteDBPartition partitionn,
                              YugabyteDBOffsetContext offsetContext)
@@ -253,6 +267,9 @@ public class YugabyteDBStreamingChangeEventSource implements
         ListTablesResponse tablesResp = syncClient.getTablesList();
 
         String tabletList = this.connectorConfig.getConfig().getString(YugabyteDBConnectorConfig.TABLET_LIST);
+
+        // This tabletPairList has Pair<String, String> objects wherein the key is the table UUID 
+        // and the value is tablet UUID
         List<Pair<String, String>> tabletPairList = null;
         try {
             tabletPairList = (List<Pair<String, String>>) ObjectUtil.deserializeObjectFromString(tabletList);
@@ -281,6 +298,9 @@ public class YugabyteDBStreamingChangeEventSource implements
         Map<String, Boolean> schemaStreamed = new HashMap<>();
         for (Pair<String, String> entry : tabletPairList) {
             schemaStreamed.put(entry.getValue(), Boolean.TRUE);
+
+            // Iterate over the tablets and bootstrap them
+            bootstrapTablet(this.syncClient.openTableByUUID(entry.getKey()), entry.getValue());
         }
 
         for (Pair<String, String> entry : tabletPairList) {
