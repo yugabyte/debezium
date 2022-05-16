@@ -14,7 +14,9 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -24,11 +26,14 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import javax.sql.DataSource;
+
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
 import org.postgresql.jdbc.PgConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.JdbcDatabaseContainer;
 import org.yb.client.AsyncYBClient;
 import org.yb.client.ListTablesResponse;
 import org.yb.client.YBClient;
@@ -43,6 +48,9 @@ import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection.Yugabyte
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.util.Throwables;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
 /**
  * A utility for integration test cases to connect the PostgreSQL server running in the Docker container created by this module's
@@ -79,6 +87,25 @@ public final class TestHelper {
     static final String TYPE_SCALE_PARAMETER_KEY = "__debezium.source.column.scale";
 
     private TestHelper() {
+    }
+
+    protected static ResultSet performQuery(JdbcDatabaseContainer<?> container, String sql) throws SQLException {
+        DataSource ds = getDataSource(container);
+        Statement statement = ds.getConnection().createStatement();
+        statement.execute(sql);
+        ResultSet resultSet = statement.getResultSet();
+
+        resultSet.next();
+        return resultSet;
+    }
+
+    protected static DataSource getDataSource(JdbcDatabaseContainer<?> container) {
+        HikariConfig hikariConfig = new HikariConfig();
+        hikariConfig.setJdbcUrl(container.getJdbcUrl());
+        hikariConfig.setUsername(container.getUsername());
+        hikariConfig.setPassword(container.getPassword());
+        hikariConfig.setDriverClassName(container.getDriverClassName());
+        return new HikariDataSource(hikariConfig);
     }
 
     /**
