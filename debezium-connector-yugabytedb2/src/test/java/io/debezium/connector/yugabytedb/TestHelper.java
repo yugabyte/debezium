@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -28,6 +29,11 @@ import org.awaitility.core.ConditionTimeoutException;
 import org.postgresql.jdbc.PgConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.yb.client.AsyncYBClient;
+import org.yb.client.ListTablesResponse;
+import org.yb.client.YBClient;
+import org.yb.client.YBTable;
+import org.yb.master.MasterDdlOuterClass.ListTablesResponsePB.TableInfo;
 
 import io.debezium.config.Configuration;
 import io.debezium.connector.yugabytedb.YugabyteDBConnectorConfig.SecureConnectionMode;
@@ -234,6 +240,43 @@ public final class TestHelper {
         try (YugabyteDBConnection connection = create()) {
             return connection.readAllSchemaNames(Filters.IS_SYSTEM_SCHEMA.negate());
         }
+    }
+
+    protected static YBClient getYbClient(String masterAddresses) throws Exception {
+        AsyncYBClient asyncClient = new AsyncYBClient.AsyncYBClientBuilder(masterAddresses)
+                .defaultAdminOperationTimeoutMs(YugabyteDBConnectorConfig.DEFAULT_ADMIN_OPERATION_TIMEOUT_MS)
+                .defaultOperationTimeoutMs(YugabyteDBConnectorConfig.DEFAULT_OPERATION_TIMEOUT_MS)
+                .defaultSocketReadTimeoutMs(YugabyteDBConnectorConfig.DEFAULT_SOCKET_READ_TIMEOUT_MS)
+                .numTablets(YugabyteDBConnectorConfig.DEFAULT_MAX_NUM_TABLETS)
+                .build();
+
+        return new YBClient(asyncClient);
+    }
+
+    protected static YBTable getTableUUID(YBClient syncClient, String tableName) throws Exception {
+        ListTablesResponse resp = syncClient.getTablesList();
+
+        for (TableInfo tableInfo : resp.getTableInfoList()) {
+            if (Objects.equals(tableInfo.getName(), tableName)) {
+                System.out.println("Table UUID for " + tableName + " is " + tableInfo.getId().toStringUtf8());
+                return syncClient.openTableByUUID(tableInfo.getId().toStringUtf8());
+            }
+        }
+
+        // This will be returned in case no table match has been found for the given table name
+        return null;
+    }
+
+    public static String getNewDbStreamId(String namespaceName, String tableName) throws Exception {
+        YBClient syncClient = getYbClient("127.0.0.1:7100");
+
+        YBTable placeholderTable = getTableUUID(syncClient, tableName);
+
+        if (placeholderTable == null) {
+            throw new NullPointerException("No table found with the name " + tableName);
+        }
+
+        return syncClient.createCDCStream(placeholderTable, namespaceName, "PROTO", "IMPLICIT").getStreamId();
     }
 
     public static JdbcConfiguration defaultJdbcConfig() {
