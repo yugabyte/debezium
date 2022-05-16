@@ -1,15 +1,14 @@
 package io.debezium.connector.yugabytedb;
 
+import static org.fest.assertions.Assertions.*;
+
+import java.sql.SQLException;
+
+import org.apache.kafka.common.config.ConfigDef;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import org.apache.kafka.common.config.ConfigDef;
-
-import static org.fest.assertions.Assertions.*;
-
-import java.sql.SQLException;
 
 import io.debezium.config.Configuration;
 import io.debezium.config.Field;
@@ -53,7 +52,7 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
         assertThat(configDef).isNotNull();
         YugabyteDBConnectorConfig.ALL_FIELDS.forEach(this::validateFieldDef);
     }
-  
+
     @Test
     public void shouldNotStartWithInvalidConfiguration() throws Exception {
         // use an empty configuration which should be invalid because of the lack of DB connection details

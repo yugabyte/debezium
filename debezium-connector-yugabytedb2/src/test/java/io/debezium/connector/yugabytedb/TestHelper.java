@@ -34,11 +34,15 @@ import org.postgresql.jdbc.PgConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.JdbcDatabaseContainer;
+import org.testcontainers.containers.YugabyteYSQLContainer;
 import org.yb.client.AsyncYBClient;
 import org.yb.client.ListTablesResponse;
 import org.yb.client.YBClient;
 import org.yb.client.YBTable;
 import org.yb.master.MasterDdlOuterClass.ListTablesResponsePB.TableInfo;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
 import io.debezium.config.Configuration;
 import io.debezium.connector.yugabytedb.YugabyteDBConnectorConfig.SecureConnectionMode;
@@ -48,9 +52,6 @@ import io.debezium.connector.yugabytedb.connection.YugabyteDBConnection.Yugabyte
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.util.Throwables;
-
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 
 /**
  * A utility for integration test cases to connect the PostgreSQL server running in the Docker container created by this module's
@@ -65,6 +66,9 @@ public final class TestHelper {
     protected static final String PK_FIELD = "pk";
     private static final String TEST_PROPERTY_PREFIX = "debezium.test.";
     private static final Logger LOGGER = LoggerFactory.getLogger(TestHelper.class);
+
+    private static String CONTAINER_YSQL_HOST;
+    private static int CONTAINER_YSQL_PORT;
 
     /**
      * Key for schema parameter used to store DECIMAL/NUMERIC columns' precision.
@@ -142,10 +146,16 @@ public final class TestHelper {
      *
      * @return the PostgresConnection instance; never null
      */
+    // TODO: remove this function at the end of test development
     public static YugabyteDBConnection create() {
 
-        return new YugabyteDBConnection(defaultJdbcConfig());
+        // return new YugabyteDBConnection(defaultJdbcConfig());
+        return new YugabyteDBConnection(defaultJdbcConfig(CONTAINER_YSQL_HOST, CONTAINER_YSQL_PORT));
     }
+
+    // public static YugabyteDBConnection create(String host, String ysqlPort) {
+    // return new YugabyteDBConnection(defaultJdbcConfig(host, ysqlPort));
+    // }
 
     /**
      * Obtain a DB connection providing type registry.
@@ -269,6 +279,17 @@ public final class TestHelper {
         }
     }
 
+    protected static void setContainerHostPort(String host, int port) {
+        CONTAINER_YSQL_HOST = host;
+        CONTAINER_YSQL_PORT = port;
+    }
+
+    protected static YugabyteYSQLContainer getYbContainer() {
+        YugabyteYSQLContainer container = new YugabyteYSQLContainer("yugabytedb/yugabyte:2.13.1.0-b112");
+        container.addExposedPorts(7100, 9100);
+        return container;
+    }
+
     protected static YBClient getYbClient(String masterAddresses) throws Exception {
         AsyncYBClient asyncClient = new AsyncYBClient.AsyncYBClientBuilder(masterAddresses)
                 .defaultAdminOperationTimeoutMs(YugabyteDBConnectorConfig.DEFAULT_ADMIN_OPERATION_TIMEOUT_MS)
@@ -295,7 +316,7 @@ public final class TestHelper {
     }
 
     public static String getNewDbStreamId(String namespaceName, String tableName) throws Exception {
-        YBClient syncClient = getYbClient("127.0.0.1:7100");
+        YBClient syncClient = getYbClient(CONTAINER_YSQL_HOST + ":7100");
 
         YBTable placeholderTable = getTableUUID(syncClient, tableName);
 
@@ -310,8 +331,26 @@ public final class TestHelper {
         try {
             return JdbcConfiguration.copy(Configuration.empty()/* fromSystemProperties("database.") */)
                     .withDefault(JdbcConfiguration.DATABASE, "yugabyte")
-                    .withDefault(JdbcConfiguration.HOSTNAME, "127.0.0.1"/* InetAddress.getLocalHost().getHostAddress() */)
+                    .withDefault(JdbcConfiguration.HOSTNAME, CONTAINER_YSQL_HOST/* InetAddress.getLocalHost().getHostAddress() */)
                     .withDefault(JdbcConfiguration.PORT, 5433)
+                    .withDefault(JdbcConfiguration.USER, "yugabyte")
+                    .withDefault(JdbcConfiguration.PASSWORD, "yugabyte")
+                    .with(YugabyteDBConnectorConfig.MAX_RETRIES, 2)
+                    .with(YugabyteDBConnectorConfig.RETRY_DELAY_MS, 2000)
+                    .build();
+        }
+        catch (Exception e) {
+            LOGGER.error("Exception thrown while creating connection...", e);
+            return null;
+        }
+    }
+
+    public static JdbcConfiguration defaultJdbcConfig(String host, int ysqlPort) {
+        try {
+            return JdbcConfiguration.copy(Configuration.empty()/* fromSystemProperties("database.") */)
+                    .withDefault(JdbcConfiguration.DATABASE, "yugabyte")
+                    .withDefault(JdbcConfiguration.HOSTNAME, host/* InetAddress.getLocalHost().getHostAddress() */)
+                    .withDefault(JdbcConfiguration.PORT, ysqlPort)
                     .withDefault(JdbcConfiguration.USER, "yugabyte")
                     .withDefault(JdbcConfiguration.PASSWORD, "yugabyte")
                     .with(YugabyteDBConnectorConfig.MAX_RETRIES, 2)
@@ -348,6 +387,18 @@ public final class TestHelper {
                 .collect(Collectors.joining(System.lineSeparator()));
         try (YugabyteDBConnection connection = create()) {
             connection.executeWithoutCommitting(statements);
+        }
+    }
+
+    protected static void executeDDL(JdbcDatabaseContainer<?> container, String ddlFile) throws Exception {
+        URL ddlTestFile = TestHelper.class.getClassLoader().getResource(ddlFile);
+        assertNotNull("Cannot locate " + ddlFile, ddlTestFile);
+        String statements = Files.readAllLines(Paths.get(ddlTestFile.toURI()))
+                .stream()
+                .collect(Collectors.joining(System.lineSeparator()));
+        try (YugabyteDBConnection connection = create()) {
+            TestHelper.performQuery(container, statements);
+            // connection.executeWithoutCommitting(statements);
         }
     }
 
