@@ -138,6 +138,7 @@
         <module>debezium-quarkus-outbox</module>
         <module>debezium-scripting</module>
         <module>debezium-server</module>
+        <module>cdc-server</module>
         <module>debezium-testing</module>
     </modules>
 
