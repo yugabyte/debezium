@@ -67,8 +67,11 @@ public final class TestHelper {
     private static final String TEST_PROPERTY_PREFIX = "debezium.test.";
     private static final Logger LOGGER = LoggerFactory.getLogger(TestHelper.class);
 
-    private static String CONTAINER_YSQL_HOST;
-    private static int CONTAINER_YSQL_PORT;
+    private static final String SECONDARY_DATABASE = "secondary_database";
+
+    // Set the localhost value as the defaults for now
+    private static String CONTAINER_YSQL_HOST = "127.0.0.1";
+    private static int CONTAINER_YSQL_PORT = 5433;
 
     /**
      * Key for schema parameter used to store DECIMAL/NUMERIC columns' precision.
@@ -151,6 +154,10 @@ public final class TestHelper {
 
         // return new YugabyteDBConnection(defaultJdbcConfig());
         return new YugabyteDBConnection(defaultJdbcConfig(CONTAINER_YSQL_HOST, CONTAINER_YSQL_PORT));
+    }
+
+    public static YugabyteDBConnection createConnectionTo(String databaseName) {
+        return new YugabyteDBConnection(defaultJdbcConfig(CONTAINER_YSQL_HOST, CONTAINER_YSQL_PORT, databaseName));
     }
 
     // public static YugabyteDBConnection create(String host, String ysqlPort) {
@@ -279,6 +286,34 @@ public final class TestHelper {
         }
     }
 
+    protected static void createTableInSecondaryDatabase(String query) throws SQLException {
+        // try (YugabyteDBConnection conn = create()) {
+        // String createDatabaseStatement = "SELECT 'CREATE DATABASE " + newDatabaseName +
+        // "' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='" + newDatabaseName + "');";
+        // System.out.println("Executing: " + createDatabaseStatement);
+        // Statement st = conn.connection().createStatement();
+        // st.execute(createDatabaseStatement);
+        // }
+
+        // Now create a connector to the new database and execute the query
+        try (YugabyteDBConnection conn = createConnectionTo(SECONDARY_DATABASE)) {
+            Statement st = conn.connection().createStatement();
+            st.execute(query);
+            System.out.println("Created table in secondary database");
+        }
+    }
+
+    protected static Configuration.Builder getConfigBuilder(String fullTablenameWithSchema, String dbStreamId) throws Exception {
+        return TestHelper.defaultConfig()
+                .with(YugabyteDBConnectorConfig.HOSTNAME, CONTAINER_YSQL_HOST) // this field is required as of now
+                .with(YugabyteDBConnectorConfig.PORT, CONTAINER_YSQL_PORT)
+                .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
+                .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
+                .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, CONTAINER_YSQL_HOST + ":7100")
+                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, fullTablenameWithSchema)
+                .with(YugabyteDBConnectorConfig.STREAM_ID, dbStreamId);
+    }
+
     protected static void setContainerHostPort(String host, int port) {
         CONTAINER_YSQL_HOST = host;
         CONTAINER_YSQL_PORT = port;
@@ -306,7 +341,6 @@ public final class TestHelper {
 
         for (TableInfo tableInfo : resp.getTableInfoList()) {
             if (Objects.equals(tableInfo.getName(), tableName)) {
-                System.out.println("Table UUID for " + tableName + " is " + tableInfo.getId().toStringUtf8());
                 return syncClient.openTableByUUID(tableInfo.getId().toStringUtf8());
             }
         }
@@ -346,10 +380,14 @@ public final class TestHelper {
     }
 
     public static JdbcConfiguration defaultJdbcConfig(String host, int ysqlPort) {
+        return defaultJdbcConfig(host, ysqlPort, "yugabyte");
+    }
+
+    public static JdbcConfiguration defaultJdbcConfig(String host, int ysqlPort, String databaseName) {
         try {
-            return JdbcConfiguration.copy(Configuration.empty()/* fromSystemProperties("database.") */)
-                    .withDefault(JdbcConfiguration.DATABASE, "yugabyte")
-                    .withDefault(JdbcConfiguration.HOSTNAME, host/* InetAddress.getLocalHost().getHostAddress() */)
+            return JdbcConfiguration.copy(Configuration.empty())
+                    .withDefault(JdbcConfiguration.DATABASE, databaseName)
+                    .withDefault(JdbcConfiguration.HOSTNAME, host)
                     .withDefault(JdbcConfiguration.PORT, ysqlPort)
                     .withDefault(JdbcConfiguration.USER, "yugabyte")
                     .withDefault(JdbcConfiguration.PASSWORD, "yugabyte")

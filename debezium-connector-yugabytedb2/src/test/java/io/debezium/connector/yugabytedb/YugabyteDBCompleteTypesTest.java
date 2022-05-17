@@ -11,7 +11,6 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.testcontainers.containers.YugabyteYSQLContainer;
 
 import io.debezium.DebeziumException;
 import io.debezium.config.Configuration;
@@ -19,16 +18,16 @@ import io.debezium.embedded.AbstractConnectorTest;
 import io.debezium.util.Strings;
 
 public class YugabyteDBCompleteTypesTest extends AbstractConnectorTest {
-    private static YugabyteYSQLContainer ybContainer;
+    // private static YugabyteYSQLContainer ybContainer;
 
     @BeforeClass
     public static void beforeClass() throws SQLException {
-        ybContainer = TestHelper.getYbContainer();
-        System.out.println("Starting YB container now");
-        ybContainer.start();
+        // ybContainer = TestHelper.getYbContainer();
+        // System.out.println("Starting YB container now");
+        // ybContainer.start();
 
-        System.out.println("Container Host: " + ybContainer.getHost() + " url: " + ybContainer.getMappedPort(5433));
-        TestHelper.setContainerHostPort(ybContainer.getHost(), ybContainer.getMappedPort(5433));
+        // System.out.println("Container Host: " + ybContainer.getHost() + " url: " + ybContainer.getMappedPort(5433));
+        // TestHelper.setContainerHostPort(ybContainer.getHost(), ybContainer.getMappedPort(5433));
         TestHelper.dropAllSchemas();
     }
 
@@ -38,24 +37,14 @@ public class YugabyteDBCompleteTypesTest extends AbstractConnectorTest {
     }
 
     @After
-    public void after() {
+    public void after() throws Exception {
         stopConnector();
+        TestHelper.executeDDL("drop_tables_and_databases.ddl");
     }
 
     @AfterClass
     public static void afterClass() {
-        ybContainer.close();
-    }
-
-    protected Configuration.Builder getConfigBuilder(String fullTablenameWithSchema, String dbStreamId) throws Exception {
-        return TestHelper.defaultConfig()
-                .with(YugabyteDBConnectorConfig.HOSTNAME, ybContainer.getHost()) // this field is required as of now
-                .with(YugabyteDBConnectorConfig.PORT, ybContainer.getMappedPort(5433))
-                .with(YugabyteDBConnectorConfig.SNAPSHOT_MODE, YugabyteDBConnectorConfig.SnapshotMode.NEVER.getValue())
-                .with(YugabyteDBConnectorConfig.DELETE_STREAM_ON_STOP, Boolean.TRUE)
-                .with(YugabyteDBConnectorConfig.MASTER_ADDRESSES, ybContainer.getHost() + ":7100")
-                .with(YugabyteDBConnectorConfig.TABLE_INCLUDE_LIST, fullTablenameWithSchema)
-                .with(YugabyteDBConnectorConfig.STREAM_ID, dbStreamId);
+        // ybContainer.close();
     }
 
     private void consumeRecords(long recordsCount) {
@@ -127,13 +116,13 @@ public class YugabyteDBCompleteTypesTest extends AbstractConnectorTest {
         System.out.println("Starting the test");
 
         TestHelper.dropAllSchemas();
-        TestHelper.executeDDL(ybContainer, "postgres_create_tables.ddl");
+        TestHelper.executeDDL("postgres_create_tables.ddl");
         Thread.sleep(1000);
 
         String dbStreamId = TestHelper.getNewDbStreamId("yugabyte", "all_types");
         System.out.println("DB Stream Id is " + dbStreamId);
 
-        Configuration.Builder configBuilder = getConfigBuilder("public.all_types", dbStreamId);
+        Configuration.Builder configBuilder = TestHelper.getConfigBuilder("public.all_types", dbStreamId);
         start(YugabyteDBConnector.class, configBuilder.build());
 
         assertConnectorIsRunning();
