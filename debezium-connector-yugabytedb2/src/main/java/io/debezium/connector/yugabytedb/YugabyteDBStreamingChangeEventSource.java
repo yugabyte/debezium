@@ -249,7 +249,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         long term = getCheckpointResponse.getTerm();
         long index = getCheckpointResponse.getIndex();
         LOGGER.info("Checkpoint for tablet {} before going to bootstrap: {}.{}", tabletId, term, index);
-        if (term == -1 && index == -1) {
+        if (term == 0 && index == 0) {
             LOGGER.info("Bootstrapping the tablet {}", tabletId);
             this.syncClient.bootstrapTablet(table, connectorConfig.streamId(), tabletId, 0, 0, true, true);
         } else {
