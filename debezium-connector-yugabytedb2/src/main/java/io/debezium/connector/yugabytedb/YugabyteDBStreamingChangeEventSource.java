@@ -249,7 +249,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         long term = getCheckpointResponse.getTerm();
         long index = getCheckpointResponse.getIndex();
         LOGGER.info("Checkpoint for tablet {} before going to bootstrap: {}.{}", tabletId, term, index);
-        if (term == 0 && index == 0) {
+        if (term == -1 && index == -1) {
             LOGGER.info("Bootstrapping the tablet {}", tabletId);
             this.syncClient.bootstrapTablet(table, connectorConfig.streamId(), tabletId, 0, 0, true, true);
         } else {
@@ -307,6 +307,16 @@ public class YugabyteDBStreamingChangeEventSource implements
             final String tabletId = entry.getValue();
             offsetContext.initSourceInfo(tabletId, this.connectorConfig);
         }
+
+        Map<String, Boolean> seenBeginRecord = new HashMap<>();
+        Map<String, Integer> recordsInTransactionalBlock = new HashMap<>();
+        for (Pair<String, String> entry : tabletPairList) {
+            final String tabletId = entry.getValue();
+
+            seenBeginRecord.put(tabletId, Boolean.FALSE);
+            recordsInTransactionalBlock.put(tabletId, 0);
+        }
+
         LOGGER.debug("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
 
         final Metronome pollIntervalMetronome = Metronome.parker(Duration.ofMillis(connectorConfig.cdcPollIntervalms()), Clock.SYSTEM);
@@ -364,12 +374,23 @@ public class YugabyteDBStreamingChangeEventSource implements
                                         // too early
                                         if (message.getOperation() == Operation.BEGIN) {
                                             LOGGER.debug("LSN in case of BEGIN is " + lsn);
+
+                                            seenBeginRecord.put(tabletId, Boolean.TRUE);
                                         }
                                         if (message.getOperation() == Operation.COMMIT) {
                                             LOGGER.debug("LSN in case of COMMIT is " + lsn);
                                             offsetContext.updateWalPosition(tabletId, lsn, lastCompletelyProcessedLsn, message.getCommitTime(),
                                                     String.valueOf(message.getTransactionId()), null, null/* taskContext.getSlotXmin(connection) */);
                                             commitMessage(part, offsetContext, lsn);
+
+                                            if (recordsInTransactionalBlock.get(tabletId) == 0) {
+                                                LOGGER.warn("Records in the transactional block for tablet {} are 0", tabletId);
+                                            } else {
+                                                LOGGER.info("Records in the transactional block for tablet {}: {}", tabletId, recordsInTransactionalBlock.get(tabletId));
+                                            }
+
+                                            seenBeginRecord.put(tabletId, Boolean.FALSE);
+                                            recordsInTransactionalBlock.put(tabletId, 0);
                                         }
                                         continue;
                                     }
@@ -378,6 +399,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                                         LOGGER.debug("LSN in case of BEGIN is " + lsn);
                                         dispatcher.dispatchTransactionStartedEvent(part,
                                                 message.getTransactionId(), offsetContext);
+
+                                        seenBeginRecord.put(tabletId, Boolean.TRUE);
                                     }
                                     else if (message.getOperation() == Operation.COMMIT) {
                                         LOGGER.debug("LSN in case of COMMIT is " + lsn);
@@ -385,6 +408,15 @@ public class YugabyteDBStreamingChangeEventSource implements
                                                 String.valueOf(message.getTransactionId()), null, null/* taskContext.getSlotXmin(connection) */);
                                         commitMessage(part, offsetContext, lsn);
                                         dispatcher.dispatchTransactionCommittedEvent(part, offsetContext);
+
+                                        if (recordsInTransactionalBlock.get(tabletId) == 0) {
+                                            LOGGER.warn("Records in the transactional block for tablet {} are 0", tabletId);
+                                        } else {
+                                            LOGGER.info("Records in the transactional block for tablet {}: {}", tabletId, recordsInTransactionalBlock.get(tabletId));
+                                        }
+
+                                        seenBeginRecord.put(tabletId, Boolean.FALSE);
+                                        recordsInTransactionalBlock.put(tabletId, 0);
                                     }
                                     maybeWarnAboutGrowingWalBacklog(true);
                                 }
@@ -425,6 +457,11 @@ public class YugabyteDBStreamingChangeEventSource implements
                                     boolean dispatched = message.getOperation() != Operation.NOOP
                                             && dispatcher.dispatchDataChangeEvent(tableId, new YugabyteDBChangeRecordEmitter(part, offsetContext, clock, connectorConfig,
                                                     schema, connection, tableId, message, pgSchemaNameInRecord));
+
+                                    if (seenBeginRecord.get(tabletId)) {
+                                        int recordCount = recordsInTransactionalBlock.get(tabletId);
+                                        recordsInTransactionalBlock.put(tabletId, recordCount+1);
+                                    }
 
                                     maybeWarnAboutGrowingWalBacklog(dispatched);
                                 }
