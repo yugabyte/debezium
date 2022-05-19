@@ -82,6 +82,11 @@
             </dependency>
             <dependency>
                 <groupId>io.debezium</groupId>
+                <artifactId>cdc-server-null</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.debezium</groupId>
                 <artifactId>cdc-server-kafka</artifactId>
                 <version>${project.version}</version>
             </dependency>
