@@ -23,6 +23,7 @@
         <module>cdc-server-kafka</module>
         <module>cdc-server-pravega</module>
         <module>cdc-server-nats-streaming</module>
+        <module>cdc-server-null</module>
     </modules>
 
     <dependencyManagement>
