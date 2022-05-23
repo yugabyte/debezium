@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.yb.cdc.CdcService;
 import org.yb.client.*;
 
+import io.debezium.DebeziumException;
 import io.debezium.connector.yugabytedb.connection.*;
 import io.debezium.connector.yugabytedb.connection.ReplicationMessage.Operation;
 import io.debezium.connector.yugabytedb.connection.pgproto.YbProtoReplicationMessage;
@@ -308,14 +309,9 @@ public class YugabyteDBStreamingChangeEventSource implements
             offsetContext.initSourceInfo(tabletId, this.connectorConfig);
         }
 
-        Map<String, Boolean> seenBeginRecord = new HashMap<>();
+        // This will contain the tablet ID mapped to the number of records it has seen in the transactional block.
+        // Note that the entry will be created only when a BEGIN block is encountered.
         Map<String, Integer> recordsInTransactionalBlock = new HashMap<>();
-        for (Pair<String, String> entry : tabletPairList) {
-            final String tabletId = entry.getValue();
-
-            seenBeginRecord.put(tabletId, Boolean.FALSE);
-            recordsInTransactionalBlock.put(tabletId, 0);
-        }
 
         LOGGER.debug("The init tabletSourceInfo is " + offsetContext.getTabletSourceInfo());
 
@@ -375,7 +371,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                                         if (message.getOperation() == Operation.BEGIN) {
                                             LOGGER.debug("LSN in case of BEGIN is " + lsn);
 
-                                            seenBeginRecord.put(tabletId, Boolean.TRUE);
+                                            recordsInTransactionalBlock.put(tabletId, 0);
                                         }
                                         if (message.getOperation() == Operation.COMMIT) {
                                             LOGGER.debug("LSN in case of COMMIT is " + lsn);
@@ -383,14 +379,17 @@ public class YugabyteDBStreamingChangeEventSource implements
                                                     String.valueOf(message.getTransactionId()), null, null/* taskContext.getSlotXmin(connection) */);
                                             commitMessage(part, offsetContext, lsn);
 
-                                            if (recordsInTransactionalBlock.get(tabletId) == 0) {
-                                                LOGGER.warn("Records in the transactional block for tablet {} are 0", tabletId);
+                                            if (recordsInTransactionalBlock.containsKey(tabletId)) {
+                                                if (recordsInTransactionalBlock.get(tabletId) == 0) {
+                                                    LOGGER.warn("Records in the transactional block for tablet {} are 0", tabletId);
+                                                } else {
+                                                    LOGGER.debug("Records in the transactional block for tablet {}: {}", tabletId, recordsInTransactionalBlock.get(tabletId));
+                                                }
                                             } else {
-                                                LOGGER.info("Records in the transactional block for tablet {}: {}", tabletId, recordsInTransactionalBlock.get(tabletId));
+                                                throw new DebeziumException("COMMIT record encountered without a preceding BEGIN record");
                                             }
 
-                                            seenBeginRecord.put(tabletId, Boolean.FALSE);
-                                            recordsInTransactionalBlock.put(tabletId, 0);
+                                            recordsInTransactionalBlock.remove(tabletId);
                                         }
                                         continue;
                                     }
@@ -400,7 +399,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                                         dispatcher.dispatchTransactionStartedEvent(part,
                                                 message.getTransactionId(), offsetContext);
 
-                                        seenBeginRecord.put(tabletId, Boolean.TRUE);
+                                        recordsInTransactionalBlock.put(tabletId, 0);
                                     }
                                     else if (message.getOperation() == Operation.COMMIT) {
                                         LOGGER.debug("LSN in case of COMMIT is " + lsn);
@@ -409,14 +408,17 @@ public class YugabyteDBStreamingChangeEventSource implements
                                         commitMessage(part, offsetContext, lsn);
                                         dispatcher.dispatchTransactionCommittedEvent(part, offsetContext);
 
-                                        if (recordsInTransactionalBlock.get(tabletId) == 0) {
-                                            LOGGER.warn("Records in the transactional block for tablet {} are 0", tabletId);
+                                        if (recordsInTransactionalBlock.containsKey(tabletId)) {
+                                            if (recordsInTransactionalBlock.get(tabletId) == 0) {
+                                                LOGGER.warn("Records in the transactional block for tablet {} are 0", tabletId);
+                                            } else {
+                                                LOGGER.debug("Records in the transactional block for tablet {}: {}", tabletId, recordsInTransactionalBlock.get(tabletId));
+                                            }
                                         } else {
-                                            LOGGER.info("Records in the transactional block for tablet {}: {}", tabletId, recordsInTransactionalBlock.get(tabletId));
+                                            throw new DebeziumException("COMMIT record encountered without a preceding BEGIN record");
                                         }
 
-                                        seenBeginRecord.put(tabletId, Boolean.FALSE);
-                                        recordsInTransactionalBlock.put(tabletId, 0);
+                                        recordsInTransactionalBlock.remove(tabletId);
                                     }
                                     maybeWarnAboutGrowingWalBacklog(true);
                                 }
@@ -458,9 +460,8 @@ public class YugabyteDBStreamingChangeEventSource implements
                                             && dispatcher.dispatchDataChangeEvent(tableId, new YugabyteDBChangeRecordEmitter(part, offsetContext, clock, connectorConfig,
                                                     schema, connection, tableId, message, pgSchemaNameInRecord));
 
-                                    if (seenBeginRecord.get(tabletId)) {
-                                        int recordCount = recordsInTransactionalBlock.get(tabletId);
-                                        recordsInTransactionalBlock.put(tabletId, recordCount+1);
+                                    if (recordsInTransactionalBlock.containsKey(tabletId)) {
+                                        recordsInTransactionalBlock.merge(tabletId, 1, Integer::sum);
                                     }
 
                                     maybeWarnAboutGrowingWalBacklog(dispatched);
