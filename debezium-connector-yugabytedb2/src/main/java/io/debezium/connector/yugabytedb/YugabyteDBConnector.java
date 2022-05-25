@@ -367,7 +367,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 // the changes for CDCSDK were not present. For more details, visit https://github.com/yugabyte/yugabyte-db/issues/11976
                 if (tableInfo.getPgschemaName() == null || tableInfo.getPgschemaName().isEmpty()) {
                     LOGGER.warn(String.format("Ignoring the table %s.%s since it does not have a pgschema_name value (possibly because it was created using an older "
-                                    + "YugabyteDB version)",
+                            + "YugabyteDB version)",
                             tableInfo.getNamespace().getName(),
                             tableInfo.getName()));
                     continue;
@@ -380,7 +380,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 GetDBStreamInfoResponse dbStreamInfoResponse = this.ybClient.getDBStreamInfo(yugabyteDBConnectorConfig.streamId());
 
                 if (yugabyteDBConnectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId)
-                    && yugabyteDBConnectorConfig.databaseFilter().isIncluded(tableId)) {
+                        && yugabyteDBConnectorConfig.databaseFilter().isIncluded(tableId)) {
                     // Throw an exception if the table in the include list is not a part of DB stream ID
                     if (!isTableIncludedInStreamId(dbStreamInfoResponse, tableInfo.getId().toStringUtf8())) {
                         String warningMessage = "The table " + tableId + " is not a part of the stream ID " + yugabyteDBConnectorConfig.streamId();
@@ -393,7 +393,8 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
                     LOGGER.info(String.format("Adding table %s for streaming (%s)", tableInfo.getId().toStringUtf8(), fqlTableName));
                     tIds.add(tableInfo.getId().toStringUtf8());
-                } else {
+                }
+                else {
                     LOGGER.warn("Filtering out the table {} since it was not in the include list", tableId);
                 }
             }

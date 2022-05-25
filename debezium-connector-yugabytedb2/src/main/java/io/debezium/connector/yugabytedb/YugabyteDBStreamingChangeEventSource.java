@@ -7,12 +7,11 @@ package io.debezium.connector.yugabytedb;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-
-import java.time.Duration;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.postgresql.core.BaseConnection;
@@ -252,7 +251,8 @@ public class YugabyteDBStreamingChangeEventSource implements
         if (term == -1 && index == -1) {
             LOGGER.info("Bootstrapping the tablet {}", tabletId);
             this.syncClient.bootstrapTablet(table, connectorConfig.streamId(), tabletId, 0, 0, true, true);
-        } else {
+        }
+        else {
             LOGGER.info("Skipping bootstrap for tablet {} as it has a checkpoint {}.{}", tabletId, term, index);
         }
     }
@@ -268,7 +268,7 @@ public class YugabyteDBStreamingChangeEventSource implements
 
         String tabletList = this.connectorConfig.getConfig().getString(YugabyteDBConnectorConfig.TABLET_LIST);
 
-        // This tabletPairList has Pair<String, String> objects wherein the key is the table UUID 
+        // This tabletPairList has Pair<String, String> objects wherein the key is the table UUID
         // and the value is tablet UUID
         List<Pair<String, String>> tabletPairList = null;
         try {
@@ -311,10 +311,10 @@ public class YugabyteDBStreamingChangeEventSource implements
 
         final Metronome pollIntervalMetronome = Metronome.parker(Duration.ofMillis(connectorConfig.cdcPollIntervalms()), Clock.SYSTEM);
         final Metronome retryMetronome = Metronome.parker(Duration.ofMillis(connectorConfig.connectorRetryDelayMs()), Clock.SYSTEM);
-        
+
         short retryCount = 0;
         while (retryCount <= connectorConfig.maxConnectorRetries()) {
-            try { 
+            try {
                 while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                         (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
                     // Pause for the specified duration before asking for a new set of changes from the server
@@ -447,12 +447,13 @@ public class YugabyteDBStreamingChangeEventSource implements
                             // CDCSDK Find out why this fails : connection.commit();
                         }
                     }
-                
+
                     // Reset the retry count, because if flow reached at this point, it means that the connection
                     // has succeeded
                     retryCount = 0;
                 }
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 ++retryCount;
 
                 // If the retry limit is exceeded, log an error with a description and throw the exception.
@@ -464,10 +465,11 @@ public class YugabyteDBStreamingChangeEventSource implements
                 // If there are retries left, perform them after the specified delay.
                 LOGGER.warn("Error while trying to get the changes from the server; will attempt retry {} of {} after {} milli-seconds. Exception message: {}",
                         retryCount, connectorConfig.maxConnectorRetries(), connectorConfig.connectorRetryDelayMs(), e.getMessage());
-                
+
                 try {
                     retryMetronome.pause();
-                } catch (InterruptedException ie) {
+                }
+                catch (InterruptedException ie) {
                     LOGGER.warn("Connector retry sleep interrupted by exception: {}", ie);
                     Thread.currentThread().interrupt();
                 }
