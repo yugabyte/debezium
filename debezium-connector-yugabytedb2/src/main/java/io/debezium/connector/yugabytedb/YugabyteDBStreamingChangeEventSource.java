@@ -299,9 +299,6 @@ public class YugabyteDBStreamingChangeEventSource implements
         Map<String, Boolean> schemaStreamed = new HashMap<>();
         for (Pair<String, String> entry : tabletPairList) {
             schemaStreamed.put(entry.getValue(), Boolean.TRUE);
-
-            // Iterate over the tablets and bootstrap them
-            bootstrapTablet(this.syncClient.openTableByUUID(entry.getKey()), entry.getValue());
         }
 
         for (Pair<String, String> entry : tabletPairList) {
@@ -321,6 +318,12 @@ public class YugabyteDBStreamingChangeEventSource implements
         short retryCount = 0;
         while (retryCount <= connectorConfig.maxConnectorRetries()) {
             try { 
+                // Iterate over all the tablets to bootstrap them
+                for (Pair<String, String> entry : tabletPairList) {
+                    // entry is a Pair<tableId, tabletId>
+                    bootstrapTablet(this.syncClient.openTableByUUID(entry.getKey()), entry.getValue());
+                }
+
                 while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                         (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
                     // Pause for the specified duration before asking for a new set of changes from the server
