@@ -315,15 +315,37 @@ public class YugabyteDBStreamingChangeEventSource implements
         final Metronome pollIntervalMetronome = Metronome.parker(Duration.ofMillis(connectorConfig.cdcPollIntervalms()), Clock.SYSTEM);
         final Metronome retryMetronome = Metronome.parker(Duration.ofMillis(connectorConfig.connectorRetryDelayMs()), Clock.SYSTEM);
         
+        short retryCountForBootstrapping = 0;
+        for (Pair<String, String> entry : tabletPairList) {
+            // entry is a Pair<tableId, tabletId>
+            while (retryCountForBootstrapping <= connectorConfig.maxConnectorRetries()) {
+                try {
+                    bootstrapTablet(this.syncClient.openTableByUUID(entry.getKey()), entry.getValue());
+                } catch (Exception e) {
+                    ++retryCountForBootstrapping;
+
+                    if (retryCountForBootstrapping > connectorConfig.maxConnectorRetries()) {
+                        LOGGER.error("Failed to bootstrap all the tablet {} after {} retries", entry.getValue(), connectorConfig.maxConnectorRetries());
+                        throw e;
+                    }
+
+                    // If there are retries left, perform them after the specified delay.
+                    LOGGER.warn("Error while trying to bootstrap tablet {}; will attempt retry {} of {} after {} milli-seconds. Exception message: {}",
+                            entry.getValue(), retryCountForBootstrapping, connectorConfig.maxConnectorRetries(), connectorConfig.connectorRetryDelayMs(), e.getMessage());
+            
+                    try {
+                        retryMetronome.pause();
+                    } catch (InterruptedException ie) {
+                        LOGGER.warn("Connector retry sleep interrupted by exception: {}", ie);
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+
         short retryCount = 0;
         while (retryCount <= connectorConfig.maxConnectorRetries()) {
             try { 
-                // Iterate over all the tablets to bootstrap them
-                for (Pair<String, String> entry : tabletPairList) {
-                    // entry is a Pair<tableId, tabletId>
-                    bootstrapTablet(this.syncClient.openTableByUUID(entry.getKey()), entry.getValue());
-                }
-
                 while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                         (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
                     // Pause for the specified duration before asking for a new set of changes from the server
