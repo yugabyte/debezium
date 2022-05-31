@@ -325,7 +325,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                     ++retryCountForBootstrapping;
 
                     if (retryCountForBootstrapping > connectorConfig.maxConnectorRetries()) {
-                        LOGGER.error("Failed to bootstrap all the tablet {} after {} retries", entry.getValue(), connectorConfig.maxConnectorRetries());
+                        LOGGER.error("Failed to bootstrap the tablet {} after {} retries", entry.getValue(), connectorConfig.maxConnectorRetries());
                         throw e;
                     }
 
