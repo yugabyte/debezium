@@ -263,11 +263,18 @@ public class YugabyteDBStreamingChangeEventSource implements
         final Metronome retryMetronome = Metronome.parker(Duration.ofMillis(connectorConfig.connectorRetryDelayMs()), Clock.SYSTEM);
         for (Pair<String, String> entry : tabletPairList) {
             // entry is a Pair<tableId, tabletId>
-            while (retryCountForBootstrapping <= connectorConfig.maxConnectorRetries()) {
+            boolean shouldRetry = true;
+            while (retryCountForBootstrapping <= connectorConfig.maxConnectorRetries() && shouldRetry) {
                 try {
                     bootstrapTablet(this.syncClient.openTableByUUID(entry.getKey()), entry.getValue());
+
+                    // Reset the retry flag if the bootstrap was successful
+                    shouldRetry = false;
                 } catch (Exception e) {
                     ++retryCountForBootstrapping;
+                    
+                    // The connector should go for a retry if any exception is thrown
+                    shouldRetry = true;
 
                     if (retryCountForBootstrapping > connectorConfig.maxConnectorRetries()) {
                         LOGGER.error("Failed to bootstrap the tablet {} after {} retries", entry.getValue(), connectorConfig.maxConnectorRetries());
@@ -347,7 +354,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         final Metronome retryMetronome = Metronome.parker(Duration.ofMillis(connectorConfig.connectorRetryDelayMs()), Clock.SYSTEM);
 
         bootstrapTabletWithRetry(tabletPairList);
-        
+
         short retryCount = 0;
         while (retryCount <= connectorConfig.maxConnectorRetries()) {
             try { 
