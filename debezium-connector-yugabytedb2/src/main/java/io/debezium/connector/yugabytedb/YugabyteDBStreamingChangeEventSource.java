@@ -372,8 +372,9 @@ public class YugabyteDBStreamingChangeEventSource implements
                         OpId cp = offsetContext.lsn(tabletId);
 
                         // GetChangesResponse response = getChangeResponse(offsetContext);
-                        LOGGER.debug("Going to fetch for tablet " + tabletId + " from OpId " + cp + " " +
-                                "table " + table.getName());
+                        // LOGGER.debug("Going to fetch for tablet " + tabletId + " from OpId " + cp + " " +
+                        //         "table " + table.getName());
+                        LOGGER.info("Going to fetch for tablet {} from opId {}", tabletId, cp);
 
                         GetChangesResponse response = this.syncClient.getChangesCDCSDK(
                                 table, streamId, tabletId,
@@ -419,6 +420,7 @@ public class YugabyteDBStreamingChangeEventSource implements
                                             if (recordsInTransactionalBlock.containsKey(tabletId)) {
                                                 if (recordsInTransactionalBlock.get(tabletId) == 0) {
                                                     LOGGER.warn("Records in the transactional block for tablet {} are 0", tabletId);
+                                                    LOGGER.warn("Transaction ID: {} and OpId: {}.{}", message.getTransactionId(), lsn.getTerm(), lsn.getIndex());
                                                 } else {
                                                     LOGGER.debug("Records in the transactional block for tablet {}: {}", tabletId, recordsInTransactionalBlock.get(tabletId));
                                                 }
@@ -511,6 +513,9 @@ public class YugabyteDBStreamingChangeEventSource implements
                                 se.printStackTrace();
                             }
                         }
+
+                        // Print the response we are getting in the response being returned
+                        LOGGER.info("Checkpoint returned in the response {}.{}", response.getTerm(), response.getIndex());
 
                         probeConnectionIfNeeded();
 
