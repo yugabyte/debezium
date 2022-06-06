@@ -342,6 +342,7 @@ public class YugabyteDBStreamingChangeEventSource implements
         for (Pair<String, String> entry : tabletPairList) {
             final String tabletId = entry.getValue();
             offsetContext.initSourceInfo(tabletId, this.connectorConfig);
+            offsetContext.getSourceInfo(tabletId).updateLastCommit(offsetContext.lastCompletelyProcessedLsn());
         }
 
         // This will contain the tablet ID mapped to the number of records it has seen in the transactional block.

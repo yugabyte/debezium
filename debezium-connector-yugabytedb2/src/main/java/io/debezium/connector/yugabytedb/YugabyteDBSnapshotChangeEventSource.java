@@ -112,7 +112,6 @@ public class YugabyteDBSnapshotChangeEventSource extends AbstractSnapshotChangeE
                                                              SnapshottingTask snapshottingTask)
             throws Exception {
         final RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext> ctx = (RelationalSnapshotChangeEventSource.RelationalSnapshotContext<YugabyteDBPartition, YugabyteDBOffsetContext>) snapshotContext;
-
         // Connection connection = null;
         try {
             LOGGER.info("Snapshot step 1 - Preparing");
@@ -168,7 +167,7 @@ public class YugabyteDBSnapshotChangeEventSource extends AbstractSnapshotChangeE
 
             // postSnapshot();
             dispatcher.alwaysDispatchHeartbeatEvent(ctx.partition, ctx.offset);
-            return SnapshotResult.completed(ctx.offset);
+            return SnapshotResult.completed(previousOffset);
         }
         finally {
             // rollbackTransaction(connection);
