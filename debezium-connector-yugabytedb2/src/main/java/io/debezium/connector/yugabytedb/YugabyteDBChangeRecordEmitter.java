@@ -140,7 +140,8 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
                     return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
                 case UPDATE:
                     // todo vaibhav: add scenario for the case of multiple columns being updated
-                    return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
+                    // return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
+                    return updatedColumnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
                 case READ:
                     return columnValues(message.getNewTupleList(), tableId, true, message.hasTypeMetadata(), false, false);
                 default:
@@ -209,7 +210,52 @@ public class YugabyteDBChangeRecordEmitter extends RelationalChangeRecordEmitter
             if (position != -1) {
                 Object value = column.getValue(() -> (BaseConnection) connection.connection(),
                         connectorConfig.includeUnknownDatatypes());
-                values[position] = value;
+                // values[position] = value;
+                values[position] = new Object[]{ value, Boolean.TRUE };
+            }
+        }
+        return values;
+    }
+
+    private Object[] updatedColumnValues(List<ReplicationMessage.Column> columns, TableId tableId,
+                                         boolean refreshSchemaIfChanged, boolean metadataInMessage,
+                                         boolean sourceOfToasted, boolean oldValues)
+            throws SQLException {
+        if (columns == null || columns.isEmpty()) {
+            return null;
+        }
+        final Table table = schema.tableFor(tableId);
+        if (table == null) {
+            schema.dumpTableId();
+        }
+        Objects.requireNonNull(table);
+
+        // based on the schema columns, create the values on the same position as the columns
+        List<Column> schemaColumns = table.columns();
+        // based on the replication message without toasted columns for now
+        List<ReplicationMessage.Column> columnsWithoutToasted = columns.stream().filter(Predicates.not(ReplicationMessage.Column::isToastedColumn))
+                .collect(Collectors.toList());
+        // JSON does not deliver a list of all columns for REPLICA IDENTITY DEFAULT
+        Object[] values = new Object[columnsWithoutToasted.size() < schemaColumns.size()
+                ? schemaColumns.size()
+                : columnsWithoutToasted.size()];
+
+        // initialize to unset
+
+        final Set<String> undeliveredToastableColumns = new HashSet<>(schema
+                .getToastableColumnsForTableId(table.id()));
+        for (ReplicationMessage.Column column : columns) {
+            // DBZ-298 Quoted column names will be sent like that in messages,
+            // but stored unquoted in the column names
+            final String columnName = Strings.unquoteIdentifierPart(column.getName());
+            undeliveredToastableColumns.remove(columnName);
+
+            int position = getPosition(columnName, table, values);
+            if (position != -1) {
+                Object value = column.getValue(() -> (BaseConnection) connection.connection(),
+                        connectorConfig.includeUnknownDatatypes());
+
+                values[position] = new Object[]{ value, Boolean.TRUE };
             }
         }
         return values;

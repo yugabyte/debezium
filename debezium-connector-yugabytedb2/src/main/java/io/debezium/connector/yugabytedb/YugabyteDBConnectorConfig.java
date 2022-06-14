@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.common.config.ConfigDef;
@@ -502,11 +503,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     protected static final int DEFAULT_MAX_RETRIES = 6;
     protected static final int DEFAULT_MASTER_PORT = 7100;
     protected static final String DEFAULT_MASTER_ADDRESS = "127.0.0.1:7100";
-    protected static final int DEFAULT_MAX_NUM_TABLETS = 10;
+    protected static final int DEFAULT_MAX_NUM_TABLETS = 100;
     protected static final long DEFAULT_ADMIN_OPERATION_TIMEOUT_MS = 60000;
     protected static final long DEFAULT_OPERATION_TIMEOUT_MS = 60000;
     protected static final long DEFAULT_SOCKET_READ_TIMEOUT_MS = 60000;
-    protected static final long DEFAULT_CDC_POLL_INTERVAL_MS = 200;
+    protected static final long DEFAULT_CDC_POLL_INTERVAL_MS = 500;
+    protected static final int DEFAULT_MAX_CONNECTOR_RETRIES = 5;
+    protected static final long DEFAULT_CONNECTOR_RETRY_DELAY_MS = 60000;
 
     @Override
     public Configuration getJdbcConfig() {
@@ -575,6 +578,26 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
             .withImportance(Importance.LOW)
             .withDefault(DEFAULT_CDC_POLL_INTERVAL_MS)
             .withDescription("The poll interval in milliseconds at which the client will request for changes from the database");
+
+    public static final Field MAX_CONNECTOR_RETRIES = Field.create("max.connector.retries")
+            .withDisplayName("Maximum number of retries a connector can have")
+            .withType(Type.INT)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_MAX_CONNECTOR_RETRIES)
+            .withDescription("The maximum number of times a connector can retry to get the changes from the server.");
+
+    public static final Field CONNECTOR_RETRY_DELAY_MS = Field.create("connector.retry.delay.ms")
+            .withDisplayName("Delay after which connector will attempt a retry")
+            .withType(Type.LONG)
+            .withImportance(Importance.LOW)
+            .withDefault(DEFAULT_CONNECTOR_RETRY_DELAY_MS)
+            .withDescription("The amount of time after which the connector will attempt to retry to get the changes from the server.");
+
+    public static final Field IGNORE_EXCEPTIONS = Field.create("ignore.exceptions")
+            .withDisplayName("Flag to ignore exceptions which do not cause an issue while execution")
+            .withType(Type.BOOLEAN)
+            .withImportance(Importance.LOW)
+            .withDefault(false);
 
     public static final Field AUTO_CREATE_STREAM = Field.create("auto.create.stream")
             .withDisplayName("Specify whether to create a stream by default")
@@ -954,6 +977,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
     private final SnapshotMode snapshotMode;
     private final SchemaRefreshMode schemaRefreshMode;
 
+    private final TableFilter databaseFilter;
+
     public YugabyteDBConnectorConfig(Configuration config) {
         super(
                 config,
@@ -969,6 +994,8 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         this.intervalHandlingMode = IntervalHandlingMode.parse(config.getString(YugabyteDBConnectorConfig.INTERVAL_HANDLING_MODE));
         this.snapshotMode = SnapshotMode.parse(config.getString(SNAPSHOT_MODE));
         this.schemaRefreshMode = SchemaRefreshMode.parse(config.getString(SCHEMA_REFRESH_MODE));
+
+        this.databaseFilter = new DatabasePredicate();
     }
 
     protected String hostname() {
@@ -995,6 +1022,10 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         return getConfig().getBoolean(AUTO_CREATE_STREAM);
     }
 
+    public boolean ignoreExceptions() {
+        return getConfig().getBoolean(IGNORE_EXCEPTIONS);
+    }
+
     public int maxNumTablets() {
         return getConfig().getInteger(MAX_NUM_TABLETS);
     }
@@ -1013,6 +1044,14 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
     public long cdcPollIntervalms() {
         return getConfig().getLong(CDC_POLL_INTERVAL_MS);
+    }
+
+    public int maxConnectorRetries() {
+        return getConfig().getInteger(MAX_CONNECTOR_RETRIES);
+    }
+
+    public long connectorRetryDelayMs() {
+        return getConfig().getLong(CONNECTOR_RETRY_DELAY_MS);
     }
 
     public String sslRootCert() {
@@ -1073,6 +1112,10 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
 
     protected boolean skipRefreshSchemaOnMissingToastableData() {
         return SchemaRefreshMode.COLUMNS_DIFF_EXCLUDE_UNCHANGED_TOAST == this.schemaRefreshMode;
+    }
+
+    protected TableFilter databaseFilter() {
+        return this.databaseFilter;
     }
 
     /*
@@ -1185,6 +1228,13 @@ public class YugabyteDBConnectorConfig extends RelationalDatabaseConnectorConfig
         @Override
         public boolean isIncluded(TableId t) {
             return !SYSTEM_SCHEMAS.contains(t.schema().toLowerCase());
+        }
+    }
+
+    private class DatabasePredicate implements TableFilter {
+        @Override
+        public boolean isIncluded(TableId tableId) {
+            return Objects.equals(tableId.catalog(), getConfig().getString(DATABASE_NAME));
         }
     }
 }
