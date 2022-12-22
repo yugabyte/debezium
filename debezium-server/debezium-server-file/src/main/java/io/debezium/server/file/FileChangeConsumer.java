@@ -9,7 +9,10 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -154,6 +157,9 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 case "io.debezium.time.Date":
                     LocalDate date = LocalDate.ofEpochDay(Long.parseLong(val));
                     return date.toString(); // default yyyy-MM-dd
+                case "io.debezium.time.MicroTimestamp":
+                    LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(val) / 1000), ZoneOffset.UTC);
+                    return dt.toString();
                 default:
                     return val;
             }
