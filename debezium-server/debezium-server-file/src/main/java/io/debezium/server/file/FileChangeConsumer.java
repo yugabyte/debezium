@@ -109,7 +109,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void writeRecord(Record r) throws IOException {
-        var fileName = dataDir + "/" + r.dbName + "-" + r.schemaName + "-" + r.tableName;
+        var fileName = dataDir + "/" + r.getTableIdentifier();
         var writer = writers.get(fileName);
         if (writer == null) {
             var f = new FileWriter(fileName);
@@ -122,7 +122,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void parseSchema(JsonNode schemaNode, Record r) {
-        var identifier = dataDir + "/" + r.dbName + "-" + r.schemaName + "-" + r.tableName;
+        var identifier = r.getTableIdentifier();
         var tableFieldSchema = tableFieldSchemas.get(identifier);
         if (tableFieldSchema == null) {
             var fields = schemaNode.get("fields");
@@ -158,13 +158,33 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                     LocalDate date = LocalDate.ofEpochDay(Long.parseLong(val));
                     return date.toString(); // default yyyy-MM-dd
                 case "io.debezium.time.MicroTimestamp":
-                    LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(val) / 1000), ZoneOffset.UTC);
+                    long epochMicroSeconds = Long.parseLong(val);
+                    long epochSeconds = epochMicroSeconds / 1000000;
+                    long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
+                    LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
                     return dt.toString();
                 default:
                     return val;
             }
         }
         return val;
+    }
+
+    private void parseFields(JsonNode after, Record r) {
+        var fields = after.fields();
+        var values = new ArrayList<String>();
+        while (fields.hasNext()) {
+            var f = fields.next();
+            var v = f.getValue().asText();
+            var formattedValue = formatFieldValue(r.getTableIdentifier(), f.getKey(), v);
+            // LOGGER.info("field = {} fieldtypes={}, type ={}", f.getKey(), tableFieldSchemas.get(identifier),
+            // tableFieldSchemas.get(identifier).get("first_name"));
+            // .get(f.getKey()
+            values.add(formattedValue);
+            // .get(f.getValue()).type
+        }
+        var text = String.join("\t", values);
+        r.rowText = text;
     }
 
     public Record parse(String json) {
@@ -199,25 +219,13 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             r.dbName = source.get("db").asText();
             r.schemaName = source.get("schema").asText();
             r.tableName = source.get("table").asText();
-            var identifier = dataDir + "/" + r.dbName + "-" + r.schemaName + "-" + r.tableName;
 
+            // Parse schema the first time to be able to format specific field values
             var schemaNode = rootNode.get("schema");
             parseSchema(schemaNode, r);
 
-            var fields = after.fields();
-            var values = new ArrayList<String>();
-            while (fields.hasNext()) {
-                var f = fields.next();
-                var v = f.getValue().asText();
-                var formattedValue = formatFieldValue(identifier, f.getKey(), v);
-                // LOGGER.info("field = {} fieldtypes={}, type ={}", f.getKey(), tableFieldSchemas.get(identifier),
-                // tableFieldSchemas.get(identifier).get("first_name"));
-                // .get(f.getKey()
-                values.add(formattedValue);
-                // .get(f.getValue()).type
-            }
-            var text = String.join("\t", values);
-            r.rowText = text;
+            // parse fields and construt rowText
+            parseFields(after, r);
 
             return r;
         }
@@ -232,6 +240,10 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 class Record {
     String dbName, schemaName, tableName;
     String rowText;
+
+    public String getTableIdentifier() {
+        return dbName + "-" + schemaName + "-" + tableName;
+    }
 }
 
 class FieldSchema {
