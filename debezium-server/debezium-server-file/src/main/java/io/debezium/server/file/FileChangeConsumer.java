@@ -9,6 +9,7 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -48,6 +49,8 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     Map<String, BufferedWriter> writers = new HashMap<>();
     JsonFactory factory = new JsonFactory();
     ObjectMapper mapper = new ObjectMapper(factory);
+
+    HashMap<String, HashMap<String, FieldSchema>> tableFieldSchemas = new HashMap<>();
 
     @PostConstruct
     void connect() throws URISyntaxException {
@@ -115,13 +118,56 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         // writer.flush();
     }
 
+    private void parseSchema(JsonNode schemaNode, Record r) {
+        var identifier = dataDir + "/" + r.dbName + "-" + r.schemaName + "-" + r.tableName;
+        var tableFieldSchema = tableFieldSchemas.get(identifier);
+        if (tableFieldSchema == null) {
+            var fields = schemaNode.get("fields");
+            var afterNodeSchema = fields.get(1);
+            var afterNodeFields = afterNodeSchema.get("fields");
+
+            var fieldsSchemas = new HashMap<String, FieldSchema>();
+
+            for (final JsonNode fieldSchema : afterNodeFields) {
+                LOGGER.info("FIELD SCHEMA NODE {}", fieldSchema);
+                var fs = new FieldSchema();
+                fs.type = fieldSchema.get("type").asText();
+                fs.name = fieldSchema.get("field").asText();
+                var className = fieldSchema.get("name");
+                if (className != null) {
+                    fs.className = className.asText();
+                }
+                else {
+                    fs.className = null;
+                }
+                LOGGER.info("XXX Putting at {}", fs.name);
+                fieldsSchemas.put(fs.name, fs);
+            }
+            tableFieldSchemas.put(identifier, fieldsSchemas);
+        }
+    }
+
+    private String formatFieldValue(String tableIdentifier, String field, String val) {
+        FieldSchema fs = tableFieldSchemas.get(tableIdentifier).get(field);
+        if (fs.className != null) {
+            switch (fs.className) {
+                case "io.debezium.time.Date":
+                    LocalDate date = LocalDate.ofEpochDay(Long.parseLong(val));
+                    return date.toString(); // default yyyy-MM-dd
+                default:
+                    return val;
+            }
+        }
+        return val;
+    }
+
     public Record parse(String json) {
         try {
             JsonNode rootNode = mapper.readTree(json);
-            LOGGER.info("XXX Received JSON {}", json);
+            // LOGGER.info("XXX Received JSON {}", json);
 
             var payload = rootNode.get("payload");
-            LOGGER.info("XXX Received Payload {}", payload.toPrettyString());
+            // LOGGER.info("XXX Received Payload {}", payload.toPrettyString());
 
             if (payload == null || payload.isNull()) {
                 LOGGER.info("XXX payload is null {}", json);
@@ -142,20 +188,29 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 return null;
             }
 
-            var fields = after.fields();
-            var values = new ArrayList<String>();
-            while (fields.hasNext()) {
-                var f = fields.next();
-                var v = f.getValue().toString();
-                values.add(v);
-            }
-            var text = String.join("\t", values);
-
             var source = payload.get("source");
             var r = new Record();
             r.dbName = source.get("db").asText();
             r.schemaName = source.get("schema").asText();
             r.tableName = source.get("table").asText();
+            var identifier = dataDir + "/" + r.dbName + "-" + r.schemaName + "-" + r.tableName;
+
+            var schemaNode = rootNode.get("schema");
+            parseSchema(schemaNode, r);
+
+            var fields = after.fields();
+            var values = new ArrayList<String>();
+            while (fields.hasNext()) {
+                var f = fields.next();
+                var v = f.getValue().asText();
+                var formattedValue = formatFieldValue(identifier, f.getKey(), v);
+                // LOGGER.info("field = {} fieldtypes={}, type ={}", f.getKey(), tableFieldSchemas.get(identifier),
+                // tableFieldSchemas.get(identifier).get("first_name"));
+                // .get(f.getKey()
+                values.add(formattedValue);
+                // .get(f.getValue()).type
+            }
+            var text = String.join("\t", values);
             r.rowText = text;
 
             return r;
@@ -171,4 +226,10 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 class Record {
     String dbName, schemaName, tableName;
     String rowText;
+}
+
+class FieldSchema {
+    String name;
+    String type;
+    String className;
 }
