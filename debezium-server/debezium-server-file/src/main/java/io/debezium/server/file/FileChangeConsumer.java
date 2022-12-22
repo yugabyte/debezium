@@ -46,6 +46,8 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private static final String PROP_PREFIX = "debezium.sink.filesink.";
 
+    private static final String NULL_STRING = "\\N";
+
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
@@ -151,6 +153,9 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private String formatFieldValue(String tableIdentifier, String field, String val) {
+        if (val == "null") {
+            return NULL_STRING;
+        }
         FieldSchema fs = tableFieldSchemas.get(tableIdentifier).get(field);
         if (fs.className != null) {
             switch (fs.className) {
