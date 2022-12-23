@@ -5,7 +5,6 @@
  */
 package io.debezium.server.file;
 
-import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -22,6 +21,8 @@ import javax.annotation.PostConstruct;
 import javax.enterprise.context.Dependent;
 import javax.inject.Named;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,12 +47,12 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private static final String PROP_PREFIX = "debezium.sink.filesink.";
 
-    private static final String NULL_STRING = "\\N";
+    private static final String NULL_STRING = "NULL";
 
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
-    Map<String, BufferedWriter> writers = new HashMap<>();
+    Map<String, CSVPrinter> writers = new HashMap<String, CSVPrinter>();
     JsonFactory factory = new JsonFactory();
     ObjectMapper mapper = new ObjectMapper(factory);
 
@@ -68,9 +69,10 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     void flush() {
         LOGGER.info("XXX Started flush thread.");
         while (true) {
-            for (var writer : writers.values()) {
+            for (CSVPrinter writer : writers.values()) {
                 try {
                     writer.flush();
+                    // LOGGER.info("FLUSHED to disk");
                 }
                 catch (IOException e) {
                     throw new RuntimeException(e);
@@ -98,7 +100,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 LOGGER.info("XXX Skipped: {}", objVal);
                 continue;
             }
-            LOGGER.info("{}.{}.{} => {}", r.dbName, r.schemaName, r.tableName, r.rowText);
+            LOGGER.info("{}.{}.{} => {}", r.dbName, r.schemaName, r.tableName, r.values);
             try {
                 writeRecord(r);
             }
@@ -112,15 +114,13 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void writeRecord(Record r) throws IOException {
         var fileName = dataDir + "/" + r.getTableIdentifier();
-        var writer = writers.get(fileName);
+        CSVPrinter writer = writers.get(fileName);
         if (writer == null) {
             var f = new FileWriter(fileName);
-            writer = new BufferedWriter(f);
+            writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
             writers.put(fileName, writer);
         }
-        writer.write(r.rowText);
-        writer.write('\n');
-        // writer.flush();
+        writer.printRecord(r.values);
     }
 
     private void parseSchema(JsonNode schemaNode, Record r) {
@@ -134,7 +134,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             var fieldsSchemas = new HashMap<String, FieldSchema>();
 
             for (final JsonNode fieldSchema : afterNodeFields) {
-                LOGGER.info("FIELD SCHEMA NODE {}", fieldSchema);
                 var fs = new FieldSchema();
                 fs.type = fieldSchema.get("type").asText();
                 fs.name = fieldSchema.get("field").asText();
@@ -145,7 +144,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 else {
                     fs.className = null;
                 }
-                LOGGER.info("XXX Putting at {}", fs.name);
                 fieldsSchemas.put(fs.name, fs);
             }
             tableFieldSchemas.put(identifier, fieldsSchemas);
@@ -153,8 +151,8 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private String formatFieldValue(String tableIdentifier, String field, String val) {
-        if (val == "null") {
-            return NULL_STRING;
+        if (val == null || val == "null") {
+            return null;
         }
         FieldSchema fs = tableFieldSchemas.get(tableIdentifier).get(field);
         if (fs.className != null) {
@@ -177,19 +175,15 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void parseFields(JsonNode after, Record r) {
         var fields = after.fields();
-        var values = new ArrayList<String>();
         while (fields.hasNext()) {
             var f = fields.next();
-            var v = f.getValue().asText();
-            var formattedValue = formatFieldValue(r.getTableIdentifier(), f.getKey(), v);
-            // LOGGER.info("field = {} fieldtypes={}, type ={}", f.getKey(), tableFieldSchemas.get(identifier),
-            // tableFieldSchemas.get(identifier).get("first_name"));
-            // .get(f.getKey()
-            values.add(formattedValue);
-            // .get(f.getValue()).type
+            var v = f.getValue();
+            // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
+            var formattedValue = formatFieldValue(r.getTableIdentifier(), f.getKey(), v.asText());
+            r.values.add(formattedValue);
         }
-        var text = String.join("\t", values);
-        r.rowText = text;
+        // var text = "";
+        // r.rowText = text;
     }
 
     public Record parse(String json) {
@@ -245,6 +239,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 class Record {
     String dbName, schemaName, tableName;
     String rowText;
+    ArrayList<String> values = new ArrayList<>();
 
     public String getTableIdentifier() {
         return dbName + "-" + schemaName + "-" + tableName;
