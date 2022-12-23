@@ -52,7 +52,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
-    Map<String, CSVPrinter> writers = new HashMap<String, CSVPrinter>();
+    Map<Table, CSVPrinter> writers = new HashMap<Table, CSVPrinter>();
     JsonFactory factory = new JsonFactory();
     ObjectMapper mapper = new ObjectMapper(factory);
 
@@ -100,7 +100,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 LOGGER.info("XXX Skipped: {}", objVal);
                 continue;
             }
-            LOGGER.info("{}.{}.{} => {}", r.dbName, r.schemaName, r.tableName, r.values);
+            LOGGER.info("{} => {}", r.getTableIdentifier(), r.values);
             try {
                 writeRecord(r);
             }
@@ -113,12 +113,13 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void writeRecord(Record r) throws IOException {
-        var fileName = dataDir + "/" + r.getTableIdentifier();
-        CSVPrinter writer = writers.get(fileName);
+        var table = r.ti;
+        CSVPrinter writer = writers.get(table);
         if (writer == null) {
+            var fileName = dataDir + "/" + table.toString();
             var f = new FileWriter(fileName);
             writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
-            writers.put(fileName, writer);
+            writers.put(table, writer);
         }
         writer.printRecord(r.values);
     }
@@ -215,9 +216,11 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
             var source = payload.get("source");
             var r = new Record();
-            r.dbName = source.get("db").asText();
-            r.schemaName = source.get("schema").asText();
-            r.tableName = source.get("table").asText();
+            var ti = new Table();
+            ti.dbName = source.get("db").asText();
+            ti.schemaName = source.get("schema").asText();
+            ti.tableName = source.get("table").asText();
+            r.ti = ti;
 
             // Parse schema the first time to be able to format specific field values
             var schemaNode = rootNode.get("schema");
@@ -236,13 +239,42 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 }
 
-class Record {
+class Table {
     String dbName, schemaName, tableName;
+
+    @Override
+    public String toString() {
+        return dbName + "-" + schemaName + "-" + tableName;
+    }
+
+    @Override
+    public int hashCode() {
+        return toString().hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof Table)) {
+            return false;
+        }
+        Table t = (Table) o;
+        return dbName.equals(t.dbName)
+                && schemaName.equals(t.schemaName)
+                && tableName.equals(t.tableName);
+    }
+}
+
+class Record {
+    // String dbName, schemaName, tableName;
+    Table ti;
     String rowText;
     ArrayList<String> values = new ArrayList<>();
 
     public String getTableIdentifier() {
-        return dbName + "-" + schemaName + "-" + tableName;
+        return ti.toString();
     }
 }
 
