@@ -108,14 +108,15 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             LOGGER.info("{} => {}", r.getTableIdentifier(), r.values);
             try {
                 writeRecord(r);
+                if (r.snapshot.equals("last")) {
+                    snapshotComplete = true;
+                    updateExportStatus();
+                }
             }
             catch (IOException e) {
                 throw new RuntimeException(e);
             }
             // committer.markProcessed(record);
-            if (snapshotComplete) {
-                updateExportStatus();
-            }
         }
         committer.markBatchFinished();
 
@@ -135,11 +136,14 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             writers.put(table, writer);
         }
         writer.printRecord(r.values);
-        Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
-        if (tableRowsProcessed == null) {
-            tableRowsProcessed = 0;
+        if (!snapshotComplete) {
+            Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
+            if (tableRowsProcessed == null) {
+                tableRowsProcessed = 0;
+            }
+            snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
         }
-        snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
+
     }
 
     private void parseSchema(JsonNode schemaNode, Record r) {
@@ -239,10 +243,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             ti.schemaName = source.get("schema").asText();
             ti.tableName = source.get("table").asText();
             r.ti = ti;
-            var snapshot = source.get("snapshot").asText();
-            if (snapshot.equals("last")) {
-                snapshotComplete = true;
-            }
+            r.snapshot = source.get("snapshot").asText();
 
             // Parse schema the first time to be able to format specific field values
             var schemaNode = rootNode.get("schema");
@@ -319,6 +320,7 @@ class Record {
     Table ti;
     String rowText;
     ArrayList<String> values = new ArrayList<>();
+    String snapshot;
 
     public String getTableIdentifier() {
         return ti.toString();
