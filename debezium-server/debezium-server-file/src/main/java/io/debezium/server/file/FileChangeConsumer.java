@@ -5,6 +5,7 @@
  */
 package io.debezium.server.file;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -30,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
@@ -48,6 +50,9 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     private static final String PROP_PREFIX = "debezium.sink.filesink.";
 
     private static final String NULL_STRING = "NULL";
+
+    private boolean snapshotComplete = false;
+    Map<Table, Integer> snapshotRowsProcessed = new HashMap<>();
 
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
@@ -108,20 +113,33 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 throw new RuntimeException(e);
             }
             // committer.markProcessed(record);
+            if (snapshotComplete) {
+                updateExportStatus();
+            }
         }
         committer.markBatchFinished();
+
+    }
+
+    private String getFilenameForTable(Table t) {
+        return dataDir + "/" + t.toString();
     }
 
     private void writeRecord(Record r) throws IOException {
         var table = r.ti;
         CSVPrinter writer = writers.get(table);
         if (writer == null) {
-            var fileName = dataDir + "/" + table.toString();
+            var fileName = getFilenameForTable(table);
             var f = new FileWriter(fileName);
             writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
             writers.put(table, writer);
         }
         writer.printRecord(r.values);
+        Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
+        if (tableRowsProcessed == null) {
+            tableRowsProcessed = 0;
+        }
+        snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
     }
 
     private void parseSchema(JsonNode schemaNode, Record r) {
@@ -221,6 +239,10 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             ti.schemaName = source.get("schema").asText();
             ti.tableName = source.get("table").asText();
             r.ti = ti;
+            var snapshot = source.get("snapshot").asText();
+            if (snapshot.equals("last")) {
+                snapshotComplete = true;
+            }
 
             // Parse schema the first time to be able to format specific field values
             var schemaNode = rootNode.get("schema");
@@ -236,6 +258,31 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         }
         LOGGER.info("XXX end returning NULL {}", json);
         return null;
+    }
+
+    private void updateExportStatus() {
+        HashMap<String, Object> exportStatus = new HashMap<>();
+        List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
+        for (Table t : writers.keySet()) {
+            HashMap<String, Object> tableInfo = new HashMap<>();
+            tableInfo.put("database", t.dbName);
+            tableInfo.put("schema", t.schemaName);
+            tableInfo.put("name", t.tableName);
+            tableInfo.put("rows", snapshotRowsProcessed.get(t));
+            tablesInfo.add(tableInfo);
+        }
+
+        exportStatus.put("tables", tablesInfo);
+        ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+        String tocJson = null;
+        try {
+            tocJson = ow.writeValueAsString(exportStatus);
+            ow.writeValue(new File(dataDir + "/export_status.json"), exportStatus);
+            LOGGER.info("TABLE OF CONTENTS = {}", tocJson);
+        }
+        catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
 
