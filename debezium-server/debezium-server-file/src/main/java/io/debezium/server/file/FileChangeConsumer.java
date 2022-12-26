@@ -279,10 +279,21 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private String formatFieldValue(Table t, String field, String val) {
+        // TODO: clean this function up. Ideal situation: have one formatting for both snapshot and cdc.
         if (val == null || val == "null") {
             return null;
         }
         FieldSchema fs = t.schema.get(field);
+        if (fs.type.equals("string")) {
+            if (snapshotComplete) {
+                String formattedVal = "'" + val + "'";
+                return formattedVal;
+            }
+            else {
+                return val;
+            }
+
+        }
         if (fs.className != null) {
             switch (fs.className) {
                 case "io.debezium.time.Date":
