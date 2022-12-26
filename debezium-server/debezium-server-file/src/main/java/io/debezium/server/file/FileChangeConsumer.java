@@ -127,19 +127,37 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private String getFilenameForTable(Table t) {
-        return dataDir + "/" + t.toString();
+        return t.toString() + ".sql";
+    }
+
+    private String getFullFileNameForTable(Table t) {
+        return dataDir + "/" + getFilenameForTable(t);
     }
 
     private void writeRecord(Record r) throws IOException {
         var table = r.ti;
+
         CSVPrinter writer = writers.get(table);
         if (writer == null) {
-            var fileName = getFilenameForTable(table);
+            var fileName = getFullFileNameForTable(table);
             var f = new FileWriter(fileName);
+            ArrayList<String> cols = new ArrayList<>(table.schema.keySet());
+            // final CSVFormat csvFormat = CSVFormat.Builder.create()
+            // .setHeader(String.join(",", cols))
+            // .setAllowMissingColumnNames(true)
+            // .
+            // .build();
             writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
             writers.put(table, writer);
+            // Write header
+            String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
+            LOGGER.info("header = {}", header);
+            f.write(header);
+            // writer.print(header);
+            // writer.printHeaders();
+
             TableExportStatus tableExportStatus = new TableExportStatus();
-            tableExportStatus.fileName = fileName;
+            tableExportStatus.fileName = getFilenameForTable(table);
             tableExportStatus.exportedRowCountSnapshot = 0;
             exportStatus.tableExportStatusMap.put(table, tableExportStatus);
         }
@@ -316,10 +334,11 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
         for (Table t : writers.keySet()) {
             HashMap<String, Object> tableInfo = new HashMap<>();
-            tableInfo.put("database", t.dbName);
-            tableInfo.put("schema", t.schemaName);
-            tableInfo.put("name", t.tableName);
-            tableInfo.put("rows", exportStatus.tableExportStatusMap.get(t).exportedRowCountSnapshot);
+            tableInfo.put("database_name", t.dbName);
+            tableInfo.put("schema_name", t.schemaName);
+            tableInfo.put("table_name", t.tableName);
+            tableInfo.put("file_name", exportStatus.tableExportStatusMap.get(t).fileName);
+            tableInfo.put("exported_row_count", exportStatus.tableExportStatusMap.get(t).exportedRowCountSnapshot);
             tablesInfo.add(tableInfo);
         }
 
