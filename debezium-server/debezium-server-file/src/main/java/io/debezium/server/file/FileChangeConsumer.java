@@ -101,19 +101,35 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             throws InterruptedException {
         LOGGER.info("RECEIVED BATCH IN FILE SINK" + "Size of records-" + records.size());
         for (ChangeEvent<Object, Object> record : records) {
-            // Object objKey = record.key();
+            Object objKey = record.key();
             Object objVal = record.value();
-
-            var r = parse((String) objVal);
-            if (r == null) {
-                LOGGER.info("XXX Skipped: {}", objVal);
+            if (objVal == null) {
+                // tombstone event
+                // TODO: handle this better. try using the config to avoid altogether
                 continue;
             }
-            LOGGER.info("{} => {}", r.getTableIdentifier(), r.values);
+
+            var r = parse((String) objVal, (String) objKey);
+            if (r == null) {
+                LOGGER.info("XXX Skipped: {}:{}", objKey, objVal);
+                continue;
+            }
+            LOGGER.info("{} => {}", r.getTableIdentifier(), r.getValues());
             try {
-                writeRecord(r);
-                if (r.snapshot.equals("last")) {
-                    handleSnapshotComplete();
+                if (!snapshotComplete) {
+                    writeRecord(r);
+                    if (r.snapshot.equals("last")) {
+                        handleSnapshotComplete();
+                    }
+                }
+                else {
+                    // LOGGER.info("XXX Received CDC JSON key {}", objKey);
+                    // LOGGER.info("XXX Received CDC JSON value {}", objVal);
+
+                    ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+                    String cdcJson = ow.writeValueAsString(r.getCDCInfo());
+                    LOGGER.info("XXX CDC json = {}", cdcJson);
+
                 }
             }
             catch (IOException e) {
@@ -183,7 +199,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             tableExportStatus.exportedRowCountSnapshot = 0;
             exportStatus.tableExportStatusMap.put(table, tableExportStatus);
         }
-        writer.printRecord(r.values);
+        writer.printRecord(r.getValues());
         if (!snapshotComplete) {
             exportStatus.tableExportStatusMap.get(table).exportedRowCountSnapshot++;
             // Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
@@ -286,19 +302,42 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void parseFields(JsonNode after, Record r) {
+        if (after == null) {
+            return;
+        }
         var fields = after.fields();
         while (fields.hasNext()) {
             var f = fields.next();
             var v = f.getValue();
             // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
             var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
-            r.values.add(formattedValue);
+            r.fields.put(f.getKey(), formattedValue);
         }
         // var text = "";
         // r.rowText = text;
     }
 
-    public Record parse(String json) {
+    private void parseKey(String jsonKey, Record r) {
+        try {
+            JsonNode rootNode = mapper.readTree(jsonKey);
+            var payload = rootNode.get("payload");
+            var payloadFields = payload.fields();
+            while (payloadFields.hasNext()) {
+                var f = payloadFields.next();
+                var v = f.getValue();
+                // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
+                var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
+                r.key.put(f.getKey(), formattedValue);
+            }
+
+        }
+        catch (Exception ex) {
+            LOGGER.error("XXX parseKey: {}", ex);
+        }
+
+    }
+
+    public Record parse(String json, String jsonKey) {
         try {
             JsonNode rootNode = mapper.readTree(json);
             // LOGGER.info("XXX Received JSON {}", json);
@@ -315,18 +354,23 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 LOGGER.info("XXX op is null {}", json);
                 return null;
             }
-            if (!op.asText().equals("r")) {
-                LOGGER.info("XXX op not r {}", json);
+            if (!op.asText().equals("r") && !op.asText().equals("c") && !op.asText().equals("d") && !op.asText().equals("u")) {
+                LOGGER.info("XXX unknown op {}", op.asText());
                 return null;
             }
+            // if (op.asText() == "d") {
+            // LOGGER.info("DELETE EVENT key = {}", jsonKey);
+            // LOGGER.info("DELETE EVENT value = {}", json);
+            // }
             var after = payload.get("after");
-            if (after == null || after.isNull()) {
+            if ((after == null || after.isNull()) && (!op.asText().equals("d"))) {
                 LOGGER.info("XXX after is null {}", json);
                 return null;
             }
 
             var source = payload.get("source");
             var r = new Record();
+            r.op = op.asText();
             r.snapshot = source.get("snapshot").asText();
             // var ti = new Table();
             // ti.dbName = source.get("db").asText();
@@ -338,6 +382,9 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             // Parse schema the first time to be able to format specific field values
             var schemaNode = rootNode.get("schema");
             parseSchema(schemaNode, source, r);
+
+            // parse key in case of CDC
+            parseKey(jsonKey, r);
 
             // parse fields and construt rowText
             parseFields(after, r);
@@ -412,11 +459,28 @@ class Record {
     // String dbName, schemaName, tableName;
     Table ti;
     String rowText;
-    ArrayList<String> values = new ArrayList<>();
+    // ArrayList<String> values = new ArrayList<>();
+    LinkedHashMap<String, String> fields = new LinkedHashMap<>();
     String snapshot;
+    String op;
+    HashMap<String, String> key = new HashMap<>();
 
     public String getTableIdentifier() {
         return ti.toString();
+    }
+
+    public ArrayList<String> getValues() {
+        return new ArrayList<>(fields.values());
+    }
+
+    public HashMap<String, Object> getCDCInfo() {
+        HashMap<String, Object> cdcInfo = new HashMap<>();
+        cdcInfo.put("op", op);
+        cdcInfo.put("schema_name", ti.schemaName);
+        cdcInfo.put("table_name", ti.tableName);
+        cdcInfo.put("key", key);
+        cdcInfo.put("fields", fields);
+        return cdcInfo;
     }
 }
 
