@@ -5,6 +5,7 @@
  */
 package io.debezium.server.file;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -58,6 +59,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     String dataDir;
 
     Map<Table, CSVPrinter> writers = new HashMap<Table, CSVPrinter>();
+    BufferedWriter cdcWriter;
     JsonFactory factory = new JsonFactory();
     ObjectMapper mapper = new ObjectMapper(factory);
 
@@ -86,6 +88,14 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 catch (IOException e) {
                     throw new RuntimeException(e);
                 }
+            }
+            try {
+                if (cdcWriter != null) {
+                    cdcWriter.flush();
+                }
+            }
+            catch (IOException e) {
+                throw new RuntimeException(e);
             }
             try {
                 Thread.sleep(2000);
@@ -125,11 +135,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 else {
                     // LOGGER.info("XXX Received CDC JSON key {}", objKey);
                     // LOGGER.info("XXX Received CDC JSON value {}", objVal);
-
-                    ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-                    String cdcJson = ow.writeValueAsString(r.getCDCInfo());
-                    LOGGER.info("XXX CDC json = {}", cdcJson);
-
+                    writeRecordCDC(r);
                 }
             }
             catch (IOException e) {
@@ -145,6 +151,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         snapshotComplete = true;
         exportStatus.mode = "streaming";
         closeSnapshotWriters();
+        openCDCWriter();
         updateExportStatus();
     }
 
@@ -162,6 +169,17 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             }
         }
         writers.clear();
+    }
+
+    private void openCDCWriter() {
+        var fileName = dataDir + "/queue.json";
+        try {
+            var f = new FileWriter(fileName);
+            cdcWriter = new BufferedWriter(f);
+        }
+        catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private String getFilenameForTable(Table t) {
@@ -209,6 +227,15 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             // snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
         }
 
+    }
+
+    private void writeRecordCDC(Record r) throws IOException {
+        ObjectWriter ow = new ObjectMapper().writer();
+        String cdcJson = ow.writeValueAsString(r.getCDCInfo());
+        LOGGER.info("XXX CDC json = {}", cdcJson);
+
+        cdcWriter.write(cdcJson);
+        cdcWriter.write("\n");
     }
 
     private void parseSchema(JsonNode schemaNode, JsonNode sourceNode, Record r) {
@@ -377,6 +404,10 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             if ((after == null || after.isNull()) && (!op.asText().equals("d"))) {
                 LOGGER.info("XXX after is null {}", json);
                 return null;
+            }
+            var before = payload.get("before");
+            if (op.asText().equals("u")) {
+                LOGGER.info("UPDATE BEFORE FIELD = {}", before);
             }
 
             var source = payload.get("source");
