@@ -113,8 +113,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             try {
                 writeRecord(r);
                 if (r.snapshot.equals("last")) {
-                    snapshotComplete = true;
-                    updateExportStatus();
+                    handleSnapshotComplete();
                 }
             }
             catch (IOException e) {
@@ -124,6 +123,29 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         }
         committer.markBatchFinished();
 
+    }
+
+    private void handleSnapshotComplete() {
+        snapshotComplete = true;
+        exportStatus.mode = "streaming";
+        closeSnapshotWriters();
+        updateExportStatus();
+    }
+
+    private void closeSnapshotWriters() {
+        // for each snapshot writer, close the file
+        for (CSVPrinter writer : writers.values()) {
+            try {
+                String eof = "\\.";
+                writer.getOut().append(eof);
+                writer.close(true);
+                LOGGER.info("Closing file = {}", writer.getOut().toString());
+            }
+            catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        writers.clear();
     }
 
     private String getFilenameForTable(Table t) {
@@ -332,7 +354,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     private void updateExportStatus() {
         HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
-        for (Table t : writers.keySet()) {
+        for (Table t : tableMap.values()) {
             HashMap<String, Object> tableInfo = new HashMap<>();
             tableInfo.put("database_name", t.dbName);
             tableInfo.put("schema_name", t.schemaName);
