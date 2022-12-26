@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -52,7 +53,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     private static final String NULL_STRING = "NULL";
 
     private boolean snapshotComplete = false;
-    Map<Table, Integer> snapshotRowsProcessed = new HashMap<>();
 
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
@@ -61,7 +61,10 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     JsonFactory factory = new JsonFactory();
     ObjectMapper mapper = new ObjectMapper(factory);
 
-    HashMap<String, HashMap<String, FieldSchema>> tableFieldSchemas = new HashMap<>();
+    Map<String, Table> tableMap = new HashMap<>();
+    ExportStatus exportStatus = new ExportStatus();
+    // Map<Table, Integer> snapshotRowsProcessed = new HashMap<>();
+    // HashMap<String, HashMap<String, FieldSchema>> tableFieldSchemas = new HashMap<>();
 
     @PostConstruct
     void connect() throws URISyntaxException {
@@ -69,6 +72,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         Thread t = new Thread(this::flush);
         t.setDaemon(true);
         t.start();
+        exportStatus.mode = "snapshot";
     }
 
     void flush() {
@@ -134,27 +138,44 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             var f = new FileWriter(fileName);
             writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
             writers.put(table, writer);
+            TableExportStatus tableExportStatus = new TableExportStatus();
+            tableExportStatus.fileName = fileName;
+            tableExportStatus.exportedRowCountSnapshot = 0;
+            exportStatus.tableExportStatusMap.put(table, tableExportStatus);
         }
         writer.printRecord(r.values);
         if (!snapshotComplete) {
-            Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
-            if (tableRowsProcessed == null) {
-                tableRowsProcessed = 0;
-            }
-            snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
+            exportStatus.tableExportStatusMap.get(table).exportedRowCountSnapshot++;
+            // Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
+            // if (tableRowsProcessed == null) {
+            // tableRowsProcessed = 0;
+            // }
+            // snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
         }
 
     }
 
-    private void parseSchema(JsonNode schemaNode, Record r) {
-        var identifier = r.getTableIdentifier();
-        var tableFieldSchema = tableFieldSchemas.get(identifier);
-        if (tableFieldSchema == null) {
+    private void parseSchema(JsonNode schemaNode, JsonNode sourceNode, Record r) {
+        // Retrieve/create table
+        String dbName = sourceNode.get("db").asText();
+        String schemaName = sourceNode.get("schema").asText();
+        String tableName = sourceNode.get("table").asText();
+        var tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
+        Table t;
+        t = tableMap.get(tableIdentifier);
+        if (t == null) {
+            // create table
+            t = new Table();
+            t.dbName = dbName;
+            t.schemaName = schemaName;
+            t.tableName = tableName;
+
+            // parse schema
             var fields = schemaNode.get("fields");
             var afterNodeSchema = fields.get(1);
             var afterNodeFields = afterNodeSchema.get("fields");
 
-            var fieldsSchemas = new HashMap<String, FieldSchema>();
+            var fieldsSchemas = new LinkedHashMap<String, FieldSchema>();
 
             for (final JsonNode fieldSchema : afterNodeFields) {
                 var fs = new FieldSchema();
@@ -169,15 +190,43 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 }
                 fieldsSchemas.put(fs.name, fs);
             }
-            tableFieldSchemas.put(identifier, fieldsSchemas);
+            t.schema = fieldsSchemas;
+
+            tableMap.put(tableIdentifier, t);
         }
+        r.ti = t;
+
+        // var identifier = r.getTableIdentifier();
+        // var tableFieldSchema = tableFieldSchemas.get(identifier);
+        // if (tableFieldSchema == null) {
+        // var fields = schemaNode.get("fields");
+        // var afterNodeSchema = fields.get(1);
+        // var afterNodeFields = afterNodeSchema.get("fields");
+        //
+        // var fieldsSchemas = new HashMap<String, FieldSchema>();
+        //
+        // for (final JsonNode fieldSchema : afterNodeFields) {
+        // var fs = new FieldSchema();
+        // fs.type = fieldSchema.get("type").asText();
+        // fs.name = fieldSchema.get("field").asText();
+        // var className = fieldSchema.get("name");
+        // if (className != null) {
+        // fs.className = className.asText();
+        // }
+        // else {
+        // fs.className = null;
+        // }
+        // fieldsSchemas.put(fs.name, fs);
+        // }
+        // tableFieldSchemas.put(identifier, fieldsSchemas);
+        // }
     }
 
-    private String formatFieldValue(String tableIdentifier, String field, String val) {
+    private String formatFieldValue(Table t, String field, String val) {
         if (val == null || val == "null") {
             return null;
         }
-        FieldSchema fs = tableFieldSchemas.get(tableIdentifier).get(field);
+        FieldSchema fs = t.schema.get(field);
         if (fs.className != null) {
             switch (fs.className) {
                 case "io.debezium.time.Date":
@@ -202,7 +251,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             var f = fields.next();
             var v = f.getValue();
             // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
-            var formattedValue = formatFieldValue(r.getTableIdentifier(), f.getKey(), v.asText());
+            var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
             r.values.add(formattedValue);
         }
         // var text = "";
@@ -238,16 +287,17 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
             var source = payload.get("source");
             var r = new Record();
-            var ti = new Table();
-            ti.dbName = source.get("db").asText();
-            ti.schemaName = source.get("schema").asText();
-            ti.tableName = source.get("table").asText();
-            r.ti = ti;
             r.snapshot = source.get("snapshot").asText();
+            // var ti = new Table();
+            // ti.dbName = source.get("db").asText();
+            // ti.schemaName = source.get("schema").asText();
+            // ti.tableName = source.get("table").asText();
+            // r.ti = ti;
+            //
 
             // Parse schema the first time to be able to format specific field values
             var schemaNode = rootNode.get("schema");
-            parseSchema(schemaNode, r);
+            parseSchema(schemaNode, source, r);
 
             // parse fields and construt rowText
             parseFields(after, r);
@@ -262,23 +312,24 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void updateExportStatus() {
-        HashMap<String, Object> exportStatus = new HashMap<>();
+        HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
         for (Table t : writers.keySet()) {
             HashMap<String, Object> tableInfo = new HashMap<>();
             tableInfo.put("database", t.dbName);
             tableInfo.put("schema", t.schemaName);
             tableInfo.put("name", t.tableName);
-            tableInfo.put("rows", snapshotRowsProcessed.get(t));
+            tableInfo.put("rows", exportStatus.tableExportStatusMap.get(t).exportedRowCountSnapshot);
             tablesInfo.add(tableInfo);
         }
 
-        exportStatus.put("tables", tablesInfo);
+        exportStatusMap.put("tables", tablesInfo);
+        exportStatusMap.put("mode", exportStatus.mode);
         ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
         String tocJson = null;
         try {
-            tocJson = ow.writeValueAsString(exportStatus);
-            ow.writeValue(new File(dataDir + "/export_status.json"), exportStatus);
+            tocJson = ow.writeValueAsString(exportStatusMap);
+            ow.writeValue(new File(dataDir + "/export_status.json"), exportStatusMap);
             LOGGER.info("TABLE OF CONTENTS = {}", tocJson);
         }
         catch (IOException e) {
@@ -289,6 +340,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
 class Table {
     String dbName, schemaName, tableName;
+    LinkedHashMap<String, FieldSchema> schema = new LinkedHashMap<>();
 
     @Override
     public String toString() {
@@ -331,4 +383,14 @@ class FieldSchema {
     String name;
     String type;
     String className;
+}
+
+class TableExportStatus {
+    Integer exportedRowCountSnapshot;
+    String fileName;
+}
+
+class ExportStatus {
+    Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>();
+    String mode;
 }
