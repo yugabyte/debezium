@@ -93,6 +93,8 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 if (cdcWriter != null) {
                     cdcWriter.flush();
                 }
+                // TODO: doing more than flushing files to disk. maybe move this call to another thread?
+                updateExportStatus();
             }
             catch (IOException e) {
                 throw new RuntimeException(e);
@@ -152,7 +154,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         exportStatus.mode = "streaming";
         closeSnapshotWriters();
         openCDCWriter();
-        updateExportStatus();
+        // updateExportStatus();
     }
 
     private void closeSnapshotWriters() {
