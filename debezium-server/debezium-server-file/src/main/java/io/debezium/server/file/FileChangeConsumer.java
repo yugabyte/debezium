@@ -143,7 +143,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            // committer.markProcessed(record);
+            committer.markProcessed(record);
         }
         committer.markBatchFinished();
 
@@ -163,6 +163,8 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             try {
                 String eof = "\\.";
                 writer.getOut().append(eof);
+                writer.println();
+                writer.println();
                 writer.close(true);
                 LOGGER.info("Closing file = {}", writer.getOut().toString());
             }
@@ -176,7 +178,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     private void openCDCWriter() {
         var fileName = dataDir + "/queue.json";
         try {
-            var f = new FileWriter(fileName);
+            var f = new FileWriter(fileName, true);
             cdcWriter = new BufferedWriter(f);
         }
         catch (IOException e) {
