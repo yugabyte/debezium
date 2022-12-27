@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,6 +27,11 @@ import javax.inject.Named;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
+import org.apache.kafka.connect.data.ConnectSchema;
+import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -433,6 +439,24 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             // parse fields and construt rowText
             parseFields(after, r);
 
+            // ALTERNATIVE WAY TO PARSE
+//            JsonConverter jsonCloudEventsConverter = new JsonConverter();
+//            Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
+//            jsonCloudEventsConverter.configure(jsonConfig, false);
+//            var schemaAndValue = jsonCloudEventsConverter.toConnectData("", json.getBytes());
+//            ConnectSchema schema = (ConnectSchema) schemaAndValue.schema();
+//            Struct value = (Struct) schemaAndValue.value();
+//
+//            LOGGER.info("XXX CONVERTER schema={}{}\n value = {}{}", schemaAndValue.schema().getClass().getName(), schemaAndValue.schema(),
+//                    schemaAndValue.value().getClass().getName(), schemaAndValue.value());
+//            Struct afterStruct = value.getStruct("after");
+//            for (Field f : afterStruct.schema().fields()) {
+//                r.objFields.put(f.name(), afterStruct.get(f));
+//                LOGGER.info("XXX CONVERTER field={}|{} value={}|{}", f.name(), f.schema().name(), afterStruct.get(f).getClass().getName(), afterStruct.get(f));
+//            }
+//
+//            LOGGER.info("XXX CONVERTER after = {}", value.get("after"));
+
             return r;
         }
         catch (Exception ex) {
@@ -505,6 +529,7 @@ class Record {
     String rowText;
     // ArrayList<String> values = new ArrayList<>();
     LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+    LinkedHashMap<String, Object> objFields = new LinkedHashMap<>();
     String snapshot;
     String op;
     HashMap<String, String> key = new HashMap<>();
@@ -515,6 +540,10 @@ class Record {
 
     public ArrayList<String> getValues() {
         return new ArrayList<>(fields.values());
+    }
+
+    public ArrayList<Object> getObjValues() {
+        return new ArrayList<>(objFields.values());
     }
 
     public HashMap<String, Object> getCDCInfo() {
