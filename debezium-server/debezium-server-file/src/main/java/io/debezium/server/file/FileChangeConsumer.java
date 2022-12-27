@@ -336,7 +336,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         return val;
     }
 
-    private void parseFields(JsonNode after, Record r) {
+    private void parseFields(JsonNode before, JsonNode after, Record r) {
         if (after == null) {
             return;
         }
@@ -344,6 +344,12 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         while (fields.hasNext()) {
             var f = fields.next();
             var v = f.getValue();
+            if (r.op.equals("u")) {
+                if (v.equals(before.get(f.getKey()))) {
+                    // no need to record this as field is unchanged
+                    continue;
+                }
+            }
             // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
             var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
             r.fields.put(f.getKey(), formattedValue);
@@ -426,7 +432,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             parseKey(jsonKey, r);
 
             // parse fields and construt rowText
-            parseFields(after, r);
+            parseFields(before, after, r);
 
             // ALTERNATIVE WAY TO PARSE
             // JsonConverter jsonCloudEventsConverter = new JsonConverter();
