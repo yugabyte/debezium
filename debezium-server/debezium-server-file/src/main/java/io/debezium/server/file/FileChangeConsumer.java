@@ -51,7 +51,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private static final String PROP_PREFIX = "debezium.sink.filesink.";
 
-    private static final String NULL_STRING = "NULL";
+    private static final String NULL_STRING = "null";
 
     private boolean snapshotComplete = false;
 
@@ -232,7 +232,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void writeRecordCDC(Record r) throws IOException {
-        ObjectWriter ow = new ObjectMapper().writer();
+        ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
         String cdcJson = ow.writeValueAsString(r.getCDCInfo());
         LOGGER.info("XXX CDC json = {}", cdcJson);
 
@@ -314,26 +314,21 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         }
         FieldSchema fs = t.schema.get(field);
         if (fs.type.equals("string")) {
-            if (snapshotComplete) {
-                String formattedVal = "'" + val + "'";
-                return formattedVal;
-            }
-            else {
-                return val;
-            }
-
+            return snapshotComplete ? String.format("'%s'", val) : val;
         }
         if (fs.className != null) {
             switch (fs.className) {
                 case "io.debezium.time.Date":
                     LocalDate date = LocalDate.ofEpochDay(Long.parseLong(val));
-                    return date.toString(); // default yyyy-MM-dd
+                    String dateStr = date.toString(); // default yyyy-MM-dd
+                    return snapshotComplete ? String.format("'%s'", dateStr) : dateStr;
                 case "io.debezium.time.MicroTimestamp":
                     long epochMicroSeconds = Long.parseLong(val);
                     long epochSeconds = epochMicroSeconds / 1000000;
                     long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
                     LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
-                    return dt.toString();
+                    String dateTimeStr = dt.toString();
+                    return snapshotComplete ? String.format("'%s'", dateTimeStr) : dateTimeStr;
                 default:
                     return val;
             }
