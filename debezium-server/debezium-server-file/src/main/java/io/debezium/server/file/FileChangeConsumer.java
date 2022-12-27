@@ -15,7 +15,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,11 +26,6 @@ import javax.inject.Named;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
-import org.apache.kafka.connect.data.ConnectSchema;
-import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.json.JsonConverter;
-import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -191,7 +185,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private String getFilenameForTable(Table t) {
-        return t.toString() + ".sql";
+        return t.tableName + "_data.sql";
     }
 
     private String getFullFileNameForTable(Table t) {
@@ -316,7 +310,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     private String formatFieldValue(Table t, String field, String val) {
         // TODO: clean this function up. Ideal situation: have one formatting for both snapshot and cdc.
         if (val == null || val == "null") {
-            return null;
+            return snapshotComplete ? NULL_STRING : null;
         }
         FieldSchema fs = t.schema.get(field);
         if (fs.type.equals("string")) {
@@ -440,22 +434,22 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             parseFields(after, r);
 
             // ALTERNATIVE WAY TO PARSE
-//            JsonConverter jsonCloudEventsConverter = new JsonConverter();
-//            Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
-//            jsonCloudEventsConverter.configure(jsonConfig, false);
-//            var schemaAndValue = jsonCloudEventsConverter.toConnectData("", json.getBytes());
-//            ConnectSchema schema = (ConnectSchema) schemaAndValue.schema();
-//            Struct value = (Struct) schemaAndValue.value();
-//
-//            LOGGER.info("XXX CONVERTER schema={}{}\n value = {}{}", schemaAndValue.schema().getClass().getName(), schemaAndValue.schema(),
-//                    schemaAndValue.value().getClass().getName(), schemaAndValue.value());
-//            Struct afterStruct = value.getStruct("after");
-//            for (Field f : afterStruct.schema().fields()) {
-//                r.objFields.put(f.name(), afterStruct.get(f));
-//                LOGGER.info("XXX CONVERTER field={}|{} value={}|{}", f.name(), f.schema().name(), afterStruct.get(f).getClass().getName(), afterStruct.get(f));
-//            }
-//
-//            LOGGER.info("XXX CONVERTER after = {}", value.get("after"));
+            // JsonConverter jsonCloudEventsConverter = new JsonConverter();
+            // Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
+            // jsonCloudEventsConverter.configure(jsonConfig, false);
+            // var schemaAndValue = jsonCloudEventsConverter.toConnectData("", json.getBytes());
+            // ConnectSchema schema = (ConnectSchema) schemaAndValue.schema();
+            // Struct value = (Struct) schemaAndValue.value();
+            //
+            // LOGGER.info("XXX CONVERTER schema={}{}\n value = {}{}", schemaAndValue.schema().getClass().getName(), schemaAndValue.schema(),
+            // schemaAndValue.value().getClass().getName(), schemaAndValue.value());
+            // Struct afterStruct = value.getStruct("after");
+            // for (Field f : afterStruct.schema().fields()) {
+            // r.objFields.put(f.name(), afterStruct.get(f));
+            // LOGGER.info("XXX CONVERTER field={}|{} value={}|{}", f.name(), f.schema().name(), afterStruct.get(f).getClass().getName(), afterStruct.get(f));
+            // }
+            //
+            // LOGGER.info("XXX CONVERTER after = {}", value.get("after"));
 
             return r;
         }
@@ -486,7 +480,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         try {
             tocJson = ow.writeValueAsString(exportStatusMap);
             ow.writeValue(new File(dataDir + "/export_status.json"), exportStatusMap);
-            LOGGER.info("TABLE OF CONTENTS = {}", tocJson);
+            // LOGGER.info("TABLE OF CONTENTS = {}", tocJson);
         }
         catch (IOException e) {
             throw new RuntimeException(e);
