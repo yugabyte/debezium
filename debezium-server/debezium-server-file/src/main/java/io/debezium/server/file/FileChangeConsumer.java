@@ -10,6 +10,9 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -71,10 +74,12 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
+        exportStatus.mode = "snapshot";
+        loadExportStatus();
+
         Thread t = new Thread(this::flush);
         t.setDaemon(true);
         t.start();
-        exportStatus.mode = "snapshot";
     }
 
     void flush() {
@@ -154,7 +159,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         exportStatus.mode = "streaming";
         closeSnapshotWriters();
         openCDCWriter();
-        // updateExportStatus();
     }
 
     private void closeSnapshotWriters() {
@@ -466,7 +470,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     private void updateExportStatus() {
         HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
-        for (Table t : tableMap.values()) {
+        for (Table t : exportStatus.tableExportStatusMap.keySet()) {
             HashMap<String, Object> tableInfo = new HashMap<>();
             tableInfo.put("database_name", t.dbName);
             tableInfo.put("schema_name", t.schemaName);
@@ -484,6 +488,43 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             tocJson = ow.writeValueAsString(exportStatusMap);
             ow.writeValue(new File(dataDir + "/export_status.json"), exportStatusMap);
             // LOGGER.info("TABLE OF CONTENTS = {}", tocJson);
+        }
+        catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void loadExportStatus() {
+        try {
+            Path p = Paths.get(dataDir + "/export_status.json");
+            File f = new File(p.toUri());
+            if (!f.exists()) {
+                return;
+            }
+
+            String fileContent = Files.readString(p);
+            var exportStatusJson = mapper.readTree(fileContent);
+            LOGGER.info("XXX export status info = {}", exportStatusJson);
+            exportStatus.mode = exportStatusJson.get("mode").asText();
+
+            var tablesJson = exportStatusJson.get("tables");
+            for (var tableJson : tablesJson) {
+                LOGGER.info("XXX table info = {}", tableJson);
+                // {"database_name":"dvdrental","file_name":"customer_data.sql","exported_row_count":603,"schema_name":"public","table_name":"customer"}
+                // TODO: creating a duplicate table here. it will again be created when parsing a record of the table for the first time. 
+                Table t = new Table();
+                t.dbName = tableJson.get("database_name").asText();
+                t.schemaName = tableJson.get("schema_name").asText();
+                t.tableName = tableJson.get("table_name").asText();
+
+                TableExportStatus tes = new TableExportStatus();
+                tes.exportedRowCountSnapshot = tableJson.get("exported_row_count").asInt();
+                tes.fileName = tableJson.get("file_name").asText();
+                exportStatus.tableExportStatusMap.put(t, tes);
+            }
+            if (exportStatus.mode.equals("streaming")) {
+                handleSnapshotComplete();
+            }
         }
         catch (IOException e) {
             throw new RuntimeException(e);
