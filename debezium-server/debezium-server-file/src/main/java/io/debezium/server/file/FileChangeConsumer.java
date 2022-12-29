@@ -13,11 +13,16 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +34,12 @@ import javax.inject.Named;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
+import org.apache.kafka.connect.data.ConnectSchema;
+import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +49,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
+import io.confluent.connect.jdbc.dialect.PostgreSqlDatabaseDialect;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
 import io.debezium.server.BaseChangeConsumer;
@@ -125,6 +138,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 // TODO: handle this better. try using the config to avoid altogether
                 continue;
             }
+            LOGGER.info("key type = {}, value type = {}", objKey.getClass().getName(), objVal.getClass().getName());
 
             var r = parse((String) objVal, (String) objKey);
             if (r == null) {
@@ -320,7 +334,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         }
         FieldSchema fs = t.schema.get(field);
         if (fs.type.equals("string")) {
-            return snapshotComplete ? String.format("'%s'", val) : val;
+            return snapshotComplete ? String.format("'%s'", val.replace("'", "''")) : val;
         }
         if (fs.className != null) {
             switch (fs.className) {
@@ -440,23 +454,9 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             // parse fields and construt rowText
             parseFields(before, after, r);
 
-            // ALTERNATIVE WAY TO PARSE
-            // JsonConverter jsonCloudEventsConverter = new JsonConverter();
-            // Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
-            // jsonCloudEventsConverter.configure(jsonConfig, false);
-            // var schemaAndValue = jsonCloudEventsConverter.toConnectData("", json.getBytes());
-            // ConnectSchema schema = (ConnectSchema) schemaAndValue.schema();
-            // Struct value = (Struct) schemaAndValue.value();
-            //
-            // LOGGER.info("XXX CONVERTER schema={}{}\n value = {}{}", schemaAndValue.schema().getClass().getName(), schemaAndValue.schema(),
-            // schemaAndValue.value().getClass().getName(), schemaAndValue.value());
-            // Struct afterStruct = value.getStruct("after");
-            // for (Field f : afterStruct.schema().fields()) {
-            // r.objFields.put(f.name(), afterStruct.get(f));
-            // LOGGER.info("XXX CONVERTER field={}|{} value={}|{}", f.name(), f.schema().name(), afterStruct.get(f).getClass().getName(), afterStruct.get(f));
-            // }
-            //
-            // LOGGER.info("XXX CONVERTER after = {}", value.get("after"));
+            if (!r.op.equals("r")) {
+                parseNew(json, jsonKey);
+            }
 
             return r;
         }
@@ -465,6 +465,64 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         }
         LOGGER.info("XXX end returning NULL {}", json);
         return null;
+    }
+
+    public void parseNew(String json, String jsonKey) {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/dvdrental", "postgres", "");
+
+            Map<String, String> connProps = new HashMap<>();
+            connProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+            connProps.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
+            connProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://something");
+
+            JdbcSourceConnectorConfig cfg = new JdbcSourceConnectorConfig(connProps);
+            PostgreSqlDatabaseDialect pgdialect = new PostgreSqlDatabaseDialect(cfg);
+
+            // ALTERNATIVE WAY TO PARSE
+            JsonConverter jsonConverter = new JsonConverter();
+            Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
+            jsonConverter.configure(jsonConfig, false);
+            var schemaAndValue = jsonConverter.toConnectData("", json.getBytes());
+            ConnectSchema schema = (ConnectSchema) schemaAndValue.schema();
+            Struct value = (Struct) schemaAndValue.value();
+
+            LOGGER.info("XXX CONVERTER schema={}{}\n value = {}{}", schemaAndValue.schema().getClass().getName(), schemaAndValue.schema(),
+                    schemaAndValue.value().getClass().getName(), schemaAndValue.value());
+            Struct afterStruct = value.getStruct("after");
+            LinkedHashMap<String, Object> afterFields = new LinkedHashMap<>();
+
+            if (afterStruct != null) {
+                String queryString = "UPDATE customer SET";
+                for (Field f : afterStruct.schema().fields()) {
+                    queryString = String.format("%s %s=?,", queryString, f.name());
+                }
+                queryString = String.format("%s WHERE customer_id=524;", queryString);
+                PreparedStatement p = conn.prepareStatement(queryString);
+
+                int index = 1;
+                for (Field f : afterStruct.schema().fields()) {
+                    Schema fieldSchema = f.schema();
+                    Object fieldVal = afterStruct.get(f);
+
+                    pgdialect.bindField(p, index++, fieldSchema, fieldVal);
+
+                    // afterFields.put(f.name(), afterStruct.get(f));
+                    // LOGGER.info("XXX CONVERTER field={}|{} value={}|{}", f.name(), f.schema().name(),
+                    // (afterStruct.get(f) != null) ? afterStruct.get(f).getClass().getName() : "null", afterStruct.get(f));
+                    // LOGGER.info("XXX CONVERTER field={}|{} value={}|{}", f.name(), f.schema().name(), afterStruct.get(f).getClass().getName(), afterStruct.get(f));
+                }
+                LOGGER.info("XXX STMT = {}", p.toString());
+            }
+
+            LOGGER.info("XXX CONVERTER after = {}", value.get("after"));
+
+        }
+        catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     private void updateExportStatus() {
@@ -511,7 +569,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             for (var tableJson : tablesJson) {
                 LOGGER.info("XXX table info = {}", tableJson);
                 // {"database_name":"dvdrental","file_name":"customer_data.sql","exported_row_count":603,"schema_name":"public","table_name":"customer"}
-                // TODO: creating a duplicate table here. it will again be created when parsing a record of the table for the first time. 
+                // TODO: creating a duplicate table here. it will again be created when parsing a record of the table for the first time.
                 Table t = new Table();
                 t.dbName = tableJson.get("database_name").asText();
                 t.schemaName = tableJson.get("schema_name").asText();
