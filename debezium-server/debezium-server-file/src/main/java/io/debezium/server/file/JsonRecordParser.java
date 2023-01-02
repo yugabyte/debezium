@@ -100,7 +100,7 @@ public class JsonRecordParser implements RecordParser {
 
             tableMap.put(tableIdentifier, t);
         }
-        r.ti = t;
+        r.t = t;
     }
 
     protected void parseKeyFields(Struct key, Record r) {

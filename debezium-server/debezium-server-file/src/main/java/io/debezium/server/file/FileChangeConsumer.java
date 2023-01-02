@@ -200,7 +200,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void writeRecord(Record r) throws IOException {
-        var table = r.ti;
+        var table = r.t;
 
         CSVPrinter writer = writers.get(table);
         if (writer == null) {
@@ -612,33 +612,25 @@ class Table {
 }
 
 class Record {
-    // String dbName, schemaName, tableName;
-    Table ti;
-    String rowText;
-    // ArrayList<String> values = new ArrayList<>();
+    Table t;
     LinkedHashMap<String, Object> fields = new LinkedHashMap<>();
-    LinkedHashMap<String, Object> objFields = new LinkedHashMap<>();
     String snapshot;
     String op;
     HashMap<String, Object> key = new HashMap<>();
 
     public String getTableIdentifier() {
-        return ti.toString();
+        return t.toString();
     }
 
     public ArrayList<Object> getValues() {
         return new ArrayList<>(fields.values());
     }
 
-    public ArrayList<Object> getObjValues() {
-        return new ArrayList<>(objFields.values());
-    }
-
     public HashMap<String, Object> getCDCInfo() {
         HashMap<String, Object> cdcInfo = new HashMap<>();
         cdcInfo.put("op", op);
-        cdcInfo.put("schema_name", ti.schemaName);
-        cdcInfo.put("table_name", ti.tableName);
+        cdcInfo.put("schema_name", t.schemaName);
+        cdcInfo.put("table_name", t.tableName);
         cdcInfo.put("key", key);
         cdcInfo.put("fields", fields);
         return cdcInfo;
