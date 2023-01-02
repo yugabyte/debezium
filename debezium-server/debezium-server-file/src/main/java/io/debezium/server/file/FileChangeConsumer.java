@@ -59,7 +59,10 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     RecordParser parser;
     Map<Table, CSVPrinter> writers = new HashMap<Table, CSVPrinter>();
-    BufferedWriter cdcWriter;
+    BufferedWriter cdcWriterOld;
+
+    Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
+    RecordWriter cdcWriter;
     JsonFactory factory = new JsonFactory();
     ObjectMapper mapper = new ObjectMapper(factory);
 
@@ -84,24 +87,31 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     void flush() {
         LOGGER.info("XXX Started flush thread.");
         while (true) {
-            for (CSVPrinter writer : writers.values()) {
-                try {
-                    writer.flush();
-                    // LOGGER.info("FLUSHED to disk");
-                }
-                catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+            // for (CSVPrinter writer : writers.values()) {
+            // try {
+            // writer.flush();
+            // // LOGGER.info("FLUSHED to disk");
+            // }
+            // catch (IOException e) {
+            // throw new RuntimeException(e);
+            // }
+            // }
+            // try {
+            // if (cdcWriterOld != null) {
+            // cdcWriterOld.flush();
+            // }
+            // // TODO: doing more than flushing files to disk. maybe move this call to another thread?
+            // updateExportStatus();
+            // }
+            // catch (IOException e) {
+            // throw new RuntimeException(e);
+            // }
+
+            for (RecordWriter writer : snapshotWriters.values()) {
+                writer.flush();
             }
-            try {
-                if (cdcWriter != null) {
-                    cdcWriter.flush();
-                }
-                // TODO: doing more than flushing files to disk. maybe move this call to another thread?
-                updateExportStatus();
-            }
-            catch (IOException e) {
-                throw new RuntimeException(e);
+            if (cdcWriter != null) {
+                cdcWriter.flush();
             }
             try {
                 Thread.sleep(2000);
@@ -133,25 +143,46 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 continue;
             }
             LOGGER.info("{} => {}", r.getTableIdentifier(), r.getValues());
-            try {
-                if (!snapshotComplete) {
-                    writeRecord(r);
-                    if (r.snapshot.equals("last")) {
-                        handleSnapshotComplete();
-                    }
-                }
-                else {
-                    // LOGGER.info("XXX Received CDC JSON key {}", objKey);
-                    // LOGGER.info("XXX Received CDC JSON value {}", objVal);
-                    writeRecordCDC(r);
-                }
+            RecordWriter writer = getWriterForRecord(r);
+            writer.writeRecord(r);
+            if (r.snapshot.equals("last")) {
+                handleSnapshotComplete();
             }
-            catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+
+            // try {
+            // if (!snapshotComplete) {
+            // writeRecord(r);
+            // if (r.snapshot.equals("last")) {
+            // handleSnapshotComplete();
+            // }
+            // }
+            // else {
+            // // LOGGER.info("XXX Received CDC JSON key {}", objKey);
+            // // LOGGER.info("XXX Received CDC JSON value {}", objVal);
+            // writeRecordCDC(r);
+            // }
+            // }
+            // catch (IOException e) {
+            // throw new RuntimeException(e);
+            // }
             committer.markProcessed(record);
         }
         committer.markBatchFinished();
+
+    }
+
+    private RecordWriter getWriterForRecord(Record r) {
+        if (!snapshotComplete) {
+            RecordWriter writer = snapshotWriters.get(r.t);
+            if (writer == null) {
+                writer = new TableSnapshotWriterCSV(dataDir, r.t);
+                snapshotWriters.put(r.t, writer);
+            }
+            return writer;
+        }
+        else {
+            return cdcWriter;
+        }
 
     }
 
@@ -164,31 +195,36 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void closeSnapshotWriters() {
         // for each snapshot writer, close the file
-        for (CSVPrinter writer : writers.values()) {
-            try {
-                String eof = "\\.";
-                writer.getOut().append(eof);
-                writer.println();
-                writer.println();
-                writer.close(true);
-                LOGGER.info("Closing file = {}", writer.getOut().toString());
-            }
-            catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+        // for (CSVPrinter writer : writers.values()) {
+        // try {
+        // String eof = "\\.";
+        // writer.getOut().append(eof);
+        // writer.println();
+        // writer.println();
+        // writer.close(true);
+        // LOGGER.info("Closing file = {}", writer.getOut().toString());
+        // }
+        // catch (IOException e) {
+        // throw new RuntimeException(e);
+        // }
+        // }
+        // writers.clear();
+        for (RecordWriter writer : snapshotWriters.values()) {
+            writer.close();
         }
-        writers.clear();
+        snapshotWriters.clear();
     }
 
     private void openCDCWriter() {
-        var fileName = dataDir + "/queue.json";
-        try {
-            var f = new FileWriter(fileName, true);
-            cdcWriter = new BufferedWriter(f);
-        }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        cdcWriter = new CDCWriterJson(dataDir);
+        // var fileName = dataDir + "/queue.json";
+        // try {
+        // var f = new FileWriter(fileName, true);
+        // cdcWriter = new BufferedWriter(f);
+        // }
+        // catch (IOException e) {
+        // throw new RuntimeException(e);
+        // }
     }
 
     private String getFilenameForTable(Table t) {
@@ -244,8 +280,8 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         String cdcJson = ow.writeValueAsString(r.getCDCInfo());
         LOGGER.info("XXX CDC json = {}", cdcJson);
 
-        cdcWriter.write(cdcJson);
-        cdcWriter.write("\n");
+        cdcWriterOld.write(cdcJson);
+        cdcWriterOld.write("\n");
     }
 
     // private void parseSchema(JsonNode schemaNode, JsonNode sourceNode, Record r) {

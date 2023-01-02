@@ -18,7 +18,7 @@ public class YugabyteDialectConverter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDialectConverter.class);
 
     public static Object fromConnect(Field field, Object fieldValue) {
-        LOGGER.info("field={}", field);
+//        LOGGER.info("field={}", field);
         String logicalType = field.schema().name();
         if (logicalType != null) {
             switch (logicalType) {
