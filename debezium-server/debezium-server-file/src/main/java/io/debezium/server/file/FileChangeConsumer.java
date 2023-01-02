@@ -5,9 +5,7 @@
  */
 package io.debezium.server.file;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
@@ -23,8 +21,6 @@ import javax.annotation.PostConstruct;
 import javax.enterprise.context.Dependent;
 import javax.inject.Named;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVPrinter;
 import org.apache.kafka.connect.data.Field;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
@@ -57,27 +53,30 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
-    RecordParser parser;
-    Map<Table, CSVPrinter> writers = new HashMap<Table, CSVPrinter>();
-    BufferedWriter cdcWriterOld;
+    Map<String, Table> tableMap = new HashMap<>();
 
+    RecordParser parser;
     Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
     RecordWriter cdcWriter;
     JsonFactory factory = new JsonFactory();
     ObjectMapper mapper = new ObjectMapper(factory);
 
-    Map<String, Table> tableMap = new HashMap<>();
-    ExportStatus exportStatus = new ExportStatus();
+    ExportStatus exportStatus;
     // Map<Table, Integer> snapshotRowsProcessed = new HashMap<>();
     // HashMap<String, HashMap<String, FieldSchema>> tableFieldSchemas = new HashMap<>();
 
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
-        exportStatus.mode = "snapshot";
-        loadExportStatus();
 
         parser = new JsonRecordParser(tableMap);
+        exportStatus = ExportStatus.getInstance(dataDir);
+        if (exportStatus.mode != null && exportStatus.mode.equals("streaming")) {
+            handleSnapshotComplete();
+        }
+        else {
+            exportStatus.mode = "snapshot";
+        }
 
         Thread t = new Thread(this::flush);
         t.setDaemon(true);
@@ -113,6 +112,9 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             if (cdcWriter != null) {
                 cdcWriter.flush();
             }
+            if (exportStatus != null) {
+                exportStatus.serializeToDisk();
+            }
             try {
                 Thread.sleep(2000);
             }
@@ -129,7 +131,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         for (ChangeEvent<Object, Object> record : records) {
             Object objKey = record.key();
             Object objVal = record.value();
-//            LOGGER.info("key type = {}, value type = {}", objKey.getClass().getName(), objVal.getClass().getName());
+            // LOGGER.info("key type = {}, value type = {}", objKey.getClass().getName(), objVal.getClass().getName());
             if (objVal == null) {
                 // tombstone event
                 // TODO: handle this better. try using the config to avoid altogether
@@ -186,47 +188,45 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         cdcWriter = new CDCWriterJson(dataDir);
     }
 
-
-//    private void writeRecord(Record r) throws IOException {
-//        var table = r.t;
-//
-//        CSVPrinter writer = writers.get(table);
-//        if (writer == null) {
-//            var fileName = getFullFileNameForTable(table);
-//            var f = new FileWriter(fileName);
-//            ArrayList<String> cols = table.getColumns();
-//            // ArrayList<String> cols = new ArrayList<>(table.schema.keySet());
-//            // final CSVFormat csvFormat = CSVFormat.Builder.create()
-//            // .setHeader(String.join(",", cols))
-//            // .setAllowMissingColumnNames(true)
-//            // .
-//            // .build();
-//            writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
-//            writers.put(table, writer);
-//            // Write header
-//            String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
-//            LOGGER.info("header = {}", header);
-//            f.write(header);
-//            // writer.print(header);
-//            // writer.printHeaders();
-//
-//            TableExportStatus tableExportStatus = new TableExportStatus();
-//            tableExportStatus.fileName = getFilenameForTable(table);
-//            tableExportStatus.exportedRowCountSnapshot = 0;
-//            exportStatus.tableExportStatusMap.put(table, tableExportStatus);
-//        }
-//        writer.printRecord(r.getValues());
-//        if (!snapshotComplete) {
-//            exportStatus.tableExportStatusMap.get(table).exportedRowCountSnapshot++;
-//            // Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
-//            // if (tableRowsProcessed == null) {
-//            // tableRowsProcessed = 0;
-//            // }
-//            // snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
-//        }
-//
-//    }
-
+    // private void writeRecord(Record r) throws IOException {
+    // var table = r.t;
+    //
+    // CSVPrinter writer = writers.get(table);
+    // if (writer == null) {
+    // var fileName = getFullFileNameForTable(table);
+    // var f = new FileWriter(fileName);
+    // ArrayList<String> cols = table.getColumns();
+    // // ArrayList<String> cols = new ArrayList<>(table.schema.keySet());
+    // // final CSVFormat csvFormat = CSVFormat.Builder.create()
+    // // .setHeader(String.join(",", cols))
+    // // .setAllowMissingColumnNames(true)
+    // // .
+    // // .build();
+    // writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
+    // writers.put(table, writer);
+    // // Write header
+    // String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
+    // LOGGER.info("header = {}", header);
+    // f.write(header);
+    // // writer.print(header);
+    // // writer.printHeaders();
+    //
+    // TableExportStatus tableExportStatus = new TableExportStatus();
+    // tableExportStatus.fileName = getFilenameForTable(table);
+    // tableExportStatus.exportedRowCountSnapshot = 0;
+    // exportStatus.tableExportStatusMap.put(table, tableExportStatus);
+    // }
+    // writer.printRecord(r.getValues());
+    // if (!snapshotComplete) {
+    // exportStatus.tableExportStatusMap.get(table).exportedRowCountSnapshot++;
+    // // Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
+    // // if (tableRowsProcessed == null) {
+    // // tableRowsProcessed = 0;
+    // // }
+    // // snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
+    // }
+    //
+    // }
 
     private void updateExportStatus() {
         HashMap<String, Object> exportStatusMap = new HashMap<>();
@@ -236,7 +236,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             tableInfo.put("database_name", t.dbName);
             tableInfo.put("schema_name", t.schemaName);
             tableInfo.put("table_name", t.tableName);
-            tableInfo.put("file_name", exportStatus.tableExportStatusMap.get(t).fileName);
+            tableInfo.put("file_name", exportStatus.tableExportStatusMap.get(t).snapshotFilename);
             tableInfo.put("exported_row_count", exportStatus.tableExportStatusMap.get(t).exportedRowCountSnapshot);
             tablesInfo.add(tableInfo);
         }
@@ -280,7 +280,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
                 TableExportStatus tes = new TableExportStatus();
                 tes.exportedRowCountSnapshot = tableJson.get("exported_row_count").asInt();
-                tes.fileName = tableJson.get("file_name").asText();
+                tes.snapshotFilename = tableJson.get("file_name").asText();
                 exportStatus.tableExportStatusMap.put(t, tes);
             }
             if (exportStatus.mode.equals("streaming")) {
@@ -360,10 +360,5 @@ class FieldSchema {
 
 class TableExportStatus {
     Integer exportedRowCountSnapshot;
-    String fileName;
-}
-
-class ExportStatus {
-    Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>();
-    String mode;
+    String snapshotFilename;
 }

@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 
 public class TableSnapshotWriterCSV implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
+
+    private ExportStatus es;
     private final String dataDir;
 
     Table t;
@@ -34,6 +36,8 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
             LOGGER.info("header = {}", header);
             f.write(header);
+            es = ExportStatus.getInstance(dataDir);
+            es.updateTableSnapshotWriterCreated(tbl, fileName);
 
         }
         catch (IOException e) {
@@ -46,6 +50,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
         // TODO: assert r.table = table
         try {
             csvPrinter.printRecord(r.getValues());
+            es.updateTableSnapshotRecordWritten(t);
         }
         catch (IOException e) {
             throw new RuntimeException(e);

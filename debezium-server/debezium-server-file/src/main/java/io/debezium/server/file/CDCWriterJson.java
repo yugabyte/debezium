@@ -41,6 +41,7 @@ public class CDCWriterJson implements RecordWriter {
     @Override
     public void writeRecord(Record r) {
         try {
+            // TODO: move cdcinfo generation to this class
             String cdcJson = ow.writeValueAsString(r.getCDCInfo());
             writer.write(cdcJson);
             writer.write("\n");
