@@ -17,10 +17,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -223,7 +219,8 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         if (writer == null) {
             var fileName = getFullFileNameForTable(table);
             var f = new FileWriter(fileName);
-            ArrayList<String> cols = new ArrayList<>(table.schema.keySet());
+            ArrayList<String> cols = table.getColumns();
+            // ArrayList<String> cols = new ArrayList<>(table.schema.keySet());
             // final CSVFormat csvFormat = CSVFormat.Builder.create()
             // .setHeader(String.join(",", cols))
             // .setAllowMissingColumnNames(true)
@@ -299,7 +296,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 }
                 fieldsSchemas.put(fs.name, fs);
             }
-            t.schema = fieldsSchemas;
+            // t.schema = fieldsSchemas;
 
             tableMap.put(tableIdentifier, t);
         }
@@ -336,27 +333,27 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         if (val == null || val == "null") {
             return snapshotComplete ? NULL_STRING : null;
         }
-        FieldSchema fs = t.schema.get(field);
-        if (fs.type.equals("string")) {
-            return snapshotComplete ? String.format("'%s'", val.replace("'", "''")) : val;
-        }
-        if (fs.className != null) {
-            switch (fs.className) {
-                case "io.debezium.time.Date":
-                    LocalDate date = LocalDate.ofEpochDay(Long.parseLong(val));
-                    String dateStr = date.toString(); // default yyyy-MM-dd
-                    return snapshotComplete ? String.format("'%s'", dateStr) : dateStr;
-                case "io.debezium.time.MicroTimestamp":
-                    long epochMicroSeconds = Long.parseLong(val);
-                    long epochSeconds = epochMicroSeconds / 1000000;
-                    long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
-                    LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
-                    String dateTimeStr = dt.toString();
-                    return snapshotComplete ? String.format("'%s'", dateTimeStr) : dateTimeStr;
-                default:
-                    return val;
-            }
-        }
+        // Field fs = t.fields.get(field);
+        // if (fs.type.equals("string")) {
+        // return snapshotComplete ? String.format("'%s'", val.replace("'", "''")) : val;
+        // }
+        // if (fs.className != null) {
+        // switch (fs.className) {
+        // case "io.debezium.time.Date":
+        // LocalDate date = LocalDate.ofEpochDay(Long.parseLong(val));
+        // String dateStr = date.toString(); // default yyyy-MM-dd
+        // return snapshotComplete ? String.format("'%s'", dateStr) : dateStr;
+        // case "io.debezium.time.MicroTimestamp":
+        // long epochMicroSeconds = Long.parseLong(val);
+        // long epochSeconds = epochMicroSeconds / 1000000;
+        // long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
+        // LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
+        // String dateTimeStr = dt.toString();
+        // return snapshotComplete ? String.format("'%s'", dateTimeStr) : dateTimeStr;
+        // default:
+        // return val;
+        // }
+        // }
         return val;
     }
 
@@ -596,12 +593,21 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
 class Table {
     String dbName, schemaName, tableName;
-    LinkedHashMap<String, FieldSchema> schema = new LinkedHashMap<>();
+    // LinkedHashMap<String, FieldSchema> schema = new LinkedHashMap<>();
+    Schema schema;
     LinkedHashMap<String, Field> fields = new LinkedHashMap<>();
 
     @Override
     public String toString() {
         return dbName + "-" + schemaName + "-" + tableName;
+    }
+
+    public ArrayList<String> getColumns() {
+        ArrayList<String> cols = new ArrayList<>();
+        for (Field f : schema.fields()) {
+            cols.add(f.name());
+        }
+        return cols;
     }
 
     @Override
@@ -629,17 +635,17 @@ class Record {
     Table ti;
     String rowText;
     // ArrayList<String> values = new ArrayList<>();
-    LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+    LinkedHashMap<String, Object> fields = new LinkedHashMap<>();
     LinkedHashMap<String, Object> objFields = new LinkedHashMap<>();
     String snapshot;
     String op;
-    HashMap<String, String> key = new HashMap<>();
+    HashMap<String, Object> key = new HashMap<>();
 
     public String getTableIdentifier() {
         return ti.toString();
     }
 
-    public ArrayList<String> getValues() {
+    public ArrayList<Object> getValues() {
         return new ArrayList<>(fields.values());
     }
 

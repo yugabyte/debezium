@@ -10,13 +10,15 @@ import java.util.Map;
 
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaAndValue;
+import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class JsonRecordParser implements RecordParser {
@@ -33,66 +35,49 @@ public class JsonRecordParser implements RecordParser {
     }
 
     @Override
-    public Record parseRecord(Object key, Object value) {
+    public Record parseRecord(Object keyObj, Object valueObj) {
         try {
-            String jsonValue = value.toString();
-            String jsonKey = key.toString();
+            String jsonValue = valueObj.toString();
+            String jsonKey = keyObj.toString();
 
-            JsonNode rootNode = mapper.readTree(jsonValue);
-
-            var payload = rootNode.get("payload");
-
-            if (payload == null || payload.isNull()) {
-                LOGGER.info("XXX payload is null {}", value);
-                return null;
-            }
-            var op = payload.get("op");
-            if (op == null || op.isNull()) {
-                LOGGER.info("XXX op is null {}", jsonValue);
-                return null;
-            }
-            if (!op.asText().equals("r") && !op.asText().equals("c") && !op.asText().equals("d") && !op.asText().equals("u")) {
-                LOGGER.info("XXX unknown op {}", op.asText());
-                return null;
-            }
-            var after = payload.get("after");
-            if ((after == null || after.isNull()) && (!op.asText().equals("d"))) {
-                LOGGER.info("XXX after is null {}", jsonValue);
-                return null;
-            }
-            var before = payload.get("before");
-            if (op.asText().equals("u")) {
-                LOGGER.info("UPDATE BEFORE FIELD = {}", before);
-            }
-
-            var source = payload.get("source");
             var r = new Record();
-            r.op = op.asText();
-            r.snapshot = source.get("snapshot").asText();
+
+            // Deserialize to Connect object
+            SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
+            ConnectSchema valueSchema = (ConnectSchema) valueConnectObject.schema();
+            Struct value = (Struct) valueConnectObject.value();
+
+            SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
+            ConnectSchema keySchema = (ConnectSchema) keyConnectObject.schema();
+            Struct key = (Struct) keyConnectObject.value();
+
+            Struct source = value.getStruct("source");
+
+            r.op = value.getString("op");
+            r.snapshot = source.getString("snapshot");
 
             // Parse table/schema the first time to be able to format specific field values
-            var schemaNode = rootNode.get("schema");
-            parseTable(jsonValue, schemaNode, source, r);
+            parseTable(valueSchema, source, r);
 
             // parse key in case of CDC
-            parseKeyFields(jsonKey, r);
+            parseKeyFields(key, r);
 
             // parse fields and construt rowText
-            parseValueFields(before, after, r);
+            parseValueFields(value, r);
 
             return r;
         }
         catch (Exception ex) {
             LOGGER.error("XXX parse: {}", ex);
         }
-        LOGGER.info("XXX end returning NULL {}", value);
+        LOGGER.info("XXX end returning NULL {}", valueObj);
         return null;
     }
 
-    protected void parseTable(String jsonValue, JsonNode schemaNode, JsonNode sourceNode, Record r) {
-        String dbName = sourceNode.get("db").asText();
-        String schemaName = sourceNode.get("schema").asText();
-        String tableName = sourceNode.get("table").asText();
+    protected void parseTable(Schema valueSchema, Struct sourceNode, Record r) {
+        String dbName = sourceNode.getString("db");
+        String schemaName = sourceNode.getString("schema");
+        String tableName = sourceNode.getString("table");
         var tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
 
         Table t = tableMap.get(tableIdentifier);
@@ -104,30 +89,32 @@ public class JsonRecordParser implements RecordParser {
             t.tableName = tableName;
 
             // parse fields
-            var schemaAndValue = jsonConverter.toConnectData("", jsonValue.getBytes());
-            ConnectSchema schema = (ConnectSchema) schemaAndValue.schema();
-            for (Field f : schema.fields()) {
-                t.fields.put(f.name(), f);
-            }
+            t.schema = valueSchema;
+            // for (Field f : schema.fields()) {
+            // t.fields.put(f.name(), f);
+            // }
 
             tableMap.put(tableIdentifier, t);
         }
         r.ti = t;
     }
 
-    protected void parseKeyFields(String jsonKey, Record r) {
+    protected void parseKeyFields(Struct key, Record r) {
         try {
-            JsonNode rootNode = mapper.readTree(jsonKey);
-            var payload = rootNode.get("payload");
-            var payloadFields = payload.fields();
-            while (payloadFields.hasNext()) {
-                var f = payloadFields.next();
-                var v = f.getValue();
-                // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
-                // var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
-                var formattedValue = v.asText();
-                r.key.put(f.getKey(), formattedValue);
+            for (Field f : key.schema().fields()) {
+                r.key.put(f.name(), key.get(f));
             }
+            // JsonNode rootNode = mapper.readTree(jsonKey);
+            // var payload = rootNode.get("payload");
+            // var payloadFields = payload.fields();
+            // while (payloadFields.hasNext()) {
+            // var f = payloadFields.next();
+            // var v = f.getValue();
+            // // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
+            // // var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
+            // var formattedValue = jsonConverter.convert;
+            // r.key.put(f.getKey(), formattedValue);
+            // }
 
         }
         catch (Exception ex) {
@@ -135,25 +122,38 @@ public class JsonRecordParser implements RecordParser {
         }
     }
 
-    protected void parseValueFields(JsonNode before, JsonNode after, Record r) {
+    protected void parseValueFields(Struct value, Record r) {
+        Struct before = value.getStruct("before");
+        Struct after = value.getStruct("after");
         if (after == null) {
             return;
         }
-        var fields = after.fields();
-        while (fields.hasNext()) {
-            var f = fields.next();
-            var v = f.getValue();
+        for (Field f : after.schema().fields()) {
             if (r.op.equals("u")) {
-                if (v.equals(before.get(f.getKey()))) {
+                // TODO: error handle before is NULL
+                if (after.get(f).equals(before.get(f))) {
                     // no need to record this as field is unchanged
                     continue;
                 }
             }
-            // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
-            // var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
-            var formattedValue = v.asText();
-            r.fields.put(f.getKey(), formattedValue);
+            r.fields.put(f.name(), after.get(f));
         }
+
+        // var fields = after.fields();
+        // while (fields.hasNext()) {
+        // var f = fields.next();
+        // var v = f.getValue();
+        // if (r.op.equals("u")) {
+        // if (v.equals(before.get(f.getKey()))) {
+        // // no need to record this as field is unchanged
+        // continue;
+        // }
+        // }
+        // // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
+        // // var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
+        // var formattedValue = v.asText();
+        // r.fields.put(f.getKey(), formattedValue);
+        // }
     }
 
 }
