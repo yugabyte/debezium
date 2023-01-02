@@ -7,6 +7,7 @@ package io.debezium.server.file;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.SchemaAndValue;
@@ -124,10 +125,14 @@ public class JsonRecordParser implements RecordParser {
         for (Field f : after.schema().fields()) {
             if (r.op.equals("u")) {
                 // TODO: error handle before is NULL
-                if (after.get(f).equals(before.get(f))) {
+                if (Objects.equals(after.get(f), before.get(f))) {
                     // no need to record this as field is unchanged
                     continue;
                 }
+                // if (after.get(f).equals(before.get(f))) {
+                // // no need to record this as field is unchanged
+                // continue;
+                // }
             }
             Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
             r.fields.put(f.name(), fieldValue);

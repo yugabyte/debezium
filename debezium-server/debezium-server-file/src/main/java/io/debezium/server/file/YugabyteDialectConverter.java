@@ -5,14 +5,14 @@
  */
 package io.debezium.server.file;
 
-import org.apache.kafka.connect.data.Field;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+
+import org.apache.kafka.connect.data.Field;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class YugabyteDialectConverter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDialectConverter.class);
@@ -20,20 +20,22 @@ public class YugabyteDialectConverter {
     public static Object fromConnect(Field field, Object fieldValue) {
         LOGGER.info("field={}", field);
         String logicalType = field.schema().name();
+        if (logicalType != null) {
+            switch (logicalType) {
+                case "io.debezium.time.Date":
+                    LocalDate date = LocalDate.ofEpochDay(Long.valueOf((Integer) fieldValue));
+                    String dateStr = date.toString(); // default yyyy-MM-dd
+                    return dateStr;
+                case "io.debezium.time.MicroTimestamp":
+                    long epochMicroSeconds = (Long) fieldValue;
+                    long epochSeconds = epochMicroSeconds / 1000000;
+                    long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
+                    LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
+                    String dateTimeStr = dt.toString();
+                    return dateTimeStr;
+            }
+        }
 
-         switch (logicalType) {
-             case "io.debezium.time.Date":
-                 LocalDate date = LocalDate.ofEpochDay((Long) fieldValue);
-                 String dateStr = date.toString(); // default yyyy-MM-dd
-                 return dateStr;
-             case "io.debezium.time.MicroTimestamp":
-                 long epochMicroSeconds = (Long) fieldValue;
-                 long epochSeconds = epochMicroSeconds / 1000000;
-                 long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
-                 LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
-                 String dateTimeStr = dt.toString();
-             return dateTimeStr;
-         }
         return fieldValue;
     }
 }
