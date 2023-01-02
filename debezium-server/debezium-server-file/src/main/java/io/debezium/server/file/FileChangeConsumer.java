@@ -74,6 +74,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
+    RecordParser parser;
     Map<Table, CSVPrinter> writers = new HashMap<Table, CSVPrinter>();
     BufferedWriter cdcWriter;
     JsonFactory factory = new JsonFactory();
@@ -89,6 +90,8 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         LOGGER.info("connect() called: dataDir = {}", dataDir);
         exportStatus.mode = "snapshot";
         loadExportStatus();
+
+        parser = new JsonRecordParser(tableMap);
 
         Thread t = new Thread(this::flush);
         t.setDaemon(true);
@@ -140,7 +143,8 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
             }
             LOGGER.info("key type = {}, value type = {}", objKey.getClass().getName(), objVal.getClass().getName());
 
-            var r = parse((String) objVal, (String) objKey);
+            // var r = parse((String) objVal, (String) objKey);
+            var r = parser.parseRecord(objKey, objVal);
             if (r == null) {
                 LOGGER.info("XXX Skipped: {}:{}", objKey, objVal);
                 continue;
@@ -593,6 +597,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 class Table {
     String dbName, schemaName, tableName;
     LinkedHashMap<String, FieldSchema> schema = new LinkedHashMap<>();
+    LinkedHashMap<String, Field> fields = new LinkedHashMap<>();
 
     @Override
     public String toString() {
