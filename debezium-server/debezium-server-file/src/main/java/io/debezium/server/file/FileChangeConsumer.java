@@ -129,42 +129,25 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         for (ChangeEvent<Object, Object> record : records) {
             Object objKey = record.key();
             Object objVal = record.value();
+//            LOGGER.info("key type = {}, value type = {}", objKey.getClass().getName(), objVal.getClass().getName());
             if (objVal == null) {
                 // tombstone event
                 // TODO: handle this better. try using the config to avoid altogether
                 continue;
             }
-            LOGGER.info("key type = {}, value type = {}", objKey.getClass().getName(), objVal.getClass().getName());
 
-            // var r = parse((String) objVal, (String) objKey);
+            // PARSE
             var r = parser.parseRecord(objKey, objVal);
-            if (r == null) {
-                LOGGER.info("XXX Skipped: {}:{}", objKey, objVal);
-                continue;
-            }
             LOGGER.info("{} => {}", r.getTableIdentifier(), r.getValues());
+
+            // WRITE
             RecordWriter writer = getWriterForRecord(r);
             writer.writeRecord(r);
+            // Handle snapshot->cdc transition
             if (r.snapshot.equals("last")) {
                 handleSnapshotComplete();
             }
 
-            // try {
-            // if (!snapshotComplete) {
-            // writeRecord(r);
-            // if (r.snapshot.equals("last")) {
-            // handleSnapshotComplete();
-            // }
-            // }
-            // else {
-            // // LOGGER.info("XXX Received CDC JSON key {}", objKey);
-            // // LOGGER.info("XXX Received CDC JSON value {}", objVal);
-            // writeRecordCDC(r);
-            // }
-            // }
-            // catch (IOException e) {
-            // throw new RuntimeException(e);
-            // }
             committer.markProcessed(record);
         }
         committer.markBatchFinished();
@@ -183,7 +166,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
         else {
             return cdcWriter;
         }
-
     }
 
     private void handleSnapshotComplete() {
@@ -194,21 +176,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void closeSnapshotWriters() {
-        // for each snapshot writer, close the file
-        // for (CSVPrinter writer : writers.values()) {
-        // try {
-        // String eof = "\\.";
-        // writer.getOut().append(eof);
-        // writer.println();
-        // writer.println();
-        // writer.close(true);
-        // LOGGER.info("Closing file = {}", writer.getOut().toString());
-        // }
-        // catch (IOException e) {
-        // throw new RuntimeException(e);
-        // }
-        // }
-        // writers.clear();
         for (RecordWriter writer : snapshotWriters.values()) {
             writer.close();
         }
@@ -217,337 +184,49 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void openCDCWriter() {
         cdcWriter = new CDCWriterJson(dataDir);
-        // var fileName = dataDir + "/queue.json";
-        // try {
-        // var f = new FileWriter(fileName, true);
-        // cdcWriter = new BufferedWriter(f);
-        // }
-        // catch (IOException e) {
-        // throw new RuntimeException(e);
-        // }
     }
 
-    private String getFilenameForTable(Table t) {
-        return t.tableName + "_data.sql";
-    }
 
-    private String getFullFileNameForTable(Table t) {
-        return dataDir + "/" + getFilenameForTable(t);
-    }
+//    private void writeRecord(Record r) throws IOException {
+//        var table = r.t;
+//
+//        CSVPrinter writer = writers.get(table);
+//        if (writer == null) {
+//            var fileName = getFullFileNameForTable(table);
+//            var f = new FileWriter(fileName);
+//            ArrayList<String> cols = table.getColumns();
+//            // ArrayList<String> cols = new ArrayList<>(table.schema.keySet());
+//            // final CSVFormat csvFormat = CSVFormat.Builder.create()
+//            // .setHeader(String.join(",", cols))
+//            // .setAllowMissingColumnNames(true)
+//            // .
+//            // .build();
+//            writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
+//            writers.put(table, writer);
+//            // Write header
+//            String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
+//            LOGGER.info("header = {}", header);
+//            f.write(header);
+//            // writer.print(header);
+//            // writer.printHeaders();
+//
+//            TableExportStatus tableExportStatus = new TableExportStatus();
+//            tableExportStatus.fileName = getFilenameForTable(table);
+//            tableExportStatus.exportedRowCountSnapshot = 0;
+//            exportStatus.tableExportStatusMap.put(table, tableExportStatus);
+//        }
+//        writer.printRecord(r.getValues());
+//        if (!snapshotComplete) {
+//            exportStatus.tableExportStatusMap.get(table).exportedRowCountSnapshot++;
+//            // Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
+//            // if (tableRowsProcessed == null) {
+//            // tableRowsProcessed = 0;
+//            // }
+//            // snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
+//        }
+//
+//    }
 
-    private void writeRecord(Record r) throws IOException {
-        var table = r.t;
-
-        CSVPrinter writer = writers.get(table);
-        if (writer == null) {
-            var fileName = getFullFileNameForTable(table);
-            var f = new FileWriter(fileName);
-            ArrayList<String> cols = table.getColumns();
-            // ArrayList<String> cols = new ArrayList<>(table.schema.keySet());
-            // final CSVFormat csvFormat = CSVFormat.Builder.create()
-            // .setHeader(String.join(",", cols))
-            // .setAllowMissingColumnNames(true)
-            // .
-            // .build();
-            writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
-            writers.put(table, writer);
-            // Write header
-            String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
-            LOGGER.info("header = {}", header);
-            f.write(header);
-            // writer.print(header);
-            // writer.printHeaders();
-
-            TableExportStatus tableExportStatus = new TableExportStatus();
-            tableExportStatus.fileName = getFilenameForTable(table);
-            tableExportStatus.exportedRowCountSnapshot = 0;
-            exportStatus.tableExportStatusMap.put(table, tableExportStatus);
-        }
-        writer.printRecord(r.getValues());
-        if (!snapshotComplete) {
-            exportStatus.tableExportStatusMap.get(table).exportedRowCountSnapshot++;
-            // Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
-            // if (tableRowsProcessed == null) {
-            // tableRowsProcessed = 0;
-            // }
-            // snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
-        }
-
-    }
-
-    private void writeRecordCDC(Record r) throws IOException {
-        ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-        String cdcJson = ow.writeValueAsString(r.getCDCInfo());
-        LOGGER.info("XXX CDC json = {}", cdcJson);
-
-        cdcWriterOld.write(cdcJson);
-        cdcWriterOld.write("\n");
-    }
-
-    // private void parseSchema(JsonNode schemaNode, JsonNode sourceNode, Record r) {
-    // // Retrieve/create table
-    // String dbName = sourceNode.get("db").asText();
-    // String schemaName = sourceNode.get("schema").asText();
-    // String tableName = sourceNode.get("table").asText();
-    // var tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
-    // Table t;
-    // t = tableMap.get(tableIdentifier);
-    // if (t == null) {
-    // // create table
-    // t = new Table();
-    // t.dbName = dbName;
-    // t.schemaName = schemaName;
-    // t.tableName = tableName;
-    //
-    // // parse schema
-    // var fields = schemaNode.get("fields");
-    // var afterNodeSchema = fields.get(1);
-    // var afterNodeFields = afterNodeSchema.get("fields");
-    //
-    // var fieldsSchemas = new LinkedHashMap<String, FieldSchema>();
-    //
-    // for (final JsonNode fieldSchema : afterNodeFields) {
-    // var fs = new FieldSchema();
-    // fs.type = fieldSchema.get("type").asText();
-    // fs.name = fieldSchema.get("field").asText();
-    // var className = fieldSchema.get("name");
-    // if (className != null) {
-    // fs.className = className.asText();
-    // }
-    // else {
-    // fs.className = null;
-    // }
-    // fieldsSchemas.put(fs.name, fs);
-    // }
-    // // t.schema = fieldsSchemas;
-    //
-    // tableMap.put(tableIdentifier, t);
-    // }
-    // r.ti = t;
-    //
-    // // var identifier = r.getTableIdentifier();
-    // // var tableFieldSchema = tableFieldSchemas.get(identifier);
-    // // if (tableFieldSchema == null) {
-    // // var fields = schemaNode.get("fields");
-    // // var afterNodeSchema = fields.get(1);
-    // // var afterNodeFields = afterNodeSchema.get("fields");
-    // //
-    // // var fieldsSchemas = new HashMap<String, FieldSchema>();
-    // //
-    // // for (final JsonNode fieldSchema : afterNodeFields) {
-    // // var fs = new FieldSchema();
-    // // fs.type = fieldSchema.get("type").asText();
-    // // fs.name = fieldSchema.get("field").asText();
-    // // var className = fieldSchema.get("name");
-    // // if (className != null) {
-    // // fs.className = className.asText();
-    // // }
-    // // else {
-    // // fs.className = null;
-    // // }
-    // // fieldsSchemas.put(fs.name, fs);
-    // // }
-    // // tableFieldSchemas.put(identifier, fieldsSchemas);
-    // // }
-    // }
-
-    // private String formatFieldValue(Table t, String field, String val) {
-    // // TODO: clean this function up. Ideal situation: have one formatting for both snapshot and cdc.
-    // if (val == null || val == "null") {
-    // return snapshotComplete ? NULL_STRING : null;
-    // }
-    // Field fs = t.fields.get(field);
-    // if (fs.type.equals("string")) {
-    // return snapshotComplete ? String.format("'%s'", val.replace("'", "''")) : val;
-    // }
-    // if (fs.className != null) {
-    // switch (fs.className) {
-    // case "io.debezium.time.Date":
-    // LocalDate date = LocalDate.ofEpochDay(Long.parseLong(val));
-    // String dateStr = date.toString(); // default yyyy-MM-dd
-    // return snapshotComplete ? String.format("'%s'", dateStr) : dateStr;
-    // case "io.debezium.time.MicroTimestamp":
-    // long epochMicroSeconds = Long.parseLong(val);
-    // long epochSeconds = epochMicroSeconds / 1000000;
-    // long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
-    // LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
-    // String dateTimeStr = dt.toString();
-    // return snapshotComplete ? String.format("'%s'", dateTimeStr) : dateTimeStr;
-    // default:
-    // return val;
-    // }
-    // }
-    // return val;
-    // }
-
-    // private void parseFields(JsonNode before, JsonNode after, Record r) {
-    // if (after == null) {
-    // return;
-    // }
-    // var fields = after.fields();
-    // while (fields.hasNext()) {
-    // var f = fields.next();
-    // var v = f.getValue();
-    // if (r.op.equals("u")) {
-    // if (v.equals(before.get(f.getKey()))) {
-    // // no need to record this as field is unchanged
-    // continue;
-    // }
-    // }
-    // // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
-    // var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
-    // r.fields.put(f.getKey(), formattedValue);
-    // }
-    // // var text = "";
-    // // r.rowText = text;
-    // }
-    //
-    // private void parseKey(String jsonKey, Record r) {
-    // try {
-    // JsonNode rootNode = mapper.readTree(jsonKey);
-    // var payload = rootNode.get("payload");
-    // var payloadFields = payload.fields();
-    // while (payloadFields.hasNext()) {
-    // var f = payloadFields.next();
-    // var v = f.getValue();
-    // // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
-    // var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
-    // r.key.put(f.getKey(), formattedValue);
-    // }
-    //
-    // }
-    // catch (Exception ex) {
-    // LOGGER.error("XXX parseKey: {}", ex);
-    // }
-    //
-    // }
-    //
-    // public Record parse(String json, String jsonKey) {
-    // try {
-    // JsonNode rootNode = mapper.readTree(json);
-    // // LOGGER.info("XXX Received JSON {}", json);
-    //
-    // var payload = rootNode.get("payload");
-    // // LOGGER.info("XXX Received Payload {}", payload.toPrettyString());
-    //
-    // if (payload == null || payload.isNull()) {
-    // LOGGER.info("XXX payload is null {}", json);
-    // return null;
-    // }
-    // var op = payload.get("op");
-    // if (op == null || op.isNull()) {
-    // LOGGER.info("XXX op is null {}", json);
-    // return null;
-    // }
-    // if (!op.asText().equals("r") && !op.asText().equals("c") && !op.asText().equals("d") && !op.asText().equals("u")) {
-    // LOGGER.info("XXX unknown op {}", op.asText());
-    // return null;
-    // }
-    // // if (op.asText() == "d") {
-    // // LOGGER.info("DELETE EVENT key = {}", jsonKey);
-    // // LOGGER.info("DELETE EVENT value = {}", json);
-    // // }
-    // var after = payload.get("after");
-    // if ((after == null || after.isNull()) && (!op.asText().equals("d"))) {
-    // LOGGER.info("XXX after is null {}", json);
-    // return null;
-    // }
-    // var before = payload.get("before");
-    // if (op.asText().equals("u")) {
-    // LOGGER.info("UPDATE BEFORE FIELD = {}", before);
-    // }
-    //
-    // var source = payload.get("source");
-    // var r = new Record();
-    // r.op = op.asText();
-    // r.snapshot = source.get("snapshot").asText();
-    // // var ti = new Table();
-    // // ti.dbName = source.get("db").asText();
-    // // ti.schemaName = source.get("schema").asText();
-    // // ti.tableName = source.get("table").asText();
-    // // r.ti = ti;
-    // //
-    //
-    // // Parse schema the first time to be able to format specific field values
-    // var schemaNode = rootNode.get("schema");
-    // parseSchema(schemaNode, source, r);
-    //
-    // // parse key in case of CDC
-    // parseKey(jsonKey, r);
-    //
-    // // parse fields and construt rowText
-    // parseFields(before, after, r);
-    //
-    // if (!r.op.equals("r")) {
-    // parseNew(json, jsonKey);
-    // }
-    //
-    // return r;
-    // }
-    // catch (Exception ex) {
-    // LOGGER.error("XXX parse: {}", ex);
-    // }
-    // LOGGER.info("XXX end returning NULL {}", json);
-    // return null;
-    // }
-    //
-    // public void parseNew(String json, String jsonKey) {
-    // Connection conn = null;
-    // try {
-    // conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/dvdrental", "postgres", "");
-    //
-    // Map<String, String> connProps = new HashMap<>();
-    // connProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
-    // connProps.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
-    // connProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://something");
-    //
-    // JdbcSourceConnectorConfig cfg = new JdbcSourceConnectorConfig(connProps);
-    // PostgreSqlDatabaseDialect pgdialect = new PostgreSqlDatabaseDialect(cfg);
-    //
-    // // ALTERNATIVE WAY TO PARSE
-    // JsonConverter jsonConverter = new JsonConverter();
-    // Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
-    // jsonConverter.configure(jsonConfig, false);
-    // var schemaAndValue = jsonConverter.toConnectData("", json.getBytes());
-    // ConnectSchema schema = (ConnectSchema) schemaAndValue.schema();
-    // Struct value = (Struct) schemaAndValue.value();
-    //
-    // LOGGER.info("XXX CONVERTER schema={}{}\n value = {}{}", schemaAndValue.schema().getClass().getName(), schemaAndValue.schema(),
-    // schemaAndValue.value().getClass().getName(), schemaAndValue.value());
-    // Struct afterStruct = value.getStruct("after");
-    // LinkedHashMap<String, Object> afterFields = new LinkedHashMap<>();
-    //
-    // if (afterStruct != null) {
-    // String queryString = "UPDATE customer SET";
-    // for (Field f : afterStruct.schema().fields()) {
-    // queryString = String.format("%s %s=?,", queryString, f.name());
-    // }
-    // queryString = String.format("%s WHERE customer_id=524;", queryString);
-    // PreparedStatement p = conn.prepareStatement(queryString);
-    //
-    // int index = 1;
-    // for (Field f : afterStruct.schema().fields()) {
-    // Schema fieldSchema = f.schema();
-    // Object fieldVal = afterStruct.get(f);
-    //
-    // pgdialect.bindField(p, index++, fieldSchema, fieldVal);
-    //
-    // // afterFields.put(f.name(), afterStruct.get(f));
-    // // LOGGER.info("XXX CONVERTER field={}|{} value={}|{}", f.name(), f.schema().name(),
-    // // (afterStruct.get(f) != null) ? afterStruct.get(f).getClass().getName() : "null", afterStruct.get(f));
-    // // LOGGER.info("XXX CONVERTER field={}|{} value={}|{}", f.name(), f.schema().name(), afterStruct.get(f).getClass().getName(), afterStruct.get(f));
-    // }
-    // LOGGER.info("XXX STMT = {}", p.toString());
-    // }
-    //
-    // LOGGER.info("XXX CONVERTER after = {}", value.get("after"));
-    //
-    // }
-    // catch (SQLException e) {
-    // throw new RuntimeException(e);
-    // }
-    //
-    // }
 
     private void updateExportStatus() {
         HashMap<String, Object> exportStatusMap = new HashMap<>();

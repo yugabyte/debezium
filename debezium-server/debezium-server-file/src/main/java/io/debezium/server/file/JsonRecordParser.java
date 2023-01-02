@@ -129,10 +129,6 @@ public class JsonRecordParser implements RecordParser {
                     // no need to record this as field is unchanged
                     continue;
                 }
-                // if (after.get(f).equals(before.get(f))) {
-                // // no need to record this as field is unchanged
-                // continue;
-                // }
             }
             Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
             r.fields.put(f.name(), fieldValue);
