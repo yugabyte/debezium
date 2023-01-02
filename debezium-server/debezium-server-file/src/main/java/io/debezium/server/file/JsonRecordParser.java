@@ -8,9 +8,7 @@ package io.debezium.server.file;
 import java.util.Collections;
 import java.util.Map;
 
-import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
@@ -43,12 +41,18 @@ public class JsonRecordParser implements RecordParser {
             var r = new Record();
 
             // Deserialize to Connect object
+            // NOTE: This deserialization operation will most likely be heavier as compared to a simple
+            // jsonMapper, but this comes with the added advantages of converting the json values to
+            // java native object types (for example, of type bytes to bytearray, of type bool to java boolean).
+            // Furthermore, there is a way in future to not deal with ser-de at all, by tweaking debezium-server
+            // format.value=connect, wherein it gives a SourceRecord object directly to the ChangeConsumer.
+            // Hence going with this serde for now.
             SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
-            ConnectSchema valueSchema = (ConnectSchema) valueConnectObject.schema();
+            // ConnectSchema valueSchema = (ConnectSchema) valueConnectObject.schema();
             Struct value = (Struct) valueConnectObject.value();
 
             SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
-            ConnectSchema keySchema = (ConnectSchema) keyConnectObject.schema();
+            // ConnectSchema keySchema = (ConnectSchema) keyConnectObject.schema();
             Struct key = (Struct) keyConnectObject.value();
 
             Struct source = value.getStruct("source");
@@ -57,7 +61,7 @@ public class JsonRecordParser implements RecordParser {
             r.snapshot = source.getString("snapshot");
 
             // Parse table/schema the first time to be able to format specific field values
-            parseTable(valueSchema, source, r);
+            parseTable(value, source, r);
 
             // parse key in case of CDC
             parseKeyFields(key, r);
@@ -74,7 +78,7 @@ public class JsonRecordParser implements RecordParser {
         return null;
     }
 
-    protected void parseTable(Schema valueSchema, Struct sourceNode, Record r) {
+    protected void parseTable(Struct value, Struct sourceNode, Record r) {
         String dbName = sourceNode.getString("db");
         String schemaName = sourceNode.getString("schema");
         String tableName = sourceNode.getString("table");
@@ -89,10 +93,10 @@ public class JsonRecordParser implements RecordParser {
             t.tableName = tableName;
 
             // parse fields
-            t.schema = valueSchema;
-            // for (Field f : schema.fields()) {
-            // t.fields.put(f.name(), f);
-            // }
+            Struct afterStruct = value.getStruct("after");
+            for (Field f : afterStruct.schema().fields()) {
+                t.fieldSchemas.put(f.name(), f);
+            }
 
             tableMap.put(tableIdentifier, t);
         }
@@ -102,20 +106,9 @@ public class JsonRecordParser implements RecordParser {
     protected void parseKeyFields(Struct key, Record r) {
         try {
             for (Field f : key.schema().fields()) {
-                r.key.put(f.name(), key.get(f));
+                Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
+                r.key.put(f.name(), fieldValue);
             }
-            // JsonNode rootNode = mapper.readTree(jsonKey);
-            // var payload = rootNode.get("payload");
-            // var payloadFields = payload.fields();
-            // while (payloadFields.hasNext()) {
-            // var f = payloadFields.next();
-            // var v = f.getValue();
-            // // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
-            // // var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
-            // var formattedValue = jsonConverter.convert;
-            // r.key.put(f.getKey(), formattedValue);
-            // }
-
         }
         catch (Exception ex) {
             LOGGER.error("XXX parseKey: {}", ex);
@@ -136,24 +129,9 @@ public class JsonRecordParser implements RecordParser {
                     continue;
                 }
             }
-            r.fields.put(f.name(), after.get(f));
+            Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
+            r.fields.put(f.name(), fieldValue);
         }
-
-        // var fields = after.fields();
-        // while (fields.hasNext()) {
-        // var f = fields.next();
-        // var v = f.getValue();
-        // if (r.op.equals("u")) {
-        // if (v.equals(before.get(f.getKey()))) {
-        // // no need to record this as field is unchanged
-        // continue;
-        // }
-        // }
-        // // LOGGER.info("value = {}, value_type = {}", v, v.getClass().getName());
-        // // var formattedValue = formatFieldValue(r.ti, f.getKey(), v.asText());
-        // var formattedValue = v.asText();
-        // r.fields.put(f.getKey(), formattedValue);
-        // }
     }
 
 }
