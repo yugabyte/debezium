@@ -97,7 +97,7 @@
             </dependency>
             <dependency>
                 <groupId>io.debezium</groupId>
-                <artifactId>debezium-server-file</artifactId>
+                <artifactId>debezium-server-ybexporter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

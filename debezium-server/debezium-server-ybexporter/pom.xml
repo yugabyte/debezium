@@ -7,7 +7,7 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>debezium-server-file</artifactId>
+    <artifactId>debezium-server-ybexporter</artifactId>
     <name>Debezium Server File Sink Adapter</name>
     <packaging>jar</packaging>
 

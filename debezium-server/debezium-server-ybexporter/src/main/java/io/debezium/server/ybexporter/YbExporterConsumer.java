@@ -3,7 +3,7 @@
  *
  * Licensed under the Apache Software License version 2.0, available at http://www.apache.org/licenses/LICENSE-2.0
  */
-package io.debezium.server.file;
+package io.debezium.server.ybexporter;
 
 import java.net.URISyntaxException;
 import java.util.HashMap;
@@ -23,23 +23,21 @@ import io.debezium.engine.DebeziumEngine;
 import io.debezium.server.BaseChangeConsumer;
 
 /**
- * Implementation of the consumer that delivers the messages to an HTTP Webhook destination.
- *
- * @author Chris Baumbauer
+ * Implementation of the consumer that exports the messages to file in a Yugabyte-compatible form.
  */
-@Named("file")
+@Named("ybexporter")
 @Dependent
-public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>> {
-    private static final Logger LOGGER = LoggerFactory.getLogger(FileChangeConsumer.class);
-    private static final String PROP_PREFIX = "debezium.sink.filesink.";
+public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>> {
+    private static final Logger LOGGER = LoggerFactory.getLogger(YbExporterConsumer.class);
+    private static final String PROP_PREFIX = "debezium.sink.ybexporter.";
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
-    Map<String, Table> tableMap = new HashMap<>();
-    RecordParser parser;
-    Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
-    RecordWriter cdcWriter;
-    ExportStatus exportStatus;
+    private Map<String, Table> tableMap = new HashMap<>();
+    private RecordParser parser;
+    private Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
+    private RecordWriter cdcWriter;
+    private ExportStatus exportStatus;
 
     @PostConstruct
     void connect() throws URISyntaxException {
