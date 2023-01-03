@@ -8,6 +8,7 @@ package io.debezium.server.file;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.HashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +43,7 @@ public class CDCWriterJson implements RecordWriter {
     public void writeRecord(Record r) {
         try {
             // TODO: move cdcinfo generation to this class
-            String cdcJson = ow.writeValueAsString(r.getCDCInfo());
+            String cdcJson = ow.writeValueAsString(generateCdcMessageForRecord(r));
             writer.write(cdcJson);
             writer.write("\n");
             LOGGER.info("XXX CDC json = {}", cdcJson);
@@ -50,6 +51,29 @@ public class CDCWriterJson implements RecordWriter {
         catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private HashMap<String, Object> generateCdcMessageForRecord(Record r) {
+        HashMap<String, Object> key = new HashMap<>();
+        HashMap<String, Object> fields = new HashMap<>();
+
+        for (var entry : r.key.entrySet()) {
+            String formattedVal = YugabyteDialectConverter.transformToSQLStatementFriendlyObject(entry.getValue());
+            key.put(entry.getKey(), formattedVal);
+        }
+
+        for (var entry : r.fields.entrySet()) {
+            String formattedVal = YugabyteDialectConverter.transformToSQLStatementFriendlyObject(entry.getValue());
+            fields.put(entry.getKey(), formattedVal);
+        }
+
+        HashMap<String, Object> cdcInfo = new HashMap<>();
+        cdcInfo.put("op", r.op);
+        cdcInfo.put("schema_name", r.t.schemaName);
+        cdcInfo.put("table_name", r.t.tableName);
+        cdcInfo.put("key", key);
+        cdcInfo.put("fields", fields);
+        return cdcInfo;
     }
 
     @Override

@@ -207,15 +207,4 @@ class Record {
     public ArrayList<Object> getValues() {
         return new ArrayList<>(fields.values());
     }
-
-    public HashMap<String, Object> getCDCInfo() {
-        HashMap<String, Object> cdcInfo = new HashMap<>();
-        cdcInfo.put("op", op);
-        cdcInfo.put("schema_name", t.schemaName);
-        cdcInfo.put("table_name", t.tableName);
-        cdcInfo.put("key", key);
-        cdcInfo.put("fields", fields);
-        return cdcInfo;
-    }
 }
-

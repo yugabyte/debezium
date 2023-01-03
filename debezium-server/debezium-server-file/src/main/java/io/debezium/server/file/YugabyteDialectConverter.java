@@ -38,4 +38,18 @@ public class YugabyteDialectConverter {
 
         return fieldValue;
     }
+
+    public static String transformToSQLStatementFriendlyObject(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof String) {
+            // escape single quotes
+            String formattedVal = value.toString().replace("'", "''");
+            // single quote strings.
+            formattedVal = String.format("'%s'", formattedVal);
+            return formattedVal;
+        }
+        return value.toString();
+    }
 }

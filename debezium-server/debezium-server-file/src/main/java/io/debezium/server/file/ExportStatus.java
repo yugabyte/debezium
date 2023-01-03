@@ -43,7 +43,7 @@ public class ExportStatus {
 
     // SINGLETON
     public static ExportStatus getInstance(String datadirStr) {
-        if (instance != null){
+        if (instance != null) {
             return instance;
         }
         ExportStatus instanceFromDisk = loadFromDisk(datadirStr);
@@ -136,4 +136,3 @@ class TableExportStatus {
     Integer exportedRowCountSnapshot;
     String snapshotFilename;
 }
-
