@@ -22,9 +22,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class JsonRecordParser implements RecordParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(JsonRecordParser.class);
-    private Map<String, Table> tableMap;
-    private ObjectMapper mapper = new ObjectMapper(new JsonFactory());
-    private JsonConverter jsonConverter;
+    Map<String, Table> tableMap;
+    JsonConverter jsonConverter;
 
     public JsonRecordParser(Map<String, Table> tblMap) {
         tableMap = tblMap;
@@ -33,6 +32,14 @@ public class JsonRecordParser implements RecordParser {
         jsonConverter.configure(jsonConfig, false);
     }
 
+    /**
+     * This deserialization operation will most likely be heavier as compared to a simple
+     * jsonMapper, but this comes with the added advantages of converting the json values to
+     * java native object types (for example, of type bytes to bytearray, of type bool to java boolean, etc).
+     * Furthermore, there is a way in future to not deal with ser-de at all, by tweaking debezium-server
+     * format.value=connect, wherein it gives a SourceRecord object directly to the ChangeConsumer.
+     * Therefore, this approach is used for now.
+     */
     @Override
     public Record parseRecord(Object keyObj, Object valueObj) {
         try {
@@ -42,41 +49,29 @@ public class JsonRecordParser implements RecordParser {
             var r = new Record();
 
             // Deserialize to Connect object
-            // NOTE: This deserialization operation will most likely be heavier as compared to a simple
-            // jsonMapper, but this comes with the added advantages of converting the json values to
-            // java native object types (for example, of type bytes to bytearray, of type bool to java boolean).
-            // Furthermore, there is a way in future to not deal with ser-de at all, by tweaking debezium-server
-            // format.value=connect, wherein it gives a SourceRecord object directly to the ChangeConsumer.
-            // Hence going with this serde for now.
             SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
-            // ConnectSchema valueSchema = (ConnectSchema) valueConnectObject.schema();
             Struct value = (Struct) valueConnectObject.value();
 
             SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
-            // ConnectSchema keySchema = (ConnectSchema) keyConnectObject.schema();
             Struct key = (Struct) keyConnectObject.value();
 
             Struct source = value.getStruct("source");
-
             r.op = value.getString("op");
             r.snapshot = source.getString("snapshot");
 
             // Parse table/schema the first time to be able to format specific field values
             parseTable(value, source, r);
 
-            // parse key in case of CDC
+            // Parse key and values
             parseKeyFields(key, r);
-
-            // parse fields and construt rowText
             parseValueFields(value, r);
 
             return r;
         }
         catch (Exception ex) {
-            LOGGER.error("XXX parse: {}", ex);
+            LOGGER.error("Failed to parse msg: {}", ex);
+            throw new RuntimeException(ex);
         }
-        LOGGER.info("XXX end returning NULL {}", valueObj);
-        return null;
     }
 
     protected void parseTable(Struct value, Struct sourceNode, Record r) {
@@ -116,6 +111,11 @@ public class JsonRecordParser implements RecordParser {
         }
     }
 
+    /**
+     * Parses value fields from the msg.
+     * In case of update operation, only stores the fields that have changed by comparing
+     * the before and after structs.
+     */
     protected void parseValueFields(Struct value, Record r) {
         Struct before = value.getStruct("before");
         Struct after = value.getStruct("after");

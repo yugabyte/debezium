@@ -17,17 +17,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
 public class CDCWriterJson implements RecordWriter {
-    private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
-    private final String dataDir;
-
-    private BufferedWriter writer;
-
+    static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
+    static final String QUEUE_FILE_NAME = "queue.json";
+    final String dataDir;
+    BufferedWriter writer;
     ObjectWriter ow;
 
     public CDCWriterJson(String datadirStr) {
         dataDir = datadirStr;
 
-        var fileName = dataDir + "/queue.json";
+        var fileName = String.format("%s/%s", dataDir, QUEUE_FILE_NAME);
         try {
             var f = new FileWriter(fileName, true);
             writer = new BufferedWriter(f);
@@ -42,11 +41,10 @@ public class CDCWriterJson implements RecordWriter {
     @Override
     public void writeRecord(Record r) {
         try {
-            // TODO: move cdcinfo generation to this class
             String cdcJson = ow.writeValueAsString(generateCdcMessageForRecord(r));
             writer.write(cdcJson);
             writer.write("\n");
-            LOGGER.info("XXX CDC json = {}", cdcJson);
+            LOGGER.info("Writing CDC message = {}", cdcJson);
         }
         catch (IOException e) {
             throw new RuntimeException(e);
@@ -54,6 +52,7 @@ public class CDCWriterJson implements RecordWriter {
     }
 
     private HashMap<String, Object> generateCdcMessageForRecord(Record r) {
+        // TODO: optimize, don't create objects every time.
         HashMap<String, Object> key = new HashMap<>();
         HashMap<String, Object> fields = new HashMap<>();
 

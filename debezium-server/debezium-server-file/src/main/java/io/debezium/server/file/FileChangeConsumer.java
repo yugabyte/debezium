@@ -21,9 +21,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
 import io.debezium.server.BaseChangeConsumer;
@@ -46,13 +43,9 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     String dataDir;
 
     Map<String, Table> tableMap = new HashMap<>();
-
     RecordParser parser;
     Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
     RecordWriter cdcWriter;
-    JsonFactory factory = new JsonFactory();
-    ObjectMapper mapper = new ObjectMapper(factory);
-
     ExportStatus exportStatus;
 
     @PostConstruct
@@ -61,11 +54,11 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
         parser = new JsonRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
-        if (exportStatus.mode != null && exportStatus.mode.equals("streaming")) {
+        if (exportStatus.mode != null && exportStatus.mode.equals(ExportMode.STREAMING)) {
             handleSnapshotComplete();
         }
         else {
-            exportStatus.mode = "snapshot";
+            exportStatus.updateMode(ExportMode.SNAPSHOT);
         }
 
         Thread t = new Thread(this::flush);
@@ -111,7 +104,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
             // PARSE
             var r = parser.parseRecord(objKey, objVal);
-            LOGGER.info("{} => {}", r.getTableIdentifier(), r.getValues());
+            LOGGER.info("{} => {}", r.getTableIdentifier(), r.getFieldValues());
 
             // WRITE
             RecordWriter writer = getWriterForRecord(r);
@@ -143,7 +136,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void handleSnapshotComplete() {
         snapshotComplete = true;
-        exportStatus.mode = "streaming";
+        exportStatus.updateMode(ExportMode.STREAMING);
         closeSnapshotWriters();
         openCDCWriter();
     }
@@ -166,7 +159,7 @@ class Table {
 
     @Override
     public String toString() {
-        return dbName + "-" + schemaName + "-" + tableName;
+        return String.format("%s-%s-%s", dbName, schemaName, tableName);
     }
 
     public ArrayList<String> getColumns() {
@@ -204,7 +197,7 @@ class Record {
         return t.toString();
     }
 
-    public ArrayList<Object> getValues() {
+    public ArrayList<Object> getFieldValues() {
         return new ArrayList<>(fields.values());
     }
 }

@@ -17,6 +17,13 @@ import org.slf4j.LoggerFactory;
 public class YugabyteDialectConverter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDialectConverter.class);
 
+    /**
+     * Converts objects from those present in kafka connect SourceRecord object to that interpretable by Yugabyte's dialect.
+     * @param field of type kafka.connect.data.Field having schema that of
+     *              https://kafka.apache.org/20/javadoc/org/apache/kafka/connect/data/Schema.Type.html
+     * @param fieldValue Value of field as present in kafka.connect.data.SourceRecord. For example, as java int/long/bool
+     *                   or kafka.connect Struct
+     */
     public static Object fromConnect(Field field, Object fieldValue) {
         // LOGGER.info("field={}", field);
         String logicalType = field.schema().name();
@@ -24,21 +31,23 @@ public class YugabyteDialectConverter {
             switch (logicalType) {
                 case "io.debezium.time.Date":
                     LocalDate date = LocalDate.ofEpochDay(Long.valueOf((Integer) fieldValue));
-                    String dateStr = date.toString(); // default yyyy-MM-dd
-                    return dateStr;
+                    return date.toString(); // default yyyy-MM-dd
                 case "io.debezium.time.MicroTimestamp":
                     long epochMicroSeconds = (Long) fieldValue;
                     long epochSeconds = epochMicroSeconds / 1000000;
                     long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
                     LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
-                    String dateTimeStr = dt.toString();
-                    return dateTimeStr;
+                    return dt.toString();
             }
         }
 
         return fieldValue;
     }
 
+    /**
+     * Converts objects to a string representation that can be used in a DML SQL query.
+     * For example, strings are single quoted.
+     */
     public static String transformToSQLStatementFriendlyObject(Object value) {
         if (value == null) {
             return "null";

@@ -16,13 +16,10 @@ import org.slf4j.LoggerFactory;
 
 public class TableSnapshotWriterCSV implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
-
-    private ExportStatus es;
-    private final String dataDir;
-
+    ExportStatus es;
+    String dataDir;
     Table t;
-
-    private CSVPrinter csvPrinter;
+    CSVPrinter csvPrinter;
 
     public TableSnapshotWriterCSV(String datadirStr, Table tbl) {
         dataDir = datadirStr;
@@ -37,7 +34,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             LOGGER.info("header = {}", header);
             f.write(header);
             es = ExportStatus.getInstance(dataDir);
-            es.updateTableSnapshotWriterCreated(tbl, fileName);
+            es.updateTableSnapshotWriterCreated(tbl, getFilenameForTable());
 
         }
         catch (IOException e) {
@@ -49,7 +46,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     public void writeRecord(Record r) {
         // TODO: assert r.table = table
         try {
-            csvPrinter.printRecord(r.getValues());
+            csvPrinter.printRecord(r.getFieldValues());
             es.updateTableSnapshotRecordWritten(t);
         }
         catch (IOException e) {

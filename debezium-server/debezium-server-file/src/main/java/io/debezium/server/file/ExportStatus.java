@@ -22,16 +22,24 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
+/**
+ * Singleton class that is used to update the status of the export process.
+ */
 public class ExportStatus {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ExportStatus.class);
-    private static ExportStatus instance;
+    static final Logger LOGGER = LoggerFactory.getLogger(ExportStatus.class);
+    static ExportStatus instance;
     String dataDir;
     Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>();
-    String mode;
+    ExportMode mode;
     ObjectWriter ow;
     File f;
 
+    /**
+     * Should only be called once in the lifetime of the process.
+     * Creates and instance and assigns it to static instance property of the class.
+     */
     private ExportStatus(String datadirStr) {
+        //
         if (instance != null) {
             throw new RuntimeException("instance already exists.");
         }
@@ -41,7 +49,13 @@ public class ExportStatus {
         instance = this;
     }
 
-    // SINGLETON
+    /**
+     * 1. Tries to check if an instance is already created
+     * 2. If not, tries to load from disk.
+     * 3. If not available on disk, creates a new instance.
+     * @param datadirStr - data directory
+     * @return instance
+     */
     public static ExportStatus getInstance(String datadirStr) {
         if (instance != null) {
             return instance;
@@ -65,8 +79,8 @@ public class ExportStatus {
         tableExportStatusMap.get(t).exportedRowCountSnapshot++;
     }
 
-    public void updateMode(String modeStr) {
-        mode = modeStr;
+    public void updateMode(ExportMode modeEnum) {
+        mode = modeEnum;
     }
 
     public void flushToDisk() {
@@ -105,14 +119,13 @@ public class ExportStatus {
             JsonFactory factory = new JsonFactory();
             ObjectMapper mapper = new ObjectMapper(factory);
             var exportStatusJson = mapper.readTree(fileContent);
-            LOGGER.info("XXX export status info = {}", exportStatusJson);
+            LOGGER.info("Loaded export status info from disk = {}", exportStatusJson);
             ExportStatus es = new ExportStatus(datadirStr);
-            es.updateMode(exportStatusJson.get("mode").asText());
+            String exportModeText = exportStatusJson.get("mode").asText();
+            es.updateMode(ExportMode.valueOf(exportModeText));
 
             var tablesJson = exportStatusJson.get("tables");
             for (var tableJson : tablesJson) {
-                LOGGER.info("XXX table info = {}", tableJson);
-                // {"database_name":"dvdrental","file_name":"customer_data.sql","exported_row_count":603,"schema_name":"public","table_name":"customer"}
                 // TODO: creating a duplicate table here. it will again be created when parsing a record of the table for the first time.
                 Table t = new Table();
                 t.dbName = tableJson.get("database_name").asText();
@@ -135,4 +148,9 @@ public class ExportStatus {
 class TableExportStatus {
     Integer exportedRowCountSnapshot;
     String snapshotFilename;
+}
+
+enum ExportMode {
+    SNAPSHOT,
+    STREAMING,
 }
