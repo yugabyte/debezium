@@ -26,13 +26,14 @@ import com.fasterxml.jackson.databind.ObjectWriter;
  * Singleton class that is used to update the status of the export process.
  */
 public class ExportStatus {
-    static final Logger LOGGER = LoggerFactory.getLogger(ExportStatus.class);
-    static ExportStatus instance;
-    String dataDir;
-    Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>();
-    ExportMode mode;
-    ObjectWriter ow;
-    File f;
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExportStatus.class);
+    private static final String EXPORT_STATUS_FILE_NAME = "export_status.json";
+    private static ExportStatus instance;
+    private String dataDir;
+    private Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>();
+    private ExportMode mode;
+    private ObjectWriter ow;
+    private File f;
 
     /**
      * Should only be called once in the lifetime of the process.
@@ -45,7 +46,7 @@ public class ExportStatus {
         }
         dataDir = datadirStr;
         ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-        f = new File(dataDir + "/export_status.json");
+        f = new File(String.format("%s/%s", dataDir, EXPORT_STATUS_FILE_NAME));
         instance = this;
     }
 
@@ -66,6 +67,10 @@ public class ExportStatus {
             return instance;
         }
         return new ExportStatus(datadirStr);
+    }
+
+    public ExportMode getMode() {
+        return mode;
     }
 
     public void updateTableSnapshotWriterCreated(Table t, String tblFilename) {

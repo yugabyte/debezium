@@ -16,10 +16,10 @@ import org.slf4j.LoggerFactory;
 
 public class TableSnapshotWriterCSV implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
-    ExportStatus es;
-    String dataDir;
-    Table t;
-    CSVPrinter csvPrinter;
+    private ExportStatus es;
+    private String dataDir;
+    private Table t;
+    private CSVPrinter csvPrinter;
 
     public TableSnapshotWriterCSV(String datadirStr, Table tbl) {
         dataDir = datadirStr;
@@ -31,7 +31,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             csvPrinter = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
             ArrayList<String> cols = t.getColumns();
             String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
-            LOGGER.info("header = {}", header);
+            LOGGER.debug("header = {}", header);
             f.write(header);
             es = ExportStatus.getInstance(dataDir);
             es.updateTableSnapshotWriterCreated(tbl, getFilenameForTable());
@@ -46,7 +46,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     public void writeRecord(Record r) {
         // TODO: assert r.table = table
         try {
-            csvPrinter.printRecord(r.getFieldValues());
+            csvPrinter.printRecord(r.getValueFieldValues());
             es.updateTableSnapshotRecordWritten(t);
         }
         catch (IOException e) {
@@ -80,7 +80,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             csvPrinter.println();
             csvPrinter.println();
             csvPrinter.close(true);
-            LOGGER.info("Closing snapshot file = {}", csvPrinter.getOut().toString());
+            LOGGER.info("Closing snapshot file for table {}", t);
         }
         catch (IOException e) {
             throw new RuntimeException(e);

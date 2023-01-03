@@ -6,9 +6,9 @@
 package io.debezium.server.file;
 
 public interface RecordWriter {
-    public void writeRecord(Record r);
+    void writeRecord(Record r);
 
-    public void flush();
+    void flush();
 
-    public void close();
+    void close();
 }

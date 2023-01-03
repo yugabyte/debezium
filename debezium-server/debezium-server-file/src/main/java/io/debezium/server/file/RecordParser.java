@@ -6,5 +6,5 @@
 package io.debezium.server.file;
 
 public interface RecordParser {
-    public Record parseRecord(Object key, Object value);
+    Record parseRecord(Object key, Object value);
 }

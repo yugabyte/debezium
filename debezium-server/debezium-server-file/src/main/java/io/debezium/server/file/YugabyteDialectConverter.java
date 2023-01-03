@@ -48,7 +48,7 @@ public class YugabyteDialectConverter {
      * Converts objects to a string representation that can be used in a DML SQL query.
      * For example, strings are single quoted.
      */
-    public static String transformToSQLStatementFriendlyObject(Object value) {
+    public static String makeSqlStatementCompatible(Object value) {
         if (value == null) {
             return "null";
         }

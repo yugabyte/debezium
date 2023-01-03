@@ -17,11 +17,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
 public class CDCWriterJson implements RecordWriter {
-    static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
-    static final String QUEUE_FILE_NAME = "queue.json";
-    final String dataDir;
-    BufferedWriter writer;
-    ObjectWriter ow;
+    private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
+    private static final String QUEUE_FILE_NAME = "queue.json";
+    private String dataDir;
+    private BufferedWriter writer;
+    private ObjectWriter ow;
 
     public CDCWriterJson(String datadirStr) {
         dataDir = datadirStr;
@@ -56,13 +56,13 @@ public class CDCWriterJson implements RecordWriter {
         HashMap<String, Object> key = new HashMap<>();
         HashMap<String, Object> fields = new HashMap<>();
 
-        for (var entry : r.key.entrySet()) {
-            String formattedVal = YugabyteDialectConverter.transformToSQLStatementFriendlyObject(entry.getValue());
+        for (var entry : r.keyFields.entrySet()) {
+            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(entry.getValue());
             key.put(entry.getKey(), formattedVal);
         }
 
-        for (var entry : r.fields.entrySet()) {
-            String formattedVal = YugabyteDialectConverter.transformToSQLStatementFriendlyObject(entry.getValue());
+        for (var entry : r.valueFields.entrySet()) {
+            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(entry.getValue());
             fields.put(entry.getKey(), formattedVal);
         }
 

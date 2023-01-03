@@ -6,9 +6,7 @@
 package io.debezium.server.file;
 
 import java.net.URISyntaxException;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -16,7 +14,6 @@ import javax.annotation.PostConstruct;
 import javax.enterprise.context.Dependent;
 import javax.inject.Named;
 
-import org.apache.kafka.connect.data.Field;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,11 +31,7 @@ import io.debezium.server.BaseChangeConsumer;
 @Dependent
 public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(FileChangeConsumer.class);
-
     private static final String PROP_PREFIX = "debezium.sink.filesink.";
-
-    private boolean snapshotComplete = false;
-
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
@@ -54,7 +47,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
         parser = new JsonRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
-        if (exportStatus.mode != null && exportStatus.mode.equals(ExportMode.STREAMING)) {
+        if (exportStatus.getMode() != null && exportStatus.getMode().equals(ExportMode.STREAMING)) {
             handleSnapshotComplete();
         }
         else {
@@ -91,11 +84,10 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     @Override
     public void handleBatch(List<ChangeEvent<Object, Object>> records, DebeziumEngine.RecordCommitter<ChangeEvent<Object, Object>> committer)
             throws InterruptedException {
-        LOGGER.info("RECEIVED BATCH IN FILE SINK" + "Size of records-" + records.size());
+        LOGGER.info("Processing batch with {} records", records.size());
         for (ChangeEvent<Object, Object> record : records) {
             Object objKey = record.key();
             Object objVal = record.value();
-            // LOGGER.info("key type = {}, value type = {}", objKey.getClass().getName(), objVal.getClass().getName());
             if (objVal == null) {
                 // tombstone event
                 // TODO: handle this better. try using the config to avoid altogether
@@ -104,7 +96,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
             // PARSE
             var r = parser.parseRecord(objKey, objVal);
-            LOGGER.info("{} => {}", r.getTableIdentifier(), r.getFieldValues());
+            LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
 
             // WRITE
             RecordWriter writer = getWriterForRecord(r);
@@ -121,7 +113,7 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private RecordWriter getWriterForRecord(Record r) {
-        if (!snapshotComplete) {
+        if (exportStatus.getMode() == ExportMode.SNAPSHOT) {
             RecordWriter writer = snapshotWriters.get(r.t);
             if (writer == null) {
                 writer = new TableSnapshotWriterCSV(dataDir, r.t);
@@ -135,7 +127,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void handleSnapshotComplete() {
-        snapshotComplete = true;
         exportStatus.updateMode(ExportMode.STREAMING);
         closeSnapshotWriters();
         openCDCWriter();
@@ -150,54 +141,5 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void openCDCWriter() {
         cdcWriter = new CDCWriterJson(dataDir);
-    }
-}
-
-class Table {
-    String dbName, schemaName, tableName;
-    LinkedHashMap<String, Field> fieldSchemas = new LinkedHashMap<>();
-
-    @Override
-    public String toString() {
-        return String.format("%s-%s-%s", dbName, schemaName, tableName);
-    }
-
-    public ArrayList<String> getColumns() {
-        return new ArrayList<>(fieldSchemas.keySet());
-    }
-
-    @Override
-    public int hashCode() {
-        return toString().hashCode();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (!(o instanceof Table)) {
-            return false;
-        }
-        Table t = (Table) o;
-        return dbName.equals(t.dbName)
-                && schemaName.equals(t.schemaName)
-                && tableName.equals(t.tableName);
-    }
-}
-
-class Record {
-    Table t;
-    String snapshot;
-    String op;
-    HashMap<String, Object> key = new HashMap<>();
-    LinkedHashMap<String, Object> fields = new LinkedHashMap<>();
-
-    public String getTableIdentifier() {
-        return t.toString();
-    }
-
-    public ArrayList<Object> getFieldValues() {
-        return new ArrayList<>(fields.values());
     }
 }

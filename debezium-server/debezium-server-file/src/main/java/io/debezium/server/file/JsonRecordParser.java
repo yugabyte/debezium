@@ -17,13 +17,10 @@ import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-public class JsonRecordParser implements RecordParser {
+class JsonRecordParser implements RecordParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(JsonRecordParser.class);
-    Map<String, Table> tableMap;
-    JsonConverter jsonConverter;
+    private Map<String, Table> tableMap;
+    private JsonConverter jsonConverter;
 
     public JsonRecordParser(Map<String, Table> tblMap) {
         tableMap = tblMap;
@@ -33,11 +30,13 @@ public class JsonRecordParser implements RecordParser {
     }
 
     /**
-     * This deserialization operation will most likely be heavier as compared to a simple
-     * jsonMapper, but this comes with the added advantages of converting the json values to
+     * Note: This uses the org.apache.kafka.connect.json.JsonConverter to convert from json
+     * to KafkaConnect objects (which is what is serialized to the json that the ChangeConsumer receives)
+     * This deserialization process will most likely be heavier as compared to a simple
+     * json deserializer, but this comes with the added advantages of converting the json values to
      * java native object types (for example, of type bytes to bytearray, of type bool to java boolean, etc).
      * Furthermore, there is a way in future to not deal with ser-de at all, by tweaking debezium-server
-     * format.value=connect, wherein it gives a SourceRecord object directly to the ChangeConsumer.
+     * format.value=connect, wherein it gives a KafkaConnect object directly to the ChangeConsumer.
      * Therefore, this approach is used for now.
      */
     @Override
@@ -45,6 +44,7 @@ public class JsonRecordParser implements RecordParser {
         try {
             String jsonValue = valueObj.toString();
             String jsonKey = keyObj.toString();
+            LOGGER.debug("Parsing key={}, value={}", jsonKey, jsonValue);
 
             var r = new Record();
 
@@ -100,14 +100,9 @@ public class JsonRecordParser implements RecordParser {
     }
 
     protected void parseKeyFields(Struct key, Record r) {
-        try {
-            for (Field f : key.schema().fields()) {
-                Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
-                r.key.put(f.name(), fieldValue);
-            }
-        }
-        catch (Exception ex) {
-            LOGGER.error("XXX parseKey: {}", ex);
+        for (Field f : key.schema().fields()) {
+            Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
+            r.keyFields.put(f.name(), fieldValue);
         }
     }
 
@@ -131,7 +126,7 @@ public class JsonRecordParser implements RecordParser {
                 }
             }
             Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
-            r.fields.put(f.name(), fieldValue);
+            r.valueFields.put(f.name(), fieldValue);
         }
     }
 
