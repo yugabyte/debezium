@@ -104,8 +104,6 @@ public class DebeziumServer {
     @SuppressWarnings("unchecked")
     @PostConstruct
     public void start() {
-        // System.out.println(System.getProperty("user.dir"));
-        LOGGER.info("user dir is" + System.getProperty("user.dir"));
         final Config config = loadConfigOrDie();
         final String name = config.getValue(PROP_SINK_TYPE, String.class);
 

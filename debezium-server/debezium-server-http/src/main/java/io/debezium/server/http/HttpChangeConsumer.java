@@ -102,7 +102,7 @@ public class HttpChangeConsumer extends BaseChangeConsumer implements DebeziumEn
                 // Note: will default to JSON if it cannot be determined, but should not reach this point
                 contentType = "application/json";
         }
-        LOGGER.info("Hello HTTP Sink!!!!!");
+
         LOGGER.info("Using http content-type type {}", contentType);
         LOGGER.info("Using sink URL: {}", sinkUrl);
         requestBuilder = HttpRequest.newBuilder(new URI(sinkUrl)).timeout(timeoutDuration);
