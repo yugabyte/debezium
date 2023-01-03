@@ -5,12 +5,7 @@
  */
 package io.debezium.server.file;
 
-import java.io.File;
-import java.io.IOException;
 import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -28,7 +23,6 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
 
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
@@ -46,8 +40,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private static final String PROP_PREFIX = "debezium.sink.filesink.";
 
-    private static final String NULL_STRING = "null";
-
     private boolean snapshotComplete = false;
 
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
@@ -62,8 +54,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     ObjectMapper mapper = new ObjectMapper(factory);
 
     ExportStatus exportStatus;
-    // Map<Table, Integer> snapshotRowsProcessed = new HashMap<>();
-    // HashMap<String, HashMap<String, FieldSchema>> tableFieldSchemas = new HashMap<>();
 
     @PostConstruct
     void connect() throws URISyntaxException {
@@ -86,34 +76,15 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     void flush() {
         LOGGER.info("XXX Started flush thread.");
         while (true) {
-            // for (CSVPrinter writer : writers.values()) {
-            // try {
-            // writer.flush();
-            // // LOGGER.info("FLUSHED to disk");
-            // }
-            // catch (IOException e) {
-            // throw new RuntimeException(e);
-            // }
-            // }
-            // try {
-            // if (cdcWriterOld != null) {
-            // cdcWriterOld.flush();
-            // }
-            // // TODO: doing more than flushing files to disk. maybe move this call to another thread?
-            // updateExportStatus();
-            // }
-            // catch (IOException e) {
-            // throw new RuntimeException(e);
-            // }
-
             for (RecordWriter writer : snapshotWriters.values()) {
                 writer.flush();
             }
             if (cdcWriter != null) {
                 cdcWriter.flush();
             }
+            // TODO: doing more than flushing files to disk. maybe move this call to another thread?
             if (exportStatus != null) {
-                exportStatus.serializeToDisk();
+                exportStatus.flushToDisk();
             }
             try {
                 Thread.sleep(2000);
@@ -187,110 +158,6 @@ public class FileChangeConsumer extends BaseChangeConsumer implements DebeziumEn
     private void openCDCWriter() {
         cdcWriter = new CDCWriterJson(dataDir);
     }
-
-    // private void writeRecord(Record r) throws IOException {
-    // var table = r.t;
-    //
-    // CSVPrinter writer = writers.get(table);
-    // if (writer == null) {
-    // var fileName = getFullFileNameForTable(table);
-    // var f = new FileWriter(fileName);
-    // ArrayList<String> cols = table.getColumns();
-    // // ArrayList<String> cols = new ArrayList<>(table.schema.keySet());
-    // // final CSVFormat csvFormat = CSVFormat.Builder.create()
-    // // .setHeader(String.join(",", cols))
-    // // .setAllowMissingColumnNames(true)
-    // // .
-    // // .build();
-    // writer = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
-    // writers.put(table, writer);
-    // // Write header
-    // String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
-    // LOGGER.info("header = {}", header);
-    // f.write(header);
-    // // writer.print(header);
-    // // writer.printHeaders();
-    //
-    // TableExportStatus tableExportStatus = new TableExportStatus();
-    // tableExportStatus.fileName = getFilenameForTable(table);
-    // tableExportStatus.exportedRowCountSnapshot = 0;
-    // exportStatus.tableExportStatusMap.put(table, tableExportStatus);
-    // }
-    // writer.printRecord(r.getValues());
-    // if (!snapshotComplete) {
-    // exportStatus.tableExportStatusMap.get(table).exportedRowCountSnapshot++;
-    // // Integer tableRowsProcessed = snapshotRowsProcessed.get(table);
-    // // if (tableRowsProcessed == null) {
-    // // tableRowsProcessed = 0;
-    // // }
-    // // snapshotRowsProcessed.put(table, tableRowsProcessed + 1);
-    // }
-    //
-    // }
-
-    private void updateExportStatus() {
-        HashMap<String, Object> exportStatusMap = new HashMap<>();
-        List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
-        for (Table t : exportStatus.tableExportStatusMap.keySet()) {
-            HashMap<String, Object> tableInfo = new HashMap<>();
-            tableInfo.put("database_name", t.dbName);
-            tableInfo.put("schema_name", t.schemaName);
-            tableInfo.put("table_name", t.tableName);
-            tableInfo.put("file_name", exportStatus.tableExportStatusMap.get(t).snapshotFilename);
-            tableInfo.put("exported_row_count", exportStatus.tableExportStatusMap.get(t).exportedRowCountSnapshot);
-            tablesInfo.add(tableInfo);
-        }
-
-        exportStatusMap.put("tables", tablesInfo);
-        exportStatusMap.put("mode", exportStatus.mode);
-        ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-        String tocJson = null;
-        try {
-            tocJson = ow.writeValueAsString(exportStatusMap);
-            ow.writeValue(new File(dataDir + "/export_status.json"), exportStatusMap);
-            // LOGGER.info("TABLE OF CONTENTS = {}", tocJson);
-        }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private void loadExportStatus() {
-        try {
-            Path p = Paths.get(dataDir + "/export_status.json");
-            File f = new File(p.toUri());
-            if (!f.exists()) {
-                return;
-            }
-
-            String fileContent = Files.readString(p);
-            var exportStatusJson = mapper.readTree(fileContent);
-            LOGGER.info("XXX export status info = {}", exportStatusJson);
-            exportStatus.mode = exportStatusJson.get("mode").asText();
-
-            var tablesJson = exportStatusJson.get("tables");
-            for (var tableJson : tablesJson) {
-                LOGGER.info("XXX table info = {}", tableJson);
-                // {"database_name":"dvdrental","file_name":"customer_data.sql","exported_row_count":603,"schema_name":"public","table_name":"customer"}
-                // TODO: creating a duplicate table here. it will again be created when parsing a record of the table for the first time.
-                Table t = new Table();
-                t.dbName = tableJson.get("database_name").asText();
-                t.schemaName = tableJson.get("schema_name").asText();
-                t.tableName = tableJson.get("table_name").asText();
-
-                TableExportStatus tes = new TableExportStatus();
-                tes.exportedRowCountSnapshot = tableJson.get("exported_row_count").asInt();
-                tes.snapshotFilename = tableJson.get("file_name").asText();
-                exportStatus.tableExportStatusMap.put(t, tes);
-            }
-            if (exportStatus.mode.equals("streaming")) {
-                handleSnapshotComplete();
-            }
-        }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
 }
 
 class Table {
@@ -328,10 +195,10 @@ class Table {
 
 class Record {
     Table t;
-    LinkedHashMap<String, Object> fields = new LinkedHashMap<>();
     String snapshot;
     String op;
     HashMap<String, Object> key = new HashMap<>();
+    LinkedHashMap<String, Object> fields = new LinkedHashMap<>();
 
     public String getTableIdentifier() {
         return t.toString();
@@ -352,13 +219,3 @@ class Record {
     }
 }
 
-class FieldSchema {
-    String name;
-    String type;
-    String className;
-}
-
-class TableExportStatus {
-    Integer exportedRowCountSnapshot;
-    String snapshotFilename;
-}

@@ -29,7 +29,6 @@ public class ExportStatus {
     Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>();
     String mode;
     ObjectWriter ow;
-
     File f;
 
     private ExportStatus(String datadirStr) {
@@ -47,7 +46,7 @@ public class ExportStatus {
         if (instance != null){
             return instance;
         }
-        ExportStatus instanceFromDisk = deserializeFromDisk(datadirStr);
+        ExportStatus instanceFromDisk = loadFromDisk(datadirStr);
         if (instanceFromDisk != null) {
             instance = instanceFromDisk;
             return instance;
@@ -70,7 +69,7 @@ public class ExportStatus {
         mode = modeStr;
     }
 
-    public void serializeToDisk() {
+    public void flushToDisk() {
         HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
         for (Table t : tableExportStatusMap.keySet()) {
@@ -94,7 +93,7 @@ public class ExportStatus {
         }
     }
 
-    private static ExportStatus deserializeFromDisk(String datadirStr) {
+    private static ExportStatus loadFromDisk(String datadirStr) {
         try {
             Path p = Paths.get(datadirStr + "/export_status.json");
             File f = new File(p.toUri());
@@ -126,12 +125,15 @@ public class ExportStatus {
                 es.tableExportStatusMap.put(t, tes);
             }
             return es;
-            // if (mode.equals("streaming")) {
-            // handleSnapshotComplete();
-            // }
         }
         catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 }
+
+class TableExportStatus {
+    Integer exportedRowCountSnapshot;
+    String snapshotFilename;
+}
+
