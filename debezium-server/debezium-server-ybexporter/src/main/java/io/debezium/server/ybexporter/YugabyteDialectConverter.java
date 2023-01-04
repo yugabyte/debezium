@@ -13,10 +13,12 @@ import java.util.BitSet;
 
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema.Type;
+import org.apache.kafka.connect.data.Struct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.data.Bits;
+import io.debezium.data.geometry.Point;
 
 public class YugabyteDialectConverter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDialectConverter.class);
@@ -52,6 +54,10 @@ public class YugabyteDialectConverter {
                         s.append(bs.get(i) ? "1" : "0");
                     }
                     return s.toString();
+                case "io.debezium.data.geometry.Point":
+                    Struct ptStruct = (Struct) fieldValue;
+                    double[] point = Point.parseWKBPoint(ptStruct.getBytes("wkb"));
+                    return String.format("(%f,%f)", point[0], point[1]);
             }
         }
         Type type = field.schema().type();
