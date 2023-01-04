@@ -8,7 +8,9 @@ package io.debezium.server.ybexporter;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.BitSet;
 
 import org.apache.kafka.connect.data.Field;
@@ -41,6 +43,18 @@ public class YugabyteDialectConverter {
                 case "io.debezium.time.Date":
                     LocalDate date = LocalDate.ofEpochDay(Long.valueOf((Integer) fieldValue));
                     return date.toString(); // default yyyy-MM-dd
+                case "io.debezium.time.Time":
+                    long millisecondsSinceMidnight = Long.valueOf((Integer) fieldValue);
+                    LocalTime t = LocalTime.ofSecondOfDay(0).plus(millisecondsSinceMidnight, ChronoUnit.MILLIS);
+                    return t.toString();
+                case "io.debezium.time.MicroTime":
+                    long microsecondsSinceMidnight = (Long) fieldValue;
+                    LocalTime mt = LocalTime.ofSecondOfDay(0).plus(microsecondsSinceMidnight, ChronoUnit.MICROS);
+                    return mt.toString();
+                case "io.debezium.time.Timestamp":
+                    long tsEpochMilliSeconds = (Long) fieldValue;
+                    LocalDateTime tsDt = LocalDateTime.ofInstant(Instant.ofEpochMilli(tsEpochMilliSeconds), ZoneOffset.UTC);
+                    return tsDt.toString();
                 case "io.debezium.time.MicroTimestamp":
                     long epochMicroSeconds = (Long) fieldValue;
                     long epochSeconds = epochMicroSeconds / 1000000;
