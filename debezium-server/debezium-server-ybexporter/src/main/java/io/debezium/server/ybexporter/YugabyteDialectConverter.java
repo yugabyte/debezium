@@ -9,10 +9,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.BitSet;
 
 import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Schema.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.debezium.data.Bits;
 
 public class YugabyteDialectConverter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDialectConverter.class);
@@ -26,6 +30,9 @@ public class YugabyteDialectConverter {
      */
     public static Object fromConnect(Field field, Object fieldValue) {
         // LOGGER.info("field={}", field);
+        if (fieldValue == null) {
+            return fieldValue;
+        }
         String logicalType = field.schema().name();
         if (logicalType != null) {
             switch (logicalType) {
@@ -38,7 +45,26 @@ public class YugabyteDialectConverter {
                     long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
                     LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
                     return dt.toString();
+                case "io.debezium.data.Bits":
+                    BitSet bs = Bits.toBitSet(null, (byte[]) fieldValue);
+                    StringBuilder s = new StringBuilder();
+                    for (int i = bs.length() - 1; i >= 0; i--) {
+                        s.append(bs.get(i) ? "1" : "0");
+                    }
+                    return s.toString();
             }
+        }
+        Type type = field.schema().type();
+        switch (type) {
+            case BYTES:
+                StringBuilder hexString = new StringBuilder();
+                // TODO: move the binary array -> hex to sequelize
+                hexString.append("\\x");
+                for (byte b : (byte[]) fieldValue) {
+                    hexString.append(String.format("%02x", b));
+                }
+                return hexString.toString();
+
         }
 
         return fieldValue;
