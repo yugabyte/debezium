@@ -24,10 +24,13 @@ import org.slf4j.LoggerFactory;
 import io.debezium.data.Bits;
 import io.debezium.data.geometry.Point;
 
+
 public class YugabyteDialectConverter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDialectConverter.class);
 
     /**
+     * TODO: Try using a Custom Converter - https://debezium.io/documentation/reference/stable/development/converters.html
+     * instead to handle these conversions.
      * Converts objects from those present in kafka connect SourceRecord object to that interpretable by Yugabyte's dialect.
      * @param field of type kafka.connect.data.Field having schema that of
      *              https://kafka.apache.org/20/javadoc/org/apache/kafka/connect/data/Schema.Type.html
