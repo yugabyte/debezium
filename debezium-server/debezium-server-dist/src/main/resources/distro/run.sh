@@ -25,4 +25,6 @@ if [[ "${ENABLE_DEBEZIUM_SCRIPTING}" == "true" ]]; then
     LIB_PATH=$LIB_PATH$PATH_SEP"lib_opt/*"
 fi
 
-exec "$JAVA_BINARY" $DEBEZIUM_OPTS $JAVA_OPTS -cp "$RUNNER"$PATH_SEP"conf"$PATH_SEP$LIB_PATH io.debezium.server.Main
+
+DEBUGGER="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+exec "$JAVA_BINARY" $DEBEZIUM_OPTS $JAVA_OPTS -cp "$RUNNER"$PATH_SEP"conf"$PATH_SEP$LIB_PATH "$DEBUGGER" io.debezium.server.Main

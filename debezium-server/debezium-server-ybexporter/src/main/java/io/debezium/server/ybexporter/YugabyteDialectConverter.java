@@ -12,6 +12,8 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.BitSet;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema.Type;
@@ -37,6 +39,26 @@ public class YugabyteDialectConverter {
         if (fieldValue == null) {
             return fieldValue;
         }
+
+        // The below types are not supported by debezium's postgres connector.
+        // Therefore, we interpret the actual source column type (set by config datatype.propagate.source.type)
+        // and then handle them.
+        var params = field.schema().parameters();
+        if (params != null) {
+            String columnType = params.get("__debezium.source.column.type");
+            if (columnType != null) {
+                switch (columnType) {
+                    case "BOX":
+                    case "LINE":
+                    case "LSEG":
+                    case "PATH":
+                    case "POLYGON":
+                    case "CIRCLE":
+                        return new String((byte[]) fieldValue);
+                }
+            }
+        }
+
         String logicalType = field.schema().name();
         if (logicalType != null) {
             switch (logicalType) {
@@ -78,12 +100,22 @@ public class YugabyteDialectConverter {
         switch (type) {
             case BYTES:
                 StringBuilder hexString = new StringBuilder();
-                // TODO: move the binary array -> hex to sequelize
                 hexString.append("\\x");
                 for (byte b : (byte[]) fieldValue) {
                     hexString.append(String.format("%02x", b));
                 }
                 return hexString.toString();
+            case MAP:
+                StringBuilder mapString = new StringBuilder();
+                for (Map.Entry<String, String> entry : ((HashMap<String, String>) fieldValue).entrySet()) {
+                    String key = entry.getKey();
+                    String val = entry.getValue();
+                    mapString.append(String.format("\"%s\" => \"%s\"", key, val));
+                }
+                return mapString.toString();
+            // return fieldValue.toString().replace("=", "=>")
+            // .replace("{", "")
+            // .replace("}", "");
 
         }
 
