@@ -688,6 +688,9 @@ public class PostgresValueConverter extends JdbcValueConverters {
             else if (data instanceof PGobject) {
                 r.deliver(HStoreConverter.fromString(data.toString()));
             }
+            else if (data instanceof java.util.HashMap) {
+                r.deliver(data);
+            }
         });
     }
 

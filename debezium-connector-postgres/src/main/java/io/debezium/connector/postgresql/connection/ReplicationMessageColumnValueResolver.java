@@ -59,6 +59,7 @@ public class ReplicationMessageColumnValueResolver {
             case "bool":
                 return value.asBoolean();
 
+            case "ltree":
             case "hstore":
                 return value.asString();
 

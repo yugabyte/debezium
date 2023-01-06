@@ -110,9 +110,9 @@ public class YugabyteDialectConverter {
                 for (Map.Entry<String, String> entry : ((HashMap<String, String>) fieldValue).entrySet()) {
                     String key = entry.getKey();
                     String val = entry.getValue();
-                    mapString.append(String.format("\"%s\" => \"%s\"", key, val));
+                    mapString.append(String.format("\"%s\" => \"%s\",", key, val));
                 }
-                return mapString.toString();
+                return mapString.toString().substring(0, mapString.length() - 1);
             // return fieldValue.toString().replace("=", "=>")
             // .replace("{", "")
             // .replace("}", "");
