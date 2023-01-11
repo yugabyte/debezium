@@ -1142,6 +1142,15 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
     }
 
     @Test
+    public void shouldReceiveLtreeAsStrong() throws Exception {
+        TestHelper.executeDDL("postgres_create_tables.ddl");
+
+        startConnector(config -> config.with(PostgresConnectorConfig.PLUGIN_NAME, "PGOUTPUT"));
+
+        assertInsert(INSERT_CUSTOM_TYPES_STMT, 1, schemasAndValuesForCustomTypes());
+    }
+
+    @Test
     @FixFor("DBZ-898")
     public void shouldReceiveHStoreTypeWithSingleValueAsMap() throws Exception {
         TestHelper.executeDDL("postgres_create_tables.ddl");
