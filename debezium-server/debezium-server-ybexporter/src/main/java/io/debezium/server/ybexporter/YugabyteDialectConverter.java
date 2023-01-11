@@ -24,7 +24,6 @@ import org.slf4j.LoggerFactory;
 import io.debezium.data.Bits;
 import io.debezium.data.geometry.Point;
 
-
 public class YugabyteDialectConverter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDialectConverter.class);
 
@@ -97,6 +96,16 @@ public class YugabyteDialectConverter {
                     Struct ptStruct = (Struct) fieldValue;
                     double[] point = Point.parseWKBPoint(ptStruct.getBytes("wkb"));
                     return String.format("(%f,%f)", point[0], point[1]);
+                case "io.debezium.data.geometry.Geometry":
+                case "io.debezium.data.geometry.Geography":
+                    Struct geometryStruct = (Struct) fieldValue;
+                    StringBuilder hexString = new StringBuilder();
+                    // hexString.append("\\x");
+                    for (byte b : (byte[]) geometryStruct.get("wkb")) {
+                        hexString.append(String.format("%02x", b));
+                    }
+                    return hexString.toString();
+
             }
         }
         Type type = field.schema().type();
