@@ -43,7 +43,10 @@ class JsonRecordParser implements RecordParser {
     public Record parseRecord(Object keyObj, Object valueObj) {
         try {
             String jsonValue = valueObj.toString();
-            String jsonKey = keyObj.toString();
+            String jsonKey = null;
+            if (keyObj != null) {
+                jsonKey = keyObj.toString();
+            }
             LOGGER.debug("Parsing key={}, value={}", jsonKey, jsonValue);
 
             var r = new Record();
@@ -51,9 +54,6 @@ class JsonRecordParser implements RecordParser {
             // Deserialize to Connect object
             SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
             Struct value = (Struct) valueConnectObject.value();
-
-            SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
-            Struct key = (Struct) keyConnectObject.value();
 
             Struct source = value.getStruct("source");
             r.op = value.getString("op");
@@ -63,7 +63,11 @@ class JsonRecordParser implements RecordParser {
             parseTable(value, source, r);
 
             // Parse key and values
-            parseKeyFields(key, r);
+            if (jsonKey != null) {
+                SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
+                Struct key = (Struct) keyConnectObject.value();
+                parseKeyFields(key, r);
+            }
             parseValueFields(value, r);
 
             return r;
@@ -76,7 +80,10 @@ class JsonRecordParser implements RecordParser {
 
     protected void parseTable(Struct value, Struct sourceNode, Record r) {
         String dbName = sourceNode.getString("db");
-        String schemaName = sourceNode.getString("schema");
+        String schemaName = "";
+        if (sourceNode.schema().field("schema") != null) {
+            schemaName = sourceNode.getString("schema");
+        }
         String tableName = sourceNode.getString("table");
         var tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
 
