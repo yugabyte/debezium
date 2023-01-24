@@ -85,6 +85,12 @@ public class YugabyteDialectConverter {
                     long nanoOffset = (epochMicroSeconds % 1000000) * 1000;
                     LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds, nanoOffset), ZoneOffset.UTC);
                     return dt.toString();
+                case "io.debezium.time.NanoTimestamp":
+                    long nanoEpochNanoSeconds = (Long) fieldValue;
+                    long nanoEpochSeconds = nanoEpochNanoSeconds / 1_000_000_000;
+                    long nanoEpochNanoOffset = nanoEpochNanoSeconds % 1_000_000_000;
+                    LocalDateTime nanoDt = LocalDateTime.ofInstant(Instant.ofEpochSecond(nanoEpochSeconds, nanoEpochNanoOffset), ZoneOffset.UTC);
+                    return nanoDt.toString();
                 case "io.debezium.data.Bits":
                     BitSet bs = Bits.toBitSet(null, (byte[]) fieldValue);
                     StringBuilder s = new StringBuilder();
