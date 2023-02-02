@@ -5,6 +5,7 @@
  */
 package io.debezium.server.ybexporter;
 
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -56,7 +57,8 @@ public class YugabyteDialectConverter {
                     case "PATH":
                     case "POLYGON":
                     case "CIRCLE":
-                        return new String((byte[]) fieldValue);
+                        byte[] byteArr = ((ByteBuffer) fieldValue).array();
+                        return new String((byte[]) byteArr);
                 }
             }
         }
@@ -92,6 +94,7 @@ public class YugabyteDialectConverter {
                     LocalDateTime nanoDt = LocalDateTime.ofInstant(Instant.ofEpochSecond(nanoEpochSeconds, nanoEpochNanoOffset), ZoneOffset.UTC);
                     return nanoDt.toString();
                 case "io.debezium.data.Bits":
+                    // byte[] byteArr = ((ByteBuffer) fieldValue).array();
                     BitSet bs = Bits.toBitSet(null, (byte[]) fieldValue);
                     StringBuilder s = new StringBuilder();
                     for (int i = bs.length() - 1; i >= 0; i--) {
@@ -119,9 +122,14 @@ public class YugabyteDialectConverter {
             case BYTES:
                 StringBuilder hexString = new StringBuilder();
                 hexString.append("\\x");
-                for (byte b : (byte[]) fieldValue) {
+                byte[] byteArr = ((ByteBuffer) fieldValue).array();
+                for (byte b : (byte[]) byteArr) {
                     hexString.append(String.format("%02x", b));
                 }
+                // ByteBuffer byteBuffer = (ByteBuffer) fieldValue;
+                // while (byteBuffer.hasRemaining()) {
+                // hexString.append(String.format("%02x", byteBuffer.get()));
+                // }
                 return hexString.toString();
             case MAP:
                 StringBuilder mapString = new StringBuilder();

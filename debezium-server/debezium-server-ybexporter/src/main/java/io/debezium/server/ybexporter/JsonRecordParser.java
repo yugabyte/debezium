@@ -10,10 +10,10 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
+import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,18 +42,19 @@ class JsonRecordParser implements RecordParser {
     @Override
     public Record parseRecord(Object keyObj, Object valueObj) {
         try {
-            String jsonValue = valueObj.toString();
-            String jsonKey = null;
-            if (keyObj != null) {
-                jsonKey = keyObj.toString();
-            }
-            LOGGER.debug("Parsing key={}, value={}", jsonKey, jsonValue);
+            // String jsonValue = valueObj.toString();
+            // String jsonKey = null;
+            // if (keyObj != null) {
+            // jsonKey = keyObj.toString();
+            // }
+            // LOGGER.debug("Parsing key={}, value={}", jsonKey, jsonValue);
 
             var r = new Record();
 
             // Deserialize to Connect object
-            SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
-            Struct value = (Struct) valueConnectObject.value();
+            // SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
+            // Struct value = (Struct) valueConnectObject.value();
+            Struct value = (Struct) ((SourceRecord) valueObj).value();
 
             Struct source = value.getStruct("source");
             r.op = value.getString("op");
@@ -63,9 +64,10 @@ class JsonRecordParser implements RecordParser {
             parseTable(value, source, r);
 
             // Parse key and values
-            if (jsonKey != null) {
-                SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
-                Struct key = (Struct) keyConnectObject.value();
+            if (keyObj != null) {
+                // SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
+                // Struct key = (Struct) keyConnectObject.value();
+                Struct key = (Struct) ((SourceRecord) valueObj).key();
                 parseKeyFields(key, r);
             }
             parseValueFields(value, r);
