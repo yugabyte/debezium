@@ -1,4 +1,4 @@
-.PHONY: debezium debezium-server yb-exporter
+.PHONY: debezium debezium-server yb-exporter debezium-server-core
 
 debezium:
 	mvn clean install -Pquick

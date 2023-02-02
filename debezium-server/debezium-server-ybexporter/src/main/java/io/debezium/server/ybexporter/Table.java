@@ -16,7 +16,8 @@ public class Table {
 
     @Override
     public String toString() {
-        return String.format("%s-%s-%s", dbName, schemaName, tableName);
+        return dbName + "-" + schemaName + "-" + tableName;
+//        return String.format("%s-%s-%s", dbName, schemaName, tableName);
     }
 
     public ArrayList<String> getColumns() {
