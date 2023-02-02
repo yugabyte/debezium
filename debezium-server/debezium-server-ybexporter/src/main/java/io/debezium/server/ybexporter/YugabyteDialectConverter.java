@@ -23,7 +23,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.data.Bits;
-import io.debezium.data.geometry.Point;
 
 public class YugabyteDialectConverter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDialectConverter.class);
@@ -102,21 +101,21 @@ public class YugabyteDialectConverter {
                     }
                     return s.toString();
                 case "io.debezium.data.geometry.Point":
-//                    Struct ptStruct = (Struct) fieldValue;
-//                    double[] point = Point.parseWKBPoint(ptStruct.getBytes("wkb"));
-//                    return String.format("(%f,%f)", point[0], point[1]);
+                    // Struct ptStruct = (Struct) fieldValue;
+                    // double[] point = Point.parseWKBPoint(ptStruct.getBytes("wkb"));
+                    // return String.format("(%f,%f)", point[0], point[1]);
                 case "io.debezium.data.geometry.Geometry":
                 case "io.debezium.data.geometry.Geography":
                     Struct geometryStruct = (Struct) fieldValue;
                     byte[] wkb = (byte[]) geometryStruct.get("wkb");
                     return bytesToHex(wkb);
 
-//                    StringBuilder hexString = new StringBuilder();
-//                    // hexString.append("\\x");
-//                    for (byte b : (byte[]) geometryStruct.get("wkb")) {
-//                        hexString.append(String.format("%02x", b));
-//                    }
-//                    return hexString.toString();
+                // StringBuilder hexString = new StringBuilder();
+                // // hexString.append("\\x");
+                // for (byte b : (byte[]) geometryStruct.get("wkb")) {
+                // hexString.append(String.format("%02x", b));
+                // }
+                // return hexString.toString();
 
             }
         }
@@ -128,14 +127,14 @@ public class YugabyteDialectConverter {
                 byte[] byteArr = ((ByteBuffer) fieldValue).array();
                 return bytesToHex(byteArr);
 
-//                for (byte b : (byte[]) byteArr) {
-//                    hexString.append(String.format("%02x", b));
-//                }
-                // ByteBuffer byteBuffer = (ByteBuffer) fieldValue;
-                // while (byteBuffer.hasRemaining()) {
-                // hexString.append(String.format("%02x", byteBuffer.get()));
-                // }
-//                return hexString.toString();
+            // for (byte b : (byte[]) byteArr) {
+            // hexString.append(String.format("%02x", b));
+            // }
+            // ByteBuffer byteBuffer = (ByteBuffer) fieldValue;
+            // while (byteBuffer.hasRemaining()) {
+            // hexString.append(String.format("%02x", byteBuffer.get()));
+            // }
+            // return hexString.toString();
             case MAP:
                 StringBuilder mapString = new StringBuilder();
                 for (Map.Entry<String, String> entry : ((HashMap<String, String>) fieldValue).entrySet()) {
@@ -172,6 +171,7 @@ public class YugabyteDialectConverter {
     }
 
     private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+
     private static String bytesToHex(byte[] bytes) {
         char[] hexChars = new char[bytes.length * 2];
         for (int j = 0; j < bytes.length; j++) {
