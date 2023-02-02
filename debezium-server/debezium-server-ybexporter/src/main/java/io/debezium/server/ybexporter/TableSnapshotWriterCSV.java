@@ -5,6 +5,7 @@
  */
 package io.debezium.server.ybexporter;
 
+import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -28,7 +29,8 @@ public class TableSnapshotWriterCSV implements RecordWriter {
         var fileName = getFullFileNameForTable();
         try {
             var f = new FileWriter(fileName);
-            csvPrinter = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
+            var bufferedWriter = new BufferedWriter(f);
+            csvPrinter = new CSVPrinter(bufferedWriter, CSVFormat.POSTGRESQL_CSV);
             ArrayList<String> cols = t.getColumns();
             String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
             LOGGER.debug("header = {}", header);
