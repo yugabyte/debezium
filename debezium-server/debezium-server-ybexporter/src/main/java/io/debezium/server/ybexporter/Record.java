@@ -23,4 +23,12 @@ public class Record {
     public ArrayList<Object> getValueFieldValues() {
         return new ArrayList<>(valueFields.values());
     }
+
+    public void clear(){
+        t = null;
+        snapshot = "";
+        op = "";
+        keyFields.clear();
+        valueFields.clear();
+    }
 }

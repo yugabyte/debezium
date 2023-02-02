@@ -125,7 +125,7 @@ public class YugabyteDialectConverter {
                 StringBuilder hexString = new StringBuilder();
                 hexString.append("\\x");
                 byte[] byteArr = ((ByteBuffer) fieldValue).array();
-                return bytesToHex(byteArr);
+                return hexString + bytesToHex(byteArr);
 
             // for (byte b : (byte[]) byteArr) {
             // hexString.append(String.format("%02x", b));
