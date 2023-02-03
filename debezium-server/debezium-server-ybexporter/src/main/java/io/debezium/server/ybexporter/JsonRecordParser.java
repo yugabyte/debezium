@@ -93,10 +93,7 @@ class JsonRecordParser implements RecordParser {
         Table t = tableMap.get(tableIdentifier);
         if (t == null) {
             // create table
-            t = new Table();
-            t.dbName = dbName;
-            t.schemaName = schemaName;
-            t.tableName = tableName;
+            t = new Table(dbName, schemaName, tableName);
 
             // parse fields
             Struct afterStruct = value.getStruct("after");
