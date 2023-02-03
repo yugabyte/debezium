@@ -111,7 +111,7 @@ class JsonRecordParser implements RecordParser {
     protected void parseKeyFields(Struct key, Record r) {
         for (Field f : key.schema().fields()) {
             Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
-            r.keyFields.put(f.name(), fieldValue);
+            r.addKeyField(f.name(), fieldValue);
         }
     }
 
@@ -135,7 +135,7 @@ class JsonRecordParser implements RecordParser {
                 }
             }
             Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
-            r.valueFields.put(f.name(), fieldValue);
+            r.addValueField(f.name(), fieldValue);
         }
     }
 

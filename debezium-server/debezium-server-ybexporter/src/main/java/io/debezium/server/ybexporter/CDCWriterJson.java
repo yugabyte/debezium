@@ -56,14 +56,22 @@ public class CDCWriterJson implements RecordWriter {
         HashMap<String, Object> key = new HashMap<>();
         HashMap<String, Object> fields = new HashMap<>();
 
-        for (var entry : r.keyFields.entrySet()) {
-            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(entry.getValue());
-            key.put(entry.getKey(), formattedVal);
+        // for (var entry : r.keyFields.entrySet()) {
+        // String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(entry.getValue());
+        // key.put(entry.getKey(), formattedVal);
+        // }
+        for (int i = 0; i < r.keyValues.size(); i++) {
+            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(r.keyValues.get(i));
+            fields.put(r.keyColumns.get(i), formattedVal);
         }
 
-        for (var entry : r.valueFields.entrySet()) {
-            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(entry.getValue());
-            fields.put(entry.getKey(), formattedVal);
+        // for (var entry : r.valueFields.entrySet()) {
+        // String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(entry.getValue());
+        // fields.put(entry.getKey(), formattedVal);
+        // }
+        for (int i = 0; i < r.valueValues.size(); i++) {
+            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(r.valueValues.get(i));
+            fields.put(r.valueColumns.get(i), formattedVal);
         }
 
         HashMap<String, Object> cdcInfo = new HashMap<>();
