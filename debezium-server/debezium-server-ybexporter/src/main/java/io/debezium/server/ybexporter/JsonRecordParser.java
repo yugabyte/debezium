@@ -122,7 +122,6 @@ class JsonRecordParser implements RecordParser {
      * the before and after structs.
      */
     protected void parseValueFields(Struct value, Record r) {
-        Struct before = value.getStruct("before");
         Struct after = value.getStruct("after");
         if (after == null) {
             return;
@@ -130,6 +129,7 @@ class JsonRecordParser implements RecordParser {
         for (Field f : after.schema().fields()) {
             if (r.op.equals("u")) {
                 // TODO: error handle before is NULL
+                Struct before = value.getStruct("before");
                 if (Objects.equals(after.get(f), before.get(f))) {
                     // no need to record this as field is unchanged
                     continue;
