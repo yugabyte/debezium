@@ -21,6 +21,7 @@ class JsonRecordParser implements RecordParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(JsonRecordParser.class);
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
+    Record r = new Record();
 
     public JsonRecordParser(Map<String, Table> tblMap) {
         tableMap = tblMap;
@@ -49,7 +50,7 @@ class JsonRecordParser implements RecordParser {
             // }
             // LOGGER.debug("Parsing key={}, value={}", jsonKey, jsonValue);
 
-            var r = new Record();
+            r.clear();
 
             // Deserialize to Connect object
             // SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
