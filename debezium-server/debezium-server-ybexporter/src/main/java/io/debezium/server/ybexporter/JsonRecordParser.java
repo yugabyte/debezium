@@ -22,30 +22,11 @@ class JsonRecordParser implements RecordParser {
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
 
-    private Record r;
-
-    private Struct value;
-    private Struct key;
-    private Struct source;
-    private Struct before;
-    private Struct after;
-    String dbName;
-    String schemaName;
-    String tableName;
-    String tableIdentifier;
-
-    Table t;
-
     public JsonRecordParser(Map<String, Table> tblMap) {
         tableMap = tblMap;
         jsonConverter = new JsonConverter();
         Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
         jsonConverter.configure(jsonConfig, false);
-        r = new Record();
-    }
-
-    private void clearRecord(){
-        r.clear();
     }
 
     /**
@@ -67,19 +48,18 @@ class JsonRecordParser implements RecordParser {
             // jsonKey = keyObj.toString();
             // }
             // LOGGER.debug("Parsing key={}, value={}", jsonKey, jsonValue);
-            clearRecord();
+
+            var r = new Record();
 
             // Deserialize to Connect object
             // SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
             // Struct value = (Struct) valueConnectObject.value();
-            value = (Struct) ((SourceRecord) valueObj).value();
+            Struct value = (Struct) ((SourceRecord) valueObj).value();
 
-            source = value.getStruct("source");
+            Struct source = value.getStruct("source");
             r.op = value.getString("op");
             r.snapshot = source.getString("snapshot");
 
-            before = value.getStruct("before");
-            after = value.getStruct("after");
             // Parse table/schema the first time to be able to format specific field values
             parseTable(value, source, r);
 
@@ -87,7 +67,7 @@ class JsonRecordParser implements RecordParser {
             if (keyObj != null) {
                 // SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
                 // Struct key = (Struct) keyConnectObject.value();
-                key = (Struct) ((SourceRecord) valueObj).key();
+                Struct key = (Struct) ((SourceRecord) valueObj).key();
                 parseKeyFields(key, r);
             }
             parseValueFields(value, r);
@@ -101,15 +81,15 @@ class JsonRecordParser implements RecordParser {
     }
 
     protected void parseTable(Struct value, Struct sourceNode, Record r) {
-        dbName = sourceNode.getString("db");
-        schemaName = "";
+        String dbName = sourceNode.getString("db");
+        String schemaName = "";
         if (sourceNode.schema().field("schema") != null) {
             schemaName = sourceNode.getString("schema");
         }
-        tableName = sourceNode.getString("table");
-        tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
+        String tableName = sourceNode.getString("table");
+        var tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
 
-        t = tableMap.get(tableIdentifier);
+        Table t = tableMap.get(tableIdentifier);
         if (t == null) {
             // create table
             t = new Table();
@@ -118,7 +98,8 @@ class JsonRecordParser implements RecordParser {
             t.tableName = tableName;
 
             // parse fields
-            for (Field f : after.schema().fields()) {
+            Struct afterStruct = value.getStruct("after");
+            for (Field f : afterStruct.schema().fields()) {
                 t.fieldSchemas.put(f.name(), f);
             }
 
@@ -140,6 +121,8 @@ class JsonRecordParser implements RecordParser {
      * the before and after structs.
      */
     protected void parseValueFields(Struct value, Record r) {
+        Struct before = value.getStruct("before");
+        Struct after = value.getStruct("after");
         if (after == null) {
             return;
         }
@@ -151,7 +134,8 @@ class JsonRecordParser implements RecordParser {
                     continue;
                 }
             }
-            r.valueFields.put(f.name(), YugabyteDialectConverter.fromConnect(f, after.get(f)));
+            Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
+            r.valueFields.put(f.name(), fieldValue);
         }
     }
 
