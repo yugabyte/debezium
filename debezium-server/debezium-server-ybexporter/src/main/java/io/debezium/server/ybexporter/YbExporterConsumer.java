@@ -100,6 +100,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             RecordWriter writer = getWriterForRecord(r);
             writer.writeRecord(r);
             // Handle snapshot->cdc transition
+            // String snapshot = ((Struct) ((SourceRecord) objVal).value()).getStruct("source").getString("snapshot");
             if (r.snapshot.equals("last")) {
                 handleSnapshotComplete();
             }

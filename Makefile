@@ -1,4 +1,4 @@
-.PHONY: debezium debezium-server yb-exporter debezium-server-core
+.PHONY: debezium debezium-server yb-exporter debezium-server-core postgres-connector
 
 debezium:
 	mvn clean install -Pquick
@@ -16,3 +16,8 @@ debezium-server-core:
 yb-exporter:
 	mvn clean install -Pquick -pl :debezium-server-ybexporter; \
 	cp debezium-server/debezium-server-ybexporter/target/debezium-server-ybexporter-2.1.0-SNAPSHOT.jar debezium-server/debezium-server-dist/target/debezium-server/lib/;
+
+postgres-connector:
+	mvn clean install -Pquick -pl :debezium-connector-postgres; \
+	cp debezium-connector-postgres/target/debezium-connector-postgres-2.1.0-SNAPSHOT.jar debezium-server/debezium-server-dist/target/debezium-server/lib/;
+

@@ -15,12 +15,13 @@ public class Table {
     public LinkedHashMap<String, Field> fieldSchemas = new LinkedHashMap<>();
     private String asString = "";
 
-    public Table(String _dbName, String _schemaName, String _tableName){
-        dbName=_dbName;
+    public Table(String _dbName, String _schemaName, String _tableName) {
+        dbName = _dbName;
         schemaName = _schemaName;
         tableName = _tableName;
         asString = dbName + "-" + schemaName + "-" + tableName;
     }
+
     @Override
     public String toString() {
         return asString;

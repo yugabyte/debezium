@@ -19,7 +19,7 @@ public class Record {
     public ArrayList<String> valueColumns = new ArrayList<>();
     public ArrayList<Object> valueValues = new ArrayList<>();
 
-    public void clear(){
+    public void clear() {
         t = null;
         snapshot = null;
         op = null;
@@ -28,6 +28,7 @@ public class Record {
         valueColumns.clear();
         valueValues.clear();
     }
+
     public String getTableIdentifier() {
         return t.toString();
     }
