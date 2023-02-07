@@ -62,9 +62,11 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         while (true) {
             for (RecordWriter writer : snapshotWriters.values()) {
                 writer.flush();
+                writer.sync();
             }
             if (cdcWriter != null) {
                 cdcWriter.flush();
+                cdcWriter.sync();
             }
             // TODO: doing more than flushing files to disk. maybe move this call to another thread?
             if (exportStatus != null) {

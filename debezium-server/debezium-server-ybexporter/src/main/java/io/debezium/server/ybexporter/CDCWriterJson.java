@@ -102,4 +102,9 @@ public class CDCWriterJson implements RecordWriter {
             throw new RuntimeException(e);
         }
     }
+
+    @Override
+    public void sync() {
+        // TODO: fsync file similar to snapshot writer.
+    }
 }
