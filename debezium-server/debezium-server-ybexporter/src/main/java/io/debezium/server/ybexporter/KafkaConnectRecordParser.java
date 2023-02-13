@@ -17,13 +17,13 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class JsonRecordParser implements RecordParser {
-    private static final Logger LOGGER = LoggerFactory.getLogger(JsonRecordParser.class);
+class KafkaConnectRecordParser implements RecordParser {
+    private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConnectRecordParser.class);
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
     Record r = new Record();
 
-    public JsonRecordParser(Map<String, Table> tblMap) {
+    public KafkaConnectRecordParser(Map<String, Table> tblMap) {
         tableMap = tblMap;
         jsonConverter = new JsonConverter();
         Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");

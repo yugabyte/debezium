@@ -105,12 +105,6 @@ public class DebeziumServer {
     @SuppressWarnings("unchecked")
     @PostConstruct
     public void start() {
-        try {
-            Thread.sleep(5000);
-        }
-        catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
         final Config config = loadConfigOrDie();
         final String name = config.getValue(PROP_SINK_TYPE, String.class);
 

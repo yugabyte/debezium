@@ -43,7 +43,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
 
-        parser = new JsonRecordParser(tableMap);
+        parser = new KafkaConnectRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
         if (exportStatus.getMode() != null && exportStatus.getMode().equals(ExportMode.STREAMING)) {
             handleSnapshotComplete();
