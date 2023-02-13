@@ -5,14 +5,12 @@
  */
 package io.debezium.server.ybexporter;
 
-
 import java.io.BufferedWriter;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.SyncFailedException;
-
 import java.util.ArrayList;
 
 import org.apache.commons.csv.CSVFormat;
@@ -39,9 +37,10 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             fd = fos.getFD();
             var f = new FileWriter(fd);
             var bufferedWriter = new BufferedWriter(f);
-            csvPrinter = new CSVPrinter(bufferedWriter, CSVFormat.POSTGRESQL_TEXT);
+            CSVFormat fmt = CSVFormat.POSTGRESQL_CSV;
+            csvPrinter = new CSVPrinter(bufferedWriter, fmt);
             ArrayList<String> cols = t.getColumns();
-            String header = String.join(CSVFormat.POSTGRESQL_TEXT.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_TEXT.getRecordSeparator();
+            String header = String.join(fmt.getDelimiterString(), cols) + fmt.getRecordSeparator();
             LOGGER.debug("header = {}", header);
             f.write(header);
             es = ExportStatus.getInstance(dataDir);
