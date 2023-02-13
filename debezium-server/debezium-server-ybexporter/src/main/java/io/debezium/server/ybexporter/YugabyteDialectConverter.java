@@ -56,9 +56,8 @@ public class YugabyteDialectConverter {
                     case "PATH":
                     case "POLYGON":
                     case "CIRCLE":
-                        // TODO: find faster way to convert to string.
                         byte[] byteArr = ((ByteBuffer) fieldValue).array();
-                        return new String((byte[]) byteArr);
+                        return new String(byteArr);
                 }
             }
         }
@@ -124,11 +123,16 @@ public class YugabyteDialectConverter {
                 for (Map.Entry<String, String> entry : ((HashMap<String, String>) fieldValue).entrySet()) {
                     String key = entry.getKey();
                     String val = entry.getValue();
-                    // TODO: get rid of string.format
-                    mapString.append(String.format("\"%s\" => \"%s\",", key, val));
+                    mapString.append("\"");
+                    mapString.append(key);
+                    mapString.append("\"");
+                    mapString.append(" => ");
+                    mapString.append("\"");
+                    mapString.append(val);
+                    mapString.append("\"");
+                    mapString.append(",");
                 }
                 return mapString.toString().substring(0, mapString.length() - 1);
-
         }
 
         return fieldValue;
@@ -146,8 +150,7 @@ public class YugabyteDialectConverter {
             // escape single quotes
             String formattedVal = value.toString().replace("'", "''");
             // single quote strings.
-            // TODO: get rid of string.format
-            formattedVal = String.format("'%s'", formattedVal);
+            formattedVal = "'" + formattedVal + "'";
             return formattedVal;
         }
         return value.toString();
