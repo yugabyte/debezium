@@ -56,6 +56,7 @@ public class YugabyteDialectConverter {
                     case "PATH":
                     case "POLYGON":
                     case "CIRCLE":
+                        // TODO: find faster way to convert to string.
                         byte[] byteArr = ((ByteBuffer) fieldValue).array();
                         return new String((byte[]) byteArr);
                 }
@@ -93,7 +94,6 @@ public class YugabyteDialectConverter {
                     LocalDateTime nanoDt = LocalDateTime.ofInstant(Instant.ofEpochSecond(nanoEpochSeconds, nanoEpochNanoOffset), ZoneOffset.UTC);
                     return nanoDt.toString();
                 case "io.debezium.data.Bits":
-                    // byte[] byteArr = ((ByteBuffer) fieldValue).array();
                     BitSet bs = Bits.toBitSet(null, (byte[]) fieldValue);
                     StringBuilder s = new StringBuilder();
                     for (int i = bs.length() - 1; i >= 0; i--) {
@@ -101,6 +101,7 @@ public class YugabyteDialectConverter {
                     }
                     return s.toString();
                 case "io.debezium.data.geometry.Point":
+                    // TODO: figure out if we want to represent it as a postgres native point or postgis geometry point.
                     // Struct ptStruct = (Struct) fieldValue;
                     // double[] point = Point.parseWKBPoint(ptStruct.getBytes("wkb"));
                     // return String.format("(%f,%f)", point[0], point[1]);
@@ -109,14 +110,6 @@ public class YugabyteDialectConverter {
                     Struct geometryStruct = (Struct) fieldValue;
                     byte[] wkb = (byte[]) geometryStruct.get("wkb");
                     return bytesToHex(wkb);
-
-                // StringBuilder hexString = new StringBuilder();
-                // // hexString.append("\\x");
-                // for (byte b : (byte[]) geometryStruct.get("wkb")) {
-                // hexString.append(String.format("%02x", b));
-                // }
-                // return hexString.toString();
-
             }
         }
         Type type = field.schema().type();
@@ -126,26 +119,15 @@ public class YugabyteDialectConverter {
                 hexString.append("\\x");
                 byte[] byteArr = ((ByteBuffer) fieldValue).array();
                 return bytesToHex(byteArr);
-
-            // for (byte b : (byte[]) byteArr) {
-            // hexString.append(String.format("%02x", b));
-            // }
-            // ByteBuffer byteBuffer = (ByteBuffer) fieldValue;
-            // while (byteBuffer.hasRemaining()) {
-            // hexString.append(String.format("%02x", byteBuffer.get()));
-            // }
-            // return hexString.toString();
             case MAP:
                 StringBuilder mapString = new StringBuilder();
                 for (Map.Entry<String, String> entry : ((HashMap<String, String>) fieldValue).entrySet()) {
                     String key = entry.getKey();
                     String val = entry.getValue();
+                    // TODO: get rid of string.format
                     mapString.append(String.format("\"%s\" => \"%s\",", key, val));
                 }
                 return mapString.toString().substring(0, mapString.length() - 1);
-            // return fieldValue.toString().replace("=", "=>")
-            // .replace("{", "")
-            // .replace("}", "");
 
         }
 
@@ -164,14 +146,17 @@ public class YugabyteDialectConverter {
             // escape single quotes
             String formattedVal = value.toString().replace("'", "''");
             // single quote strings.
+            // TODO: get rid of string.format
             formattedVal = String.format("'%s'", formattedVal);
             return formattedVal;
         }
         return value.toString();
     }
 
+    /**
+     * Credits : https://stackoverflow.com/a/9855338
+     */
     private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-
     private static String bytesToHex(byte[] bytes) {
         char[] hexChars = new char[bytes.length * 2];
         for (int j = 0; j < bytes.length; j++) {
