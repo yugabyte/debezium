@@ -12,18 +12,25 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.SyncFailedException;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVPrinter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import de.siegmar.fastcsv.writer.CsvWriter;
+import de.siegmar.fastcsv.writer.LineDelimiter;
+import de.siegmar.fastcsv.writer.QuoteStrategy;
 
 public class TableSnapshotWriterCSV implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
     private ExportStatus es;
     private String dataDir;
     private Table t;
-    private CSVPrinter csvPrinter;
+    // private CSVPrinter csvPrinter;
+    private CsvWriter csvWriter;
+    BufferedWriter bufferedWriter;
     private FileOutputStream fos;
     private FileDescriptor fd;
 
@@ -36,12 +43,23 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             fos = new FileOutputStream(fileName);
             fd = fos.getFD();
             var f = new FileWriter(fd);
-            var bufferedWriter = new BufferedWriter(f);
-            csvPrinter = new CSVPrinter(bufferedWriter, CSVFormat.POSTGRESQL_TEXT);
+            bufferedWriter = new BufferedWriter(f);
+
+            csvWriter = CsvWriter.builder()
+                    .fieldSeparator(',')
+                    .quoteCharacter('"')
+                    .quoteStrategy(QuoteStrategy.REQUIRED)
+                    .lineDelimiter(LineDelimiter.LF)
+                    .build(bufferedWriter);
+
+            // CSVFormat fmt = CSVFormat.POSTGRESQL_CSV;
+            // csvPrinter = new CSVPrinter(bufferedWriter, fmt);
             ArrayList<String> cols = t.getColumns();
-            String header = String.join(CSVFormat.POSTGRESQL_TEXT.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_TEXT.getRecordSeparator();
-            LOGGER.debug("header = {}", header);
-            f.write(header);
+            // String header = String.join(fmt.getDelimiterString(), cols) + fmt.getRecordSeparator();
+            // LOGGER.debug("header = {}", header);
+            // f.write(header);
+            csvWriter.writeRow(cols);
+
             es = ExportStatus.getInstance(dataDir);
             es.updateTableSnapshotWriterCreated(tbl, getFilenameForTable());
 
@@ -51,14 +69,21 @@ public class TableSnapshotWriterCSV implements RecordWriter {
         }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void writeRecord(Record r) {
         // TODO: assert r.table = table
         try {
-            csvPrinter.printRecord(r.getValueFieldValues());
+            // csvPrinter.printRecord(r.getValueFieldValues());
+            ArrayList<Object> rowValues = r.getValueFieldValues();
+            List<String> rowValuesStrings = rowValues.stream()
+                    .map(object -> Objects.toString(object, null))
+                    .collect(Collectors.toList());
+
+            csvWriter.writeRow(rowValuesStrings);
             es.updateTableSnapshotRecordWritten(t);
         }
-        catch (IOException e) {
+        catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
@@ -74,7 +99,8 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     @Override
     public void flush() {
         try {
-            csvPrinter.flush();
+            // csvPrinter.flush();
+            bufferedWriter.flush();
         }
         catch (IOException e) {
             throw new RuntimeException(e);
@@ -85,13 +111,17 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     public void close() {
         try {
             String eof = "\\.";
-            csvPrinter.getOut().append(eof);
-            csvPrinter.println();
-            csvPrinter.println();
+            // csvPrinter.getOut().append(eof);
+            // csvPrinter.println();
+            // csvPrinter.println();
+            bufferedWriter.append(eof);
+            bufferedWriter.append("\n");
+            bufferedWriter.append("\n");
+
             flush();
             sync();
-            csvPrinter.close(true);
-
+            // csvPrinter.close(true);
+            csvWriter.close();
             fos.close();
             LOGGER.info("Closing snapshot file for table {}", t);
         }
