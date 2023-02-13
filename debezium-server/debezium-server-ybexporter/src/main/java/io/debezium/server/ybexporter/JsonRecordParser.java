@@ -55,6 +55,7 @@ class JsonRecordParser implements RecordParser {
             SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
             Struct value = (Struct) valueConnectObject.value();
 
+
             Struct source = value.getStruct("source");
             r.op = value.getString("op");
             r.snapshot = source.getString("snapshot");
@@ -84,6 +85,7 @@ class JsonRecordParser implements RecordParser {
         if (sourceNode.schema().field("schema") != null) {
             schemaName = sourceNode.getString("schema");
         }
+
         String tableName = sourceNode.getString("table");
         var tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
 

@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import io.debezium.data.Bits;
 import io.debezium.data.geometry.Point;
 
+
 public class YugabyteDialectConverter {
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDialectConverter.class);
 
@@ -111,7 +112,6 @@ public class YugabyteDialectConverter {
                         hexString.append(String.format("%02x", b));
                     }
                     return hexString.toString();
-
             }
         }
         Type type = field.schema().type();

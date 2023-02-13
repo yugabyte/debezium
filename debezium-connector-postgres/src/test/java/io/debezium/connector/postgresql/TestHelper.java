@@ -454,7 +454,7 @@ public final class TestHelper {
                 config.hStoreHandlingMode(),
                 config.binaryHandlingMode(),
                 config.intervalHandlingMode(),
-                config.getUnavailableValuePlaceholder(),
+                new UnchangedToastedPlaceholder(config),
                 config.moneyFractionDigits());
     }
 }
