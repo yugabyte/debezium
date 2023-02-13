@@ -5,12 +5,14 @@
  */
 package io.debezium.server.ybexporter;
 
+
 import java.io.BufferedWriter;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.SyncFailedException;
+
 import java.util.ArrayList;
 
 import org.apache.commons.csv.CSVFormat;
@@ -88,10 +90,10 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             csvPrinter.getOut().append(eof);
             csvPrinter.println();
             csvPrinter.println();
+
             flush();
             sync();
             csvPrinter.close(true);
-
             fos.close();
             LOGGER.info("Closing snapshot file for table {}", t);
         }

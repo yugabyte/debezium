@@ -43,19 +43,11 @@ class JsonRecordParser implements RecordParser {
     @Override
     public Record parseRecord(Object keyObj, Object valueObj) {
         try {
-            // String jsonValue = valueObj.toString();
-            // String jsonKey = null;
-            // if (keyObj != null) {
-            // jsonKey = keyObj.toString();
-            // }
-            // LOGGER.debug("Parsing key={}, value={}", jsonKey, jsonValue);
-
             r.clear();
 
             // Deserialize to Connect object
-            // SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
-            // Struct value = (Struct) valueConnectObject.value();
             Struct value = (Struct) ((SourceRecord) valueObj).value();
+            Struct key = (Struct) ((SourceRecord) valueObj).key();
 
             Struct source = value.getStruct("source");
             r.op = value.getString("op");
@@ -65,10 +57,9 @@ class JsonRecordParser implements RecordParser {
             parseTable(value, source, r);
 
             // Parse key and values
-            if (keyObj != null) {
+            if (key != null) {
                 // SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
                 // Struct key = (Struct) keyConnectObject.value();
-                Struct key = (Struct) ((SourceRecord) valueObj).key();
                 parseKeyFields(key, r);
             }
             parseValueFields(value, r);
@@ -110,6 +101,7 @@ class JsonRecordParser implements RecordParser {
         for (Field f : key.schema().fields()) {
             Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
             r.addKeyField(f.name(), fieldValue);
+
         }
     }
 

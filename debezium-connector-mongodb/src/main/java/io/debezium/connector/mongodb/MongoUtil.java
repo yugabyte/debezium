@@ -230,9 +230,9 @@ public class MongoUtil {
         return null;
     }
 
-    public static BsonDocument getOplogEntry(MongoClient primary, int sortOrder, Logger logger) throws MongoQueryException {
+    public static BsonDocument getOplogEntry(MongoClient client, int sortOrder, Logger logger) throws MongoQueryException {
         try {
-            MongoCollection<BsonDocument> oplog = primary.getDatabase("local").getCollection("oplog.rs", BsonDocument.class);
+            MongoCollection<BsonDocument> oplog = client.getDatabase("local").getCollection("oplog.rs", BsonDocument.class);
             return oplog.find().sort(new Document("$natural", sortOrder)).limit(1).first();
         }
         catch (MongoQueryException e) {
@@ -369,23 +369,22 @@ public class MongoUtil {
         return Strings.join(ADDRESS_DELIMITER, addresses);
     }
 
-    protected static ServerAddress getPrimaryAddress(MongoClient client) {
-
+    protected static ServerAddress getPreferredAddress(MongoClient client, ReadPreference preference) {
         ClusterDescription clusterDescription = clusterDescription(client);
 
-        if (!clusterDescription.hasReadableServer(ReadPreference.primaryPreferred())) {
+        if (!clusterDescription.hasReadableServer(preference)) {
             throw new DebeziumException("Unable to use cluster description from MongoDB connection: " + clusterDescription);
         }
 
-        List<ServerDescription> serverDescriptions = clusterDescription.getServerDescriptions();
+        List<ServerDescription> serverDescriptions = preference.choose(clusterDescription);
 
-        if (serverDescriptions == null || serverDescriptions.size() == 0) {
+        if (serverDescriptions.size() == 0) {
             throw new DebeziumException("Unable to read server descriptions from MongoDB connection (Null or empty list).");
         }
 
-        Optional<ServerDescription> primaryDescription = serverDescriptions.stream().filter(ServerDescription::isPrimary).findFirst();
+        Optional<ServerDescription> preferredDescription = serverDescriptions.stream().findFirst();
 
-        return primaryDescription
+        return preferredDescription
                 .map(ServerDescription::getAddress)
                 .map(address -> new ServerAddress(address.getHost(), address.getPort()))
                 .orElseThrow(() -> new DebeziumException("Unable to find primary from MongoDB connection, got '" + serverDescriptions + "'"));

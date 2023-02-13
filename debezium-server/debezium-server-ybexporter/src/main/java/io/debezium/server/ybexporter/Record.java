@@ -21,8 +21,8 @@ public class Record {
 
     public void clear() {
         t = null;
-        snapshot = null;
-        op = null;
+        snapshot = "";
+        op = "";
         keyColumns.clear();
         keyValues.clear();
         valueColumns.clear();
@@ -35,7 +35,6 @@ public class Record {
 
     public ArrayList<Object> getValueFieldValues() {
         return valueValues;
-        // return new ArrayList<>(valueFields.values());
     }
 
     public void addValueField(String key, Object value) {
