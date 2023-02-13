@@ -1,25 +1,31 @@
-debezium.format.value=json
+debezium.format.value=connect
+debezium.format.key=connect
 
 debezium.sink.type=ybexporter
 debezium.sink.ybexporter.dataDir=/tmp/export-dir
 
-debezium.source.max.batch.size=100
+#debezium.source.max.batch.size=100
 debezium.source.connector.class=io.debezium.connector.mysql.MySqlConnector
+debezium.source.topic.naming.strategy=io.debezium.server.ybexporter.DummyTopicNamingStrategy
+#debezium.source.snapshot.mode=initial_only
 debezium.source.offset.storage.file.filename=data/offsets.dat
 debezium.source.offset.flush.interval.ms=0
+
 debezium.source.database.hostname=localhost
 debezium.source.database.port=3306
 debezium.source.database.user=root
 debezium.source.database.password=root
 debezium.source.database.include.list=dbzmtest
 debezium.source.database.server.id=101
+
 debezium.source.table.include.list=dbzmtest.int_types
-#debezium.source.snapshot.mode=initial_only
 debezium.source.topic.prefix=tutorial
+
 debezium.source.decimal.handling.mode=string
 debezium.source.interval.handling.mode=string
 #debezium.source.include.unknown.datatypes=true
 #debezium.source.datatype.propagate.source.type=.*BOX.*,.*LINE.*,.*LSEG.*,.*PATH.*,.*POLYGON.*,.*CIRCLE.*
+
 debezium.source.schema.history.internal=io.debezium.storage.file.history.FileSchemaHistory
 debezium.source.schema.history.internal.file.filename=data/schema_history
 debezium.source.include.schema.changes=false
