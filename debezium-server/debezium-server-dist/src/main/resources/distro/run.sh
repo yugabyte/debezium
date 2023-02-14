@@ -25,6 +25,9 @@ if [[ "${ENABLE_DEBEZIUM_SCRIPTING}" == "true" ]]; then
     LIB_PATH=$LIB_PATH$PATH_SEP"lib_opt/*"
 fi
 
-
+JAVA_OPTS="-Xmx3G"
+ASYNC_PROFILER_PATH="/path/to/libasyncProfiler.so"
+PROFILER="-agentpath:${ASYNC_PROFILER_PATH}=start,event=cpu,file=profile.html"
+PROFILER="-XX:StartFlightRecording=disk=true,dumponexit=true,filename=flight.jfr"
 DEBUGGER="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
-exec "$JAVA_BINARY" $DEBEZIUM_OPTS $JAVA_OPTS -cp "$RUNNER"$PATH_SEP"conf"$PATH_SEP$LIB_PATH "$DEBUGGER" io.debezium.server.Main
+exec "$JAVA_BINARY" $DEBEZIUM_OPTS $JAVA_OPTS "$PROFILER" -cp "$RUNNER"$PATH_SEP"conf"$PATH_SEP$LIB_PATH "$DEBUGGER" io.debezium.server.Main
