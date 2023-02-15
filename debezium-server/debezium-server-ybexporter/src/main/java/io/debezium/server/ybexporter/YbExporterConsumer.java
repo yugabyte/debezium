@@ -84,7 +84,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     @Override
     public void handleBatch(List<ChangeEvent<Object, Object>> records, DebeziumEngine.RecordCommitter<ChangeEvent<Object, Object>> committer)
             throws InterruptedException {
-        LOGGER.info("Processing batch with {} records", records.size());
+//        LOGGER.info("Processing batch with {} records", records.size());
         for (ChangeEvent<Object, Object> record : records) {
             Object objKey = record.key();
             Object objVal = record.value();
@@ -128,6 +128,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void handleSnapshotComplete() {
+        LOGGER.info("Handling snapshot complete.");
         exportStatus.updateMode(ExportMode.STREAMING);
         closeSnapshotWriters();
         Thread.currentThread().interrupt();
