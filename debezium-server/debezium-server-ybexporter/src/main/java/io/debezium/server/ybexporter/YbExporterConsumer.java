@@ -96,7 +96,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
             // PARSE
             var r = parser.parseRecord(objKey, objVal);
-            // LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
+//            LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
 
             // WRITE
             RecordWriter writer = getWriterForRecord(r);
