@@ -6,8 +6,11 @@
 package io.debezium.server.ybexporter;
 
 import java.io.BufferedWriter;
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.SyncFailedException;
 import java.util.HashMap;
 
 import org.slf4j.Logger;
@@ -16,19 +19,23 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
-public class CDCWriterJson implements RecordWriter {
+public class StreamingWriterJson implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
     private static final String QUEUE_FILE_NAME = "queue.json";
     private String dataDir;
     private BufferedWriter writer;
     private ObjectWriter ow;
+    private FileOutputStream fos;
+    private FileDescriptor fd;
 
-    public CDCWriterJson(String datadirStr) {
+    public StreamingWriterJson(String datadirStr) {
         dataDir = datadirStr;
 
         var fileName = String.format("%s/%s", dataDir, QUEUE_FILE_NAME);
         try {
-            var f = new FileWriter(fileName, true);
+            fos = new FileOutputStream(fileName, true);
+            fd = fos.getFD();
+            var f = new FileWriter(fd);
             writer = new BufferedWriter(f);
 
         }
@@ -88,7 +95,10 @@ public class CDCWriterJson implements RecordWriter {
     @Override
     public void close() {
         try {
+            flush();
+            sync();
             writer.close();
+            fos.close();
         }
         catch (IOException e) {
             throw new RuntimeException(e);
@@ -97,7 +107,11 @@ public class CDCWriterJson implements RecordWriter {
 
     @Override
     public void sync() {
-        // TODO: fsync file similar to snapshot writer.
-        // Question: should we fsync on every write?
+        try {
+            fd.sync();
+        }
+        catch (SyncFailedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
