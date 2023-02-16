@@ -6,8 +6,11 @@
 package io.debezium.server.ybexporter;
 
 import java.io.BufferedWriter;
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.SyncFailedException;
 import java.util.HashMap;
 
 import org.slf4j.Logger;
@@ -16,19 +19,23 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
-public class CDCWriterJson implements RecordWriter {
+public class StreamingWriterJson implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
     private static final String QUEUE_FILE_NAME = "queue.json";
     private String dataDir;
     private BufferedWriter writer;
     private ObjectWriter ow;
+    private FileOutputStream fos;
+    private FileDescriptor fd;
 
-    public CDCWriterJson(String datadirStr) {
+    public StreamingWriterJson(String datadirStr) {
         dataDir = datadirStr;
 
         var fileName = String.format("%s/%s", dataDir, QUEUE_FILE_NAME);
         try {
-            var f = new FileWriter(fileName, true);
+            fos = new FileOutputStream(fileName, true);
+            fd = fos.getFD();
+            var f = new FileWriter(fd);
             writer = new BufferedWriter(f);
 
         }
@@ -56,14 +63,14 @@ public class CDCWriterJson implements RecordWriter {
         HashMap<String, Object> key = new HashMap<>();
         HashMap<String, Object> fields = new HashMap<>();
 
-        for (var entry : r.keyFields.entrySet()) {
-            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(entry.getValue());
-            key.put(entry.getKey(), formattedVal);
+        for (int i = 0; i < r.keyValues.size(); i++) {
+            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(r.keyValues.get(i));
+            fields.put(r.keyColumns.get(i), formattedVal);
         }
 
-        for (var entry : r.valueFields.entrySet()) {
-            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(entry.getValue());
-            fields.put(entry.getKey(), formattedVal);
+        for (int i = 0; i < r.valueValues.size(); i++) {
+            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(r.valueValues.get(i));
+            fields.put(r.valueColumns.get(i), formattedVal);
         }
 
         HashMap<String, Object> cdcInfo = new HashMap<>();
@@ -88,9 +95,22 @@ public class CDCWriterJson implements RecordWriter {
     @Override
     public void close() {
         try {
+            flush();
+            sync();
             writer.close();
+            fos.close();
         }
         catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void sync() {
+        try {
+            fd.sync();
+        }
+        catch (SyncFailedException e) {
             throw new RuntimeException(e);
         }
     }

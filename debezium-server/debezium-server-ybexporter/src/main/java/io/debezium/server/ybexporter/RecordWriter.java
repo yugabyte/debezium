@@ -11,4 +11,6 @@ public interface RecordWriter {
     void flush();
 
     void close();
+
+    void sync();
 }

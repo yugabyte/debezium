@@ -59,6 +59,8 @@ public class ReplicationMessageColumnValueResolver {
             case "bool":
                 return value.asBoolean();
 
+            case "ltree":
+                // https://issues.redhat.com/browse/DBZ-5778
             case "hstore":
                 return value.asString();
 
