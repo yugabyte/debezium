@@ -36,14 +36,14 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private Map<String, Table> tableMap = new HashMap<>();
     private RecordParser parser;
     private Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
-    private RecordWriter cdcWriter;
+    private RecordWriter streamingWriter;
     private ExportStatus exportStatus;
 
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
 
-        parser = new JsonRecordParser(tableMap);
+        parser = new KafkaConnectRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
         if (exportStatus.getMode() != null && exportStatus.getMode().equals(ExportMode.STREAMING)) {
             handleSnapshotComplete();
@@ -62,9 +62,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         while (true) {
             for (RecordWriter writer : snapshotWriters.values()) {
                 writer.flush();
-            }
-            if (cdcWriter != null) {
-                cdcWriter.flush();
+                writer.sync();
             }
             // TODO: doing more than flushing files to disk. maybe move this call to another thread?
             if (exportStatus != null) {
@@ -94,18 +92,19 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
             // PARSE
             var r = parser.parseRecord(objKey, objVal);
-            LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
+            // LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
 
             // WRITE
             RecordWriter writer = getWriterForRecord(r);
             writer.writeRecord(r);
             // Handle snapshot->cdc transition
-            if (r.snapshot.equals("last")) {
+            if ((r.snapshot != null) && (r.snapshot.equals("last"))) {
                 handleSnapshotComplete();
             }
 
             committer.markProcessed(record);
         }
+        handleBatchComplete();
         committer.markBatchFinished();
 
     }
@@ -120,13 +119,14 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             return writer;
         }
         else {
-            return cdcWriter;
+            return streamingWriter;
         }
     }
 
     private void handleSnapshotComplete() {
         exportStatus.updateMode(ExportMode.STREAMING);
         closeSnapshotWriters();
+        // Thread.currentThread().interrupt(); // For testing
         openCDCWriter();
     }
 
@@ -137,7 +137,26 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         snapshotWriters.clear();
     }
 
+    private void handleBatchComplete(){
+        flushSyncStreamingData();
+    }
+
+    /**
+     * At the end of batch, we sync streaming data to storage.
+     * This is inline with debezium behavior - https://debezium.io/documentation/reference/stable/development/engine.html#_handling_failures
+     * In case machine powers off before data is synced to storage, those events will be received again upon restart
+     * because debezium flushes its offsets information at the end of every batch.
+     */
+    private void flushSyncStreamingData() {
+        if (exportStatus.getMode().equals(ExportMode.STREAMING)) {
+            if (streamingWriter != null) {
+                streamingWriter.flush();
+                streamingWriter.sync();
+            }
+        }
+    }
+
     private void openCDCWriter() {
-        cdcWriter = new CDCWriterJson(dataDir);
+        streamingWriter = new StreamingWriterJson(dataDir);
     }
 }

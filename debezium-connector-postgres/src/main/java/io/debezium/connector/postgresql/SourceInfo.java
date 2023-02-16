@@ -7,10 +7,7 @@
 package io.debezium.connector.postgresql;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.debezium.annotation.NotThreadSafe;
@@ -166,21 +163,22 @@ public final class SourceInfo extends BaseSourceInfo {
 
     @Override
     public String sequence() {
-        List<String> sequence = new ArrayList<String>(2);
+        // List<String> sequence = new ArrayList<String>(2);
         String lastCommitLsn = (this.lastCommitLsn != null)
                 ? Long.toString(this.lastCommitLsn.asLong())
                 : null;
         String lsn = (this.lsn != null)
                 ? Long.toString(this.lsn.asLong())
                 : null;
-        sequence.add(lastCommitLsn);
-        sequence.add(lsn);
-        try {
-            return MAPPER.writeValueAsString(sequence);
-        }
-        catch (JsonProcessingException e) {
-            throw new IllegalStateException(e);
-        }
+        // sequence.add(lastCommitLsn);
+        // sequence.add(lsn);
+        return lastCommitLsn + "," + lsn;
+        // try {
+        // return MAPPER.writeValueAsString(sequence);
+        // }
+        // catch (JsonProcessingException e) {
+        // throw new IllegalStateException(e);
+        // }
     }
 
     @Override

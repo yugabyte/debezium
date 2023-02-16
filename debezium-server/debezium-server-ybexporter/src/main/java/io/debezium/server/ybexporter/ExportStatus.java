@@ -132,10 +132,7 @@ public class ExportStatus {
             var tablesJson = exportStatusJson.get("tables");
             for (var tableJson : tablesJson) {
                 // TODO: creating a duplicate table here. it will again be created when parsing a record of the table for the first time.
-                Table t = new Table();
-                t.dbName = tableJson.get("database_name").asText();
-                t.schemaName = tableJson.get("schema_name").asText();
-                t.tableName = tableJson.get("table_name").asText();
+                Table t = new Table(tableJson.get("database_name").asText(), tableJson.get("schema_name").asText(), tableJson.get("table_name").asText());
 
                 TableExportStatus tes = new TableExportStatus();
                 tes.exportedRowCountSnapshot = tableJson.get("exported_row_count").asInt();

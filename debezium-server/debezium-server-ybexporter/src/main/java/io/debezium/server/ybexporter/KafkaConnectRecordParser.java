@@ -10,19 +10,20 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
+import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class JsonRecordParser implements RecordParser {
-    private static final Logger LOGGER = LoggerFactory.getLogger(JsonRecordParser.class);
+class KafkaConnectRecordParser implements RecordParser {
+    private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConnectRecordParser.class);
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
+    Record r = new Record();
 
-    public JsonRecordParser(Map<String, Table> tblMap) {
+    public KafkaConnectRecordParser(Map<String, Table> tblMap) {
         tableMap = tblMap;
         jsonConverter = new JsonConverter();
         Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
@@ -42,18 +43,11 @@ class JsonRecordParser implements RecordParser {
     @Override
     public Record parseRecord(Object keyObj, Object valueObj) {
         try {
-            String jsonValue = valueObj.toString();
-            String jsonKey = keyObj.toString();
-            LOGGER.debug("Parsing key={}, value={}", jsonKey, jsonValue);
-
-            var r = new Record();
+            r.clear();
 
             // Deserialize to Connect object
-            SchemaAndValue valueConnectObject = jsonConverter.toConnectData("", jsonValue.getBytes());
-            Struct value = (Struct) valueConnectObject.value();
-
-            SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
-            Struct key = (Struct) keyConnectObject.value();
+            Struct value = (Struct) ((SourceRecord) valueObj).value();
+            Struct key = (Struct) ((SourceRecord) valueObj).key();
 
             Struct source = value.getStruct("source");
             r.op = value.getString("op");
@@ -63,7 +57,11 @@ class JsonRecordParser implements RecordParser {
             parseTable(value, source, r);
 
             // Parse key and values
-            parseKeyFields(key, r);
+            if (key != null) {
+                // SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
+                // Struct key = (Struct) keyConnectObject.value();
+                parseKeyFields(key, r);
+            }
             parseValueFields(value, r);
 
             return r;
@@ -76,17 +74,17 @@ class JsonRecordParser implements RecordParser {
 
     protected void parseTable(Struct value, Struct sourceNode, Record r) {
         String dbName = sourceNode.getString("db");
-        String schemaName = sourceNode.getString("schema");
+        String schemaName = "";
+        if (sourceNode.schema().field("schema") != null) {
+            schemaName = sourceNode.getString("schema");
+        }
         String tableName = sourceNode.getString("table");
         var tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
 
         Table t = tableMap.get(tableIdentifier);
         if (t == null) {
             // create table
-            t = new Table();
-            t.dbName = dbName;
-            t.schemaName = schemaName;
-            t.tableName = tableName;
+            t = new Table(dbName, schemaName, tableName);
 
             // parse fields
             Struct afterStruct = value.getStruct("after");
@@ -102,7 +100,8 @@ class JsonRecordParser implements RecordParser {
     protected void parseKeyFields(Struct key, Record r) {
         for (Field f : key.schema().fields()) {
             Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
-            r.keyFields.put(f.name(), fieldValue);
+            r.addKeyField(f.name(), fieldValue);
+
         }
     }
 
@@ -112,7 +111,6 @@ class JsonRecordParser implements RecordParser {
      * the before and after structs.
      */
     protected void parseValueFields(Struct value, Record r) {
-        Struct before = value.getStruct("before");
         Struct after = value.getStruct("after");
         if (after == null) {
             return;
@@ -120,13 +118,14 @@ class JsonRecordParser implements RecordParser {
         for (Field f : after.schema().fields()) {
             if (r.op.equals("u")) {
                 // TODO: error handle before is NULL
+                Struct before = value.getStruct("before");
                 if (Objects.equals(after.get(f), before.get(f))) {
                     // no need to record this as field is unchanged
                     continue;
                 }
             }
             Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
-            r.valueFields.put(f.name(), fieldValue);
+            r.addValueField(f.name(), fieldValue);
         }
     }
 

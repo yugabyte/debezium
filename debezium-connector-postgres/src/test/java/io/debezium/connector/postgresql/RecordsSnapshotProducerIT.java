@@ -467,6 +467,26 @@ public class RecordsSnapshotProducerIT extends AbstractRecordsProducerTest {
     }
 
     @Test
+    public void shouldGenerateSnapshotsForHstoresMap() throws Exception {
+        // PostGIS must not be used
+        TestHelper.dropAllSchemas();
+        TestHelper.executeDDL("postgres_create_tables.ddl");
+
+        // insert data for each of different supported types
+        TestHelper.execute(INSERT_HSTORE_TYPE_STMT);
+
+        // then start the producer and validate all records are there
+        buildNoStreamProducer(TestHelper.defaultConfig().with(PostgresConnectorConfig.HSTORE_HANDLING_MODE, PostgresConnectorConfig.HStoreHandlingMode.MAP));
+
+        TestConsumer consumer = testConsumer(1, "public", "Quoted__");
+        consumer.await(TestHelper.waitTimeForRecords() * 30, TimeUnit.SECONDS);
+
+        final Map<String, List<SchemaAndValueField>> expectedValuesByTopicName = Collect.hashMapOf("public.hstore_table", schemaAndValueFieldForMapEncodedHStoreType());
+
+        consumer.process(record -> assertReadRecord(record, expectedValuesByTopicName));
+    }
+
+    @Test
     @FixFor("DBZ-1163")
     public void shouldGenerateSnapshotForATableWithoutPrimaryKey() throws Exception {
         TestHelper.execute("insert into table_without_pk values(1, 1000)");

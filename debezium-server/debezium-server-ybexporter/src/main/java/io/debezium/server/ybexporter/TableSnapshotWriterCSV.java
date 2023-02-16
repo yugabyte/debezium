@@ -5,8 +5,12 @@
  */
 package io.debezium.server.ybexporter;
 
+import java.io.BufferedWriter;
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.SyncFailedException;
 import java.util.ArrayList;
 
 import org.apache.commons.csv.CSVFormat;
@@ -20,6 +24,8 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     private String dataDir;
     private Table t;
     private CSVPrinter csvPrinter;
+    private FileOutputStream fos;
+    private FileDescriptor fd;
 
     public TableSnapshotWriterCSV(String datadirStr, Table tbl) {
         dataDir = datadirStr;
@@ -27,10 +33,14 @@ public class TableSnapshotWriterCSV implements RecordWriter {
 
         var fileName = getFullFileNameForTable();
         try {
-            var f = new FileWriter(fileName);
-            csvPrinter = new CSVPrinter(f, CSVFormat.POSTGRESQL_CSV);
+            fos = new FileOutputStream(fileName);
+            fd = fos.getFD();
+            var f = new FileWriter(fd);
+            var bufferedWriter = new BufferedWriter(f);
+            CSVFormat fmt = CSVFormat.POSTGRESQL_CSV;
+            csvPrinter = new CSVPrinter(bufferedWriter, fmt);
             ArrayList<String> cols = t.getColumns();
-            String header = String.join(CSVFormat.POSTGRESQL_CSV.getDelimiterString(), cols) + CSVFormat.POSTGRESQL_CSV.getRecordSeparator();
+            String header = String.join(fmt.getDelimiterString(), cols) + fmt.getRecordSeparator();
             LOGGER.debug("header = {}", header);
             f.write(header);
             es = ExportStatus.getInstance(dataDir);
@@ -79,10 +89,24 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             csvPrinter.getOut().append(eof);
             csvPrinter.println();
             csvPrinter.println();
+
+            flush();
+            sync();
             csvPrinter.close(true);
+            fos.close();
             LOGGER.info("Closing snapshot file for table {}", t);
         }
         catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void sync() {
+        try {
+            fd.sync();
+        }
+        catch (SyncFailedException e) {
             throw new RuntimeException(e);
         }
     }
