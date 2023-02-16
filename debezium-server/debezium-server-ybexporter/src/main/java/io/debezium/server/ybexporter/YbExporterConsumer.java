@@ -104,7 +104,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
             committer.markProcessed(record);
         }
-        flushSyncStreamingData();
+        handleBatchComplete();
         committer.markBatchFinished();
 
     }
@@ -137,6 +137,16 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         snapshotWriters.clear();
     }
 
+    private void handleBatchComplete(){
+        flushSyncStreamingData();
+    }
+
+    /**
+     * At the end of batch, we sync streaming data to storage.
+     * This is inline with debezium behavior - https://debezium.io/documentation/reference/stable/development/engine.html#_handling_failures
+     * In case machine powers off before data is synced to storage, those events will be received again upon restart
+     * because debezium flushes its offsets information at the end of every batch.
+     */
     private void flushSyncStreamingData() {
         if (exportStatus.getMode().equals(ExportMode.STREAMING)) {
             if (streamingWriter != null) {
