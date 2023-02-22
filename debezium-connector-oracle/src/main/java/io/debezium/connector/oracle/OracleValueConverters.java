@@ -12,6 +12,7 @@ import java.sql.Blob;
 import java.sql.Clob;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.sql.Struct;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -20,9 +21,11 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -212,10 +215,11 @@ public class OracleValueConverters extends JdbcValueConverters {
             case Types.VARCHAR:
             case Types.NCHAR:
             case Types.NVARCHAR:
-            case Types.STRUCT:
             case Types.CLOB:
             case OracleTypes.ROWID:
                 return data -> convertString(column, fieldDefn, data);
+            case Types.STRUCT:
+                return data -> convertStruct(column, fieldDefn, data);
             case Types.BLOB:
                 return data -> convertBinary(column, fieldDefn, data, binaryMode);
             case OracleTypes.BINARY_FLOAT:
@@ -781,5 +785,27 @@ public class OracleValueConverters extends JdbcValueConverters {
      */
     private boolean isHexToRawFunctionCall(String value) {
         return value != null && value.startsWith(HEXTORAW_FUNCTION_START) && value.endsWith(HEXTORAW_FUNCTION_END);
+    }
+
+    protected Object convertStruct(Column column, Field fieldDefn, Object data){
+        try {
+            Struct orclStruct = (Struct) data;
+            Object[] attrs = orclStruct.getAttributes();
+            StringBuilder structRepr = new StringBuilder();
+            structRepr.append("(");
+            String arrayCombined = Arrays.stream(attrs).map(e->'"'+e.toString()+'"').collect(Collectors.joining(","));
+            structRepr.append(arrayCombined);
+//            for (Object o: attrs){
+//                structRepr.append(o.toString());
+//
+//            }
+            structRepr.append(")");
+            return structRepr.toString();
+
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
+
     }
 }

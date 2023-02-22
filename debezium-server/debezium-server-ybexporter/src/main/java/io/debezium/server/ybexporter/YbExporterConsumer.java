@@ -41,6 +41,14 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
     @PostConstruct
     void connect() throws URISyntaxException {
+        try
+        {
+            Thread.sleep(5000);
+        }
+        catch(InterruptedException ex)
+        {
+            // noop
+        }
         LOGGER.info("connect() called: dataDir = {}", dataDir);
 
         parser = new KafkaConnectRecordParser(tableMap);
@@ -137,7 +145,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         snapshotWriters.clear();
     }
 
-    private void handleBatchComplete(){
+    private void handleBatchComplete() {
         flushSyncStreamingData();
     }
 
