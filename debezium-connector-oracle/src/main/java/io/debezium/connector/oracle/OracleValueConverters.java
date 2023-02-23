@@ -789,18 +789,22 @@ public class OracleValueConverters extends JdbcValueConverters {
 
     protected Object convertStruct(Column column, Field fieldDefn, Object data){
         try {
-            Struct orclStruct = (Struct) data;
-            Object[] attrs = orclStruct.getAttributes();
-            StringBuilder structRepr = new StringBuilder();
-            structRepr.append("(");
-            String arrayCombined = Arrays.stream(attrs).map(e->'"'+e.toString()+'"').collect(Collectors.joining(","));
-            structRepr.append(arrayCombined);
-//            for (Object o: attrs){
-//                structRepr.append(o.toString());
-//
-//            }
-            structRepr.append(")");
-            return structRepr.toString();
+            if (data == null){
+                return null;
+            }
+            else if (data instanceof Struct){
+                Struct orclStruct = (Struct) data;
+                Object[] attrs = orclStruct.getAttributes();
+                StringBuilder structRepr = new StringBuilder();
+                structRepr.append("(");
+                String arrayCombined = Arrays.stream(attrs).map(e->'"'+e.toString()+'"').collect(Collectors.joining(","));
+                structRepr.append(arrayCombined);
+                structRepr.append(")");
+                return structRepr.toString();
+            }
+            else {
+                return null;
+            }
 
         } catch (SQLException e) {
             throw new RuntimeException(e);

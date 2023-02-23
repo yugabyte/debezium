@@ -80,7 +80,7 @@ public class LogMinerQueryBuilder {
         if (connectorConfig.isLobEnabled()) {
             query.append(",9,10,11,29");
         }
-        query.append(",34,36,255) ");
+        query.append(",34,36,255,68,70,71) ");
 
         return query.toString();
     }

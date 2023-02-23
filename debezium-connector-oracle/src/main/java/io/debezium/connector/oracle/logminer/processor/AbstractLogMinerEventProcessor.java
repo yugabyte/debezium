@@ -5,12 +5,15 @@
  */
 package io.debezium.connector.oracle.logminer.processor;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -19,8 +22,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+
+import io.debezium.connector.oracle.logminer.processor.memory.MemoryTransaction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.oracle.OracleConnection;
@@ -264,6 +276,7 @@ public abstract class AbstractLogMinerEventProcessor<T extends AbstractTransacti
      * @throws InterruptedException if the dispatcher was interrupted sending an event
      */
     protected void processRow(OraclePartition partition, LogMinerEventRow row) throws SQLException, InterruptedException {
+        LOGGER.info("logminereventrow={}", row);
         if (!row.getEventType().equals(EventType.MISSING_SCN)) {
             lastProcessedScn = row.getScn();
         }
@@ -320,6 +333,9 @@ public abstract class AbstractLogMinerEventProcessor<T extends AbstractTransacti
             case UPDATE:
             case DELETE:
                 handleDataEvent(row);
+                break;
+            case XML_DOC_WRITE:
+                handleXMLDocWriteEvent(row);
                 break;
             case UNSUPPORTED:
                 handleUnsupportedEvent(row);
@@ -381,7 +397,7 @@ public abstract class AbstractLogMinerEventProcessor<T extends AbstractTransacti
         if (offsetContext.getCommitScn().hasCommitAlreadyBeenHandled(row)) {
             final Scn lastCommittedScn = offsetContext.getCommitScn().getCommitScnForRedoThread(row.getThread());
             LOGGER.debug("Transaction {} has already been processed. "
-                    + "Offset Commit SCN {}, Transaction Commit SCN {}, Last Seen Commit SCN {}.",
+                            + "Offset Commit SCN {}, Transaction Commit SCN {}, Last Seen Commit SCN {}.",
                     transactionId, offsetContext.getCommitScn(), commitScn, lastCommittedScn);
             removeTransactionAndEventsFromCache(transaction);
             metrics.setActiveTransactions(getTransactionCache().size());
@@ -823,6 +839,61 @@ public abstract class AbstractLogMinerEventProcessor<T extends AbstractTransacti
         metrics.incrementRegisteredDmlCount();
     }
 
+    protected void handleXMLDocWriteEvent(LogMinerEventRow row) {
+        ArrayList<Object> newColValues = new ArrayList<>();
+        ArrayList<Object> oldColValues = new ArrayList<>();
+        String redoSql = row.getRedoSql(); // 13:-1
+        String[] redoSqlStrings = redoSql.split("\n");
+        String xml = redoSqlStrings[0];
+
+        xml = xml.substring(13, xml.length() - 1);
+
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        DocumentBuilder db = null;
+        try {
+            db = dbf.newDocumentBuilder();
+            InputSource is = new InputSource();
+            is.setCharacterStream(new StringReader(xml));
+            try {
+                Document doc = db.parse(is);
+                String message = doc.getDocumentElement().getTextContent();
+                Element docElement = doc.getDocumentElement();
+                String typeName = docElement.getNodeName();
+                String typeValue = docElement.getChildNodes().item(0).getTextContent() + "," + docElement.getChildNodes().item(1).getTextContent();
+                oldColValues.add(null);
+                oldColValues.add(null);
+                newColValues.add(null);
+                newColValues.add(typeValue);
+            }
+            catch (SAXException e) {
+                // handle SAXException
+            }
+            catch (IOException e) {
+                // handle IOException
+            }
+        }
+        catch (ParserConfigurationException e1) {
+            // handle ParserConfigurationException
+        }
+
+        LogMinerDmlEntry dmlEntry = LogMinerDmlEntryImpl.forUpdate(newColValues.toArray(), oldColValues.toArray());
+        dmlEntry.setObjectName(row.getTableName());
+        dmlEntry.setObjectOwner(row.getTablespaceName());
+        DmlEvent e = new DmlEvent(row, dmlEntry);
+//
+
+
+        //  TWO OPTIONS:
+        // 1. adding a new update event
+        // 2. altering the older insert event and adding the value of the field to it. This would be easier
+        // but the data structures involved  are not accessible (private/final). need to override.
+//        Map<String, MemoryTransaction> cache = (Map<String, MemoryTransaction>) getTransactionCache();
+//        MemoryTransaction mt = cache.get(row.getTransactionId());
+//        mt.getEvents().get(mt.getNumberOfEvents()-1).getRowId()
+        addToTransaction(row.getTransactionId(), row, () -> e);
+
+    }
+
     protected void handleUnsupportedEvent(LogMinerEventRow row) {
         if (!Strings.isNullOrEmpty(row.getTableName())) {
             LOGGER.warn("An unsupported operation detected for table '{}' in transaction {} with SCN {} on redo thread {}.",
@@ -848,7 +919,7 @@ public abstract class AbstractLogMinerEventProcessor<T extends AbstractTransacti
                 counters.stuckCount++;
                 if (counters.stuckCount == 25) {
                     LOGGER.warn("Offset SCN {} has not changed in 25 mining session iterations. " +
-                            "This indicates long running transaction(s) are active.  Commit SCNs {}.",
+                                    "This indicates long running transaction(s) are active.  Commit SCNs {}.",
                             previousOffsetScn,
                             previousOffsetCommitScns);
                     metrics.incrementScnFreezeCount();

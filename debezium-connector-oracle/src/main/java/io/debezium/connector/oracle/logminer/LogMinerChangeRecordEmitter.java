@@ -40,6 +40,7 @@ public class LogMinerChangeRecordEmitter extends BaseChangeRecordEmitter<Object>
         switch (eventType) {
             case INSERT:
                 return Operation.CREATE;
+            case XML_DOC_WRITE:
             case UPDATE:
             case SELECT_LOB_LOCATOR:
                 return Operation.UPDATE;
