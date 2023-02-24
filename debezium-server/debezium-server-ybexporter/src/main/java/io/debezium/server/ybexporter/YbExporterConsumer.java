@@ -93,14 +93,13 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             // PARSE
             var r = parser.parseRecord(objKey, objVal);
             // LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
+            checkIfSnapshotAlreadyComplete(r);
 
             // WRITE
             RecordWriter writer = getWriterForRecord(r);
             writer.writeRecord(r);
             // Handle snapshot->cdc transition
-            if ((r.snapshot != null) && (r.snapshot.equals("last"))) {
-                handleSnapshotComplete();
-            }
+            checkIfSnapshotComplete(r);
 
             committer.markProcessed(record);
         }
@@ -120,6 +119,34 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         }
         else {
             return streamingWriter;
+        }
+    }
+
+    /**
+     * The last record we recieve will have the snapshot field='last'.
+     * We interpret this to mean that snapshot phase is complete, and move on to streaming phase
+     */
+    private void checkIfSnapshotComplete(Record r){
+        if ((r.snapshot != null) && (r.snapshot.equals("last"))) {
+            handleSnapshotComplete();
+        }
+    }
+
+    /**
+     * In an edge case where the last table scanned by debezium in the snapshot phase
+     * has 0 rows, we do not get snapshot=last in the last record of the snapshot phase.
+     * This is because debezium expected there to be more records in the subsequent table(s),
+     * but the last table scanned ended up having 0 rows.
+     *
+     * To work around this, we check if we're still in snapshot phase, and if we get a record with snapshot=null
+     * (which is indicative of streaming phase), we transition to streaming phase.
+     * Note that this method would have to be called before the record is written.
+     * @param r
+     */
+    private void checkIfSnapshotAlreadyComplete(Record r){
+        if ((exportStatus.getMode() == ExportMode.SNAPSHOT) && (r.snapshot == null)){
+            LOGGER.debug("Interpreting snapshot as complete since snapshot field of record is null");
+            handleSnapshotComplete();
         }
     }
 
