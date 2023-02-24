@@ -276,7 +276,9 @@ public abstract class AbstractLogMinerEventProcessor<T extends AbstractTransacti
      * @throws InterruptedException if the dispatcher was interrupted sending an event
      */
     protected void processRow(OraclePartition partition, LogMinerEventRow row) throws SQLException, InterruptedException {
-        LOGGER.info("logminereventrow={}", row);
+        if (row.getUserName().equals("DBZM_TEST")){
+            LOGGER.info("logminereventrow={}", row);
+        }
         if (!row.getEventType().equals(EventType.MISSING_SCN)) {
             lastProcessedScn = row.getScn();
         }
@@ -335,7 +337,7 @@ public abstract class AbstractLogMinerEventProcessor<T extends AbstractTransacti
                 handleDataEvent(row);
                 break;
             case XML_DOC_WRITE:
-                handleXMLDocWriteEvent(row);
+                // handleXMLDocWriteEvent(row);
                 break;
             case UNSUPPORTED:
                 handleUnsupportedEvent(row);
