@@ -65,7 +65,7 @@ public class StreamingWriterJson implements RecordWriter {
 
         for (int i = 0; i < r.keyValues.size(); i++) {
             String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(r.keyValues.get(i));
-            fields.put(r.keyColumns.get(i), formattedVal);
+            key.put(r.keyColumns.get(i), formattedVal);
         }
 
         for (int i = 0; i < r.valueValues.size(); i++) {
