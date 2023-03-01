@@ -86,8 +86,12 @@ class KafkaConnectRecordParser implements RecordParser {
             t = new Table(dbName, schemaName, tableName);
 
             // parse fields
-            Struct afterStruct = value.getStruct("after");
-            for (Field f : afterStruct.schema().fields()) {
+            Struct structWithAllFields = value.getStruct("after");
+            if (structWithAllFields == null) {
+                // in case of delete events the after field is empty, and the before field is populated.
+                structWithAllFields = value.getStruct("before");
+            }
+            for (Field f : structWithAllFields.schema().fields()) {
                 t.fieldSchemas.put(f.name(), f);
             }
 
