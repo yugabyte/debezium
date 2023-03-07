@@ -5,13 +5,12 @@
  */
 package io.debezium.server.ybexporter;
 
-import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Paths;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,8 +35,8 @@ public class SequenceNumberGenerator {
         this.range = range;
         this.currentSequenceNumber = start;
         this.borrowedSequenceNumbersEndRange = start - 1; // to start with we haven't borrowed any.
-        this.filename = datadir + "/" + name;
-        readStateFromDisk();
+        this.filename = datadir + "/" + name + ".dat";
+        restoreStateFromDisk();
     }
 
     private void borrowIfRequired() {
@@ -51,10 +50,9 @@ public class SequenceNumberGenerator {
     private void persistStateToDisk() {
         try {
             FileOutputStream fos = new FileOutputStream(filename);
-            FileWriter fw = new FileWriter(fos.getFD());
-            fw.write(String.valueOf(borrowedSequenceNumbersEndRange));
+            fos.write(String.valueOf(borrowedSequenceNumbersEndRange).getBytes());
             fos.getFD().sync();
-            fw.close();
+            fos.close();
         }
         catch (FileNotFoundException e) {
             throw new RuntimeException(e);
@@ -64,17 +62,13 @@ public class SequenceNumberGenerator {
         }
     }
 
-    private void readStateFromDisk() {
+    private void restoreStateFromDisk() {
         try {
-            File file = new File(filename);
-            FileReader fr = new FileReader(file);
-            BufferedReader br = new BufferedReader(fr);
-            String borrowedSequenceNumbersEndRangeStr = br.readLine();
-            borrowedSequenceNumbersEndRange = Long.parseLong(borrowedSequenceNumbersEndRangeStr);
+            String content = new String(Files.readAllBytes(Paths.get(filename)));
+            borrowedSequenceNumbersEndRange = Long.parseLong(content);
             currentSequenceNumber = borrowedSequenceNumbersEndRange + 1; // start from next set.
-
         }
-        catch (FileNotFoundException e) {
+        catch (NoSuchFileException | FileNotFoundException e) {
             LOGGER.info("File does not exist. No state to read");
         }
         catch (IOException e) {
