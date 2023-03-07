@@ -14,18 +14,18 @@
     <modules>
         <module>debezium-server-bom</module>
         <module>debezium-server-core</module>
-        <module>debezium-server-kinesis</module>
-        <module>debezium-server-pubsub</module>
-        <module>debezium-server-pulsar</module>
-        <module>debezium-server-eventhubs</module>
-        <module>debezium-server-http</module>
+<!--        <module>debezium-server-kinesis</module>-->
+<!--        <module>debezium-server-pubsub</module>-->
+<!--        <module>debezium-server-pulsar</module>-->
+<!--        <module>debezium-server-eventhubs</module>-->
+<!--        <module>debezium-server-http</module>-->
         <module>debezium-server-ybexporter</module>
-        <module>debezium-server-redis</module>
+<!--        <module>debezium-server-redis</module>-->
         <module>debezium-server-dist</module>
-        <module>debezium-server-kafka</module>
-        <module>debezium-server-pravega</module>
-        <module>debezium-server-nats-streaming</module>
-        <module>debezium-server-nats-jetstream</module>
+<!--        <module>debezium-server-kafka</module>-->
+<!--        <module>debezium-server-pravega</module>-->
+<!--        <module>debezium-server-nats-streaming</module>-->
+<!--        <module>debezium-server-nats-jetstream</module>-->
     </modules>
 
     <dependencyManagement>
