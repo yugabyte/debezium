@@ -15,24 +15,29 @@ import java.nio.file.Paths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Generates sequence numbers with a requirement that they are always in increasing order,
+ * but may not be contiguous.
+ * The generator is resistant to process crashes. This is achieved by simulating
+ * a process of borrowing sequence numbers. The generator effectively borrows numbers before
+ * it can give them out, and the last borrowed sequence number is persisted to disk. In the event of a restart,
+ * it restores the state from disk (based on the name given), and starts giving out sequence numbers
+ * from the next borrowed set.
+ */
 public class SequenceNumberGenerator {
     private static final Logger LOGGER = LoggerFactory.getLogger(SequenceNumberGenerator.class);
-    String datadir;
-    String name;
-    int start;
-    long currentSequenceNumber;
-    long range;
-    long borrowedSequenceNumbersEndRange;
-    String filename;
+    private String datadir;
+    private String name;
+    private int start;
+    private long currentSequenceNumber;
+    private long borrowSize = 100000;
+    private long borrowedSequenceNumbersEndRange;
+    private String filename;
 
-    public SequenceNumberGenerator(String datadir, String name, int start, long range) {
+    public SequenceNumberGenerator(String datadir, String name, int start) {
         this.datadir = datadir;
         this.name = name;
         this.start = start;
-        if (range < 1) {
-            throw new RuntimeException("Range too small");
-        }
-        this.range = range;
         this.currentSequenceNumber = start;
         this.borrowedSequenceNumbersEndRange = start - 1; // to start with we haven't borrowed any.
         this.filename = datadir + "/" + name + ".dat";
@@ -41,9 +46,9 @@ public class SequenceNumberGenerator {
 
     private void borrowIfRequired() {
         if (currentSequenceNumber > borrowedSequenceNumbersEndRange) {
-            borrowedSequenceNumbersEndRange += range;
+            borrowedSequenceNumbersEndRange += borrowSize;
             persistStateToDisk();
-            LOGGER.info("borrowed till {}", borrowedSequenceNumbersEndRange);
+            LOGGER.debug("Borrowed sequence numbers till {}", borrowedSequenceNumbersEndRange);
         }
     }
 

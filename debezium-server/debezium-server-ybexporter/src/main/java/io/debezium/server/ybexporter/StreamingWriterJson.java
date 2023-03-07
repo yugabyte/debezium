@@ -44,7 +44,7 @@ public class StreamingWriterJson implements RecordWriter {
             throw new RuntimeException(e);
         }
         ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-        seqNumGen = new SequenceNumberGenerator(dataDir, "streaming", 1, 3);
+        seqNumGen = new SequenceNumberGenerator(dataDir, "streaming", 1);
     }
 
     @Override
