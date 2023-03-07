@@ -27,6 +27,7 @@ public class StreamingWriterJson implements RecordWriter {
     private ObjectWriter ow;
     private FileOutputStream fos;
     private FileDescriptor fd;
+    private SequenceNumberGenerator seqNumGen;
 
     public StreamingWriterJson(String datadirStr) {
         dataDir = datadirStr;
@@ -43,6 +44,7 @@ public class StreamingWriterJson implements RecordWriter {
             throw new RuntimeException(e);
         }
         ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+        seqNumGen = new SequenceNumberGenerator(dataDir, "streaming", 1, 3);
     }
 
     @Override
@@ -60,6 +62,7 @@ public class StreamingWriterJson implements RecordWriter {
 
     private HashMap<String, Object> generateCdcMessageForRecord(Record r) {
         // TODO: optimize, don't create objects every time.
+        long seqNum = seqNumGen.getNext();
         HashMap<String, Object> key = new HashMap<>();
         HashMap<String, Object> fields = new HashMap<>();
 
@@ -79,6 +82,7 @@ public class StreamingWriterJson implements RecordWriter {
         cdcInfo.put("table_name", r.t.tableName);
         cdcInfo.put("key", key);
         cdcInfo.put("fields", fields);
+        cdcInfo.put("sequence_number", seqNum);
         return cdcInfo;
     }
 

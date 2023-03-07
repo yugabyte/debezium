@@ -89,6 +89,8 @@ public class ExportStatus {
     }
 
     public void flushToDisk() {
+        // TODO: if already written once, save the structure, and then update only what is expected
+        // to change, before writing to disk.
         HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
         for (Table t : tableExportStatusMap.keySet()) {
