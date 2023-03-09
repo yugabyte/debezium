@@ -29,19 +29,20 @@ public class PostgresSourceConverter implements CustomConverter<SchemaBuilder, R
     public void converterFor(RelationalColumn column,
                              ConverterRegistration<SchemaBuilder> registration) {
 
-        // if ("simple_udt".equals(column.typeName())) {
-        // LOGGER.info("in custom converter");
-        // // registration.register(isbnSchema, x -> x.toString());
-        // }
-        if (JDBCType.valueOf(column.jdbcType()) == JDBCType.STRUCT) {
-            registration.register(SchemaBuilder.string(), x -> {
-                if (x == null) {
-                    return null;
-                }
-                else {
-                    return x.toString();
-                }
-            });
+        JDBCType jdbcType = JDBCType.valueOf(column.jdbcType());
+        switch (jdbcType) {
+            case STRUCT:
+            case ARRAY:
+                registration.register(SchemaBuilder.string(), x -> {
+                    if (x == null) {
+                        return null;
+                    }
+                    else {
+                        return x.toString();
+                    }
+                });
+                break;
+
         }
     }
 }
