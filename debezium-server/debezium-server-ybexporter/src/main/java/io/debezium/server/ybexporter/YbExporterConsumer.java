@@ -14,6 +14,8 @@ import javax.annotation.PostConstruct;
 import javax.enterprise.context.Dependent;
 import javax.inject.Named;
 
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +32,7 @@ import io.debezium.server.BaseChangeConsumer;
 public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(YbExporterConsumer.class);
     private static final String PROP_PREFIX = "debezium.sink.ybexporter.";
+    String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
@@ -42,6 +45,9 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
+
+        final Config config = ConfigProvider.getConfig();
+        snapshotMode = config.getValue("debezium.source.snapshot.mode", String.class);
 
         parser = new KafkaConnectRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
@@ -105,7 +111,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         }
         handleBatchComplete();
         committer.markBatchFinished();
-
+        handleSnapshotOnlyComplete();
     }
 
     private RecordWriter getWriterForRecord(Record r) {
@@ -126,7 +132,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
      * The last record we recieve will have the snapshot field='last'.
      * We interpret this to mean that snapshot phase is complete, and move on to streaming phase
      */
-    private void checkIfSnapshotComplete(Record r){
+    private void checkIfSnapshotComplete(Record r) {
         if ((r.snapshot != null) && (r.snapshot.equals("last"))) {
             handleSnapshotComplete();
         }
@@ -143,8 +149,8 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
      * Note that this method would have to be called before the record is written.
      * @param r
      */
-    private void checkIfSnapshotAlreadyComplete(Record r){
-        if ((exportStatus.getMode() == ExportMode.SNAPSHOT) && (r.snapshot == null)){
+    private void checkIfSnapshotAlreadyComplete(Record r) {
+        if ((exportStatus.getMode() == ExportMode.SNAPSHOT) && (r.snapshot == null)) {
             LOGGER.debug("Interpreting snapshot as complete since snapshot field of record is null");
             handleSnapshotComplete();
         }
@@ -157,6 +163,14 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         openCDCWriter();
     }
 
+    private void handleSnapshotOnlyComplete() {
+        if ((exportStatus.getMode() == ExportMode.STREAMING) && (snapshotMode.equals("initial_only"))) {
+            LOGGER.info("Snapshot complete. Interrupting thread as snapshot mode = initial_only");
+            exportStatus.flushToDisk();
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private void closeSnapshotWriters() {
         for (RecordWriter writer : snapshotWriters.values()) {
             writer.close();
@@ -164,7 +178,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         snapshotWriters.clear();
     }
 
-    private void handleBatchComplete(){
+    private void handleBatchComplete() {
         flushSyncStreamingData();
     }
 
