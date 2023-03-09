@@ -42,6 +42,12 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
+        try {
+            Thread.sleep(5000);
+        }
+        catch (InterruptedException e) {
+            // Noop.
+        }
 
         parser = new KafkaConnectRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
@@ -126,7 +132,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
      * The last record we recieve will have the snapshot field='last'.
      * We interpret this to mean that snapshot phase is complete, and move on to streaming phase
      */
-    private void checkIfSnapshotComplete(Record r){
+    private void checkIfSnapshotComplete(Record r) {
         if ((r.snapshot != null) && (r.snapshot.equals("last"))) {
             handleSnapshotComplete();
         }
@@ -143,8 +149,8 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
      * Note that this method would have to be called before the record is written.
      * @param r
      */
-    private void checkIfSnapshotAlreadyComplete(Record r){
-        if ((exportStatus.getMode() == ExportMode.SNAPSHOT) && (r.snapshot == null)){
+    private void checkIfSnapshotAlreadyComplete(Record r) {
+        if ((exportStatus.getMode() == ExportMode.SNAPSHOT) && (r.snapshot == null)) {
             LOGGER.debug("Interpreting snapshot as complete since snapshot field of record is null");
             handleSnapshotComplete();
         }
@@ -164,7 +170,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         snapshotWriters.clear();
     }
 
-    private void handleBatchComplete(){
+    private void handleBatchComplete() {
         flushSyncStreamingData();
     }
 
