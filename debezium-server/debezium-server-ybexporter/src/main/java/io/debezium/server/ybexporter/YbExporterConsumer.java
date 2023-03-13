@@ -47,7 +47,8 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         LOGGER.info("connect() called: dataDir = {}", dataDir);
 
         final Config config = ConfigProvider.getConfig();
-        snapshotMode = config.getValue("debezium.source.snapshot.mode", String.class);
+
+        snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
 
         parser = new KafkaConnectRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
