@@ -14,6 +14,8 @@ import javax.annotation.PostConstruct;
 import javax.enterprise.context.Dependent;
 import javax.inject.Named;
 
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +32,7 @@ import io.debezium.server.BaseChangeConsumer;
 public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(YbExporterConsumer.class);
     private static final String PROP_PREFIX = "debezium.sink.ybexporter.";
+    String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
@@ -42,6 +45,10 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
+
+        final Config config = ConfigProvider.getConfig();
+
+        snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
 
         parser = new KafkaConnectRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
@@ -105,7 +112,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         }
         handleBatchComplete();
         committer.markBatchFinished();
-
+        handleSnapshotOnlyComplete();
     }
 
     private RecordWriter getWriterForRecord(Record r) {
@@ -155,6 +162,14 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         closeSnapshotWriters();
         // Thread.currentThread().interrupt(); // For testing
         openCDCWriter();
+    }
+
+    private void handleSnapshotOnlyComplete() {
+        if ((exportStatus.getMode() == ExportMode.STREAMING) && (snapshotMode.equals("initial_only"))) {
+            LOGGER.info("Snapshot complete. Interrupting thread as snapshot mode = initial_only");
+            exportStatus.flushToDisk();
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void closeSnapshotWriters() {

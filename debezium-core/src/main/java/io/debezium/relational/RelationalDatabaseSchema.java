@@ -83,6 +83,7 @@ public abstract class RelationalDatabaseSchema implements DatabaseSchema<TableId
     public void assureNonEmptySchema() {
         if (tableIds().isEmpty()) {
             LOG.warn(NO_CAPTURED_DATA_COLLECTIONS_WARNING);
+            throw new RuntimeException(DatabaseSchema.NO_CAPTURED_DATA_COLLECTIONS_WARNING);
         }
     }
 
