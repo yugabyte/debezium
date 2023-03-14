@@ -211,6 +211,8 @@ public class OracleValueConverters extends JdbcValueConverters {
     @Override
     public ValueConverter converter(Column column, Field fieldDefn) {
         switch (column.jdbcType()) {
+            case Types.STRUCT:
+//                return data -> convertStruct(column, fieldDefn, data);
             case Types.CHAR:
             case Types.VARCHAR:
             case Types.NCHAR:
@@ -218,8 +220,7 @@ public class OracleValueConverters extends JdbcValueConverters {
             case Types.CLOB:
             case OracleTypes.ROWID:
                 return data -> convertString(column, fieldDefn, data);
-            case Types.STRUCT:
-                return data -> convertStruct(column, fieldDefn, data);
+
             case Types.BLOB:
                 return data -> convertBinary(column, fieldDefn, data, binaryMode);
             case OracleTypes.BINARY_FLOAT:
@@ -787,29 +788,29 @@ public class OracleValueConverters extends JdbcValueConverters {
         return value != null && value.startsWith(HEXTORAW_FUNCTION_START) && value.endsWith(HEXTORAW_FUNCTION_END);
     }
 
-    protected Object convertStruct(Column column, Field fieldDefn, Object data){
-        try {
-            if (data == null){
-                return null;
-            }
-            else if (data instanceof Struct){
-                Struct orclStruct = (Struct) data;
-                Object[] attrs = orclStruct.getAttributes();
-                StringBuilder structRepr = new StringBuilder();
-                structRepr.append("(");
-                String arrayCombined = Arrays.stream(attrs).map(e->'"'+e.toString()+'"').collect(Collectors.joining(","));
-                structRepr.append(arrayCombined);
-                structRepr.append(")");
-                return structRepr.toString();
-            }
-            else {
-                return null;
-            }
-
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-
-    }
+//    protected Object convertStruct(Column column, Field fieldDefn, Object data){
+//        try {
+//            if (data == null){
+//                return null;
+//            }
+//            else if (data instanceof Struct){
+//                Struct orclStruct = (Struct) data;
+//                Object[] attrs = orclStruct.getAttributes();
+//                StringBuilder structRepr = new StringBuilder();
+//                structRepr.append("(");
+//                String arrayCombined = Arrays.stream(attrs).map(e->'"'+e.toString()+'"').collect(Collectors.joining(","));
+//                structRepr.append(arrayCombined);
+//                structRepr.append(")");
+//                return structRepr.toString();
+//            }
+//            else {
+//                return null;
+//            }
+//
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
+//
+//
+//    }
 }
