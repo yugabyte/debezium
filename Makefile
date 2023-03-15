@@ -1,4 +1,4 @@
-.PHONY: debezium debezium-server yb-exporter debezium-server-core postgres-connector debezium-core
+.PHONY: debezium debezium-server yb-exporter debezium-server-core postgres-connector debezium-core oracle-connector
 
 VERSION=2.2.0
 DEBEZIUM_SERVER_LIB=debezium-server/debezium-server-dist/target/debezium-server/lib/
@@ -23,6 +23,10 @@ yb-exporter:
 postgres-connector:
 	mvn clean install -Pquick -pl :debezium-connector-postgres; \
 	cp debezium-connector-postgres/target/debezium-connector-postgres-$(VERSION)-SNAPSHOT.jar $(DEBEZIUM_SERVER_LIB);
+
+oracle-connector:
+	mvn clean install -Pquick -pl :debezium-connector-oracle; \
+	cp debezium-connector-oracle/target/debezium-connector-oracle-$(VERSION)-SNAPSHOT.jar $(DEBEZIUM_SERVER_LIB);
 
 debezium-core:
 	mvn clean install -Pquick -pl :debezium-core; \
