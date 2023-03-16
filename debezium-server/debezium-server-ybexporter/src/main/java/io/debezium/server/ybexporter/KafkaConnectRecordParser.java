@@ -31,14 +31,8 @@ class KafkaConnectRecordParser implements RecordParser {
     }
 
     /**
-     * Note: This uses the org.apache.kafka.connect.json.JsonConverter to convert from json
-     * to KafkaConnect objects (which is what is serialized to the json that the ChangeConsumer receives)
-     * This deserialization process will most likely be heavier as compared to a simple
-     * json deserializer, but this comes with the added advantages of converting the json values to
-     * java native object types (for example, of type bytes to bytearray, of type bool to java boolean, etc).
-     * Furthermore, there is a way in future to not deal with ser-de at all, by tweaking debezium-server
-     * format.value=connect, wherein it gives a KafkaConnect object directly to the ChangeConsumer.
-     * Therefore, this approach is used for now.
+     * This parser parses a kafka connect SourceRecord object to a Record object
+     * that contains the relevant field schemas and values.
      */
     @Override
     public Record parseRecord(Object keyObj, Object valueObj) {
@@ -49,6 +43,13 @@ class KafkaConnectRecordParser implements RecordParser {
             Struct value = (Struct) ((SourceRecord) valueObj).value();
             Struct key = (Struct) ((SourceRecord) valueObj).key();
 
+            if (value == null) {
+                // Ideally, we should have config tombstones.on.delete=false. In case that is not set correctly,
+                // we will get those events where value field = null. Skipping those events.
+                LOGGER.warn("Empty value field in event. Assuming tombstone event. Skipping - {}", valueObj);
+                r.op = "unsupported";
+                return r;
+            }
             Struct source = value.getStruct("source");
             r.op = value.getString("op");
             r.snapshot = source.getString("snapshot");
@@ -58,8 +59,6 @@ class KafkaConnectRecordParser implements RecordParser {
 
             // Parse key and values
             if (key != null) {
-                // SchemaAndValue keyConnectObject = jsonConverter.toConnectData("", jsonKey.getBytes());
-                // Struct key = (Struct) keyConnectObject.value();
                 parseKeyFields(key, r);
             }
             parseValueFields(value, r);
@@ -87,8 +86,12 @@ class KafkaConnectRecordParser implements RecordParser {
             t = new Table(dbName, schemaName, tableName);
 
             // parse fields
-            Struct afterStruct = value.getStruct("after");
-            for (Field f : afterStruct.schema().fields()) {
+            Struct structWithAllFields = value.getStruct("after");
+            if (structWithAllFields == null) {
+                // in case of delete events the after field is empty, and the before field is populated.
+                structWithAllFields = value.getStruct("before");
+            }
+            for (Field f : structWithAllFields.schema().fields()) {
                 t.fieldSchemas.put(f.name(), f);
             }
 

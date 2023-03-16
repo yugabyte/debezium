@@ -29,6 +29,10 @@ public class Record {
         valueValues.clear();
     }
 
+    public boolean isUnsupported() {
+        return op.equals("unsupported");
+    }
+
     public String getTableIdentifier() {
         return t.toString();
     }
