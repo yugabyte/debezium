@@ -85,20 +85,19 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     @Override
-    public void handleBatch(List<ChangeEvent<Object, Object>> records, DebeziumEngine.RecordCommitter<ChangeEvent<Object, Object>> committer)
+    public void handleBatch(List<ChangeEvent<Object, Object>> changeEvents, DebeziumEngine.RecordCommitter<ChangeEvent<Object, Object>> committer)
             throws InterruptedException {
-        LOGGER.info("Processing batch with {} records", records.size());
-        for (ChangeEvent<Object, Object> record : records) {
-            Object objKey = record.key();
-            Object objVal = record.value();
-            if (objVal == null) {
-                // tombstone event
-                // TODO: handle this better. try using the config to avoid altogether
-                continue;
-            }
+        LOGGER.info("Processing batch with {} records", changeEvents.size());
+        for (ChangeEvent<Object, Object> event : changeEvents) {
+            Object objKey = event.key();
+            Object objVal = event.value();
 
             // PARSE
             var r = parser.parseRecord(objKey, objVal);
+            if (r.isUnsupported()) {
+                committer.markProcessed(event);
+                continue;
+            }
             // LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
             checkIfSnapshotAlreadyComplete(r);
 
@@ -108,7 +107,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             // Handle snapshot->cdc transition
             checkIfSnapshotComplete(r);
 
-            committer.markProcessed(record);
+            committer.markProcessed(event);
         }
         handleBatchComplete();
         committer.markBatchFinished();
