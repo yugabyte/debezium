@@ -21,15 +21,17 @@ import org.slf4j.LoggerFactory;
 public class TableSnapshotWriterCSV implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
     private ExportStatus es;
+    private String sourceType;
     private String dataDir;
     private Table t;
     private CSVPrinter csvPrinter;
     private FileOutputStream fos;
     private FileDescriptor fd;
 
-    public TableSnapshotWriterCSV(String datadirStr, Table tbl) {
+    public TableSnapshotWriterCSV(String datadirStr, Table tbl, String sourceType) {
         dataDir = datadirStr;
         t = tbl;
+        this.sourceType = sourceType;
 
         var fileName = getFullFileNameForTable();
         try {
@@ -65,7 +67,11 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     }
 
     private String getFilenameForTable() {
-        return t.tableName + "_data.sql";
+        String fileName =  t.tableName + "_data.sql";
+        if ((sourceType.equals("postgres")) && (!t.schemaName.equals("public"))){
+            fileName = t.schemaName + "." + fileName;
+        }
+        return fileName;
     }
 
     private String getFullFileNameForTable() {
