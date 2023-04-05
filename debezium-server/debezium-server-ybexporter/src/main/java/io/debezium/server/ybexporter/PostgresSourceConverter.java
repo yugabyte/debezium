@@ -46,6 +46,8 @@ public class PostgresSourceConverter implements CustomConverter<SchemaBuilder, R
         }
         switch (column.typeName()) {
             case "money":
+            case "tsvector":
+            case "tsquery":
                 registration.register(SchemaBuilder.string(), x -> {
                     if (x == null) {
                         return null;
