@@ -68,7 +68,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
 
     private String getFilenameForTable() {
         String fileName =  t.tableName + "_data.sql";
-        if ((sourceType.equals("postgres")) && (!t.schemaName.equals("public"))){
+        if ((sourceType.equals("postgresql")) && (!t.schemaName.equals("public"))){
             fileName = t.schemaName + "." + fileName;
         }
         return fileName;

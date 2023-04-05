@@ -70,7 +70,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         String sourceConnector = config.getValue("debezium.source.connector.class", String.class);
         switch (sourceConnector){
             case "io.debezium.connector.postgresql.PostgresConnector":
-                sourceType = "postgres"; break;
+                sourceType = "postgresql"; break;
             case "io.debezium.connector.oracle.OracleConnector":
                 sourceType = "oracle"; break;
             case "io.debezium.connector.mysql.MySqlConnector":
