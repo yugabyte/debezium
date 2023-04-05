@@ -6,6 +6,9 @@
 package io.debezium.server.ybexporter;
 
 import java.sql.JDBCType;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.util.Locale;
 import java.util.Properties;
 
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -46,6 +49,19 @@ public class PostgresSourceConverter implements CustomConverter<SchemaBuilder, R
         }
         switch (column.typeName()) {
             case "money":
+                registration.register(SchemaBuilder.string(), x -> {
+                    if (x == null) {
+                        return null;
+                    }
+                    else {
+//                        https://stackoverflow.com/a/25307973/4434664
+                        DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
+                        df.setMaximumFractionDigits(340); // 340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
+
+                        return df.format(x);
+                    }
+                });
+                break;
             case "tsvector":
             case "tsquery":
                 registration.register(SchemaBuilder.string(), x -> {
