@@ -44,5 +44,17 @@ public class PostgresSourceConverter implements CustomConverter<SchemaBuilder, R
                 break;
 
         }
+        switch (column.typeName()) {
+            case "money":
+                registration.register(SchemaBuilder.string(), x -> {
+                    if (x == null) {
+                        return null;
+                    }
+                    else {
+                        return x.toString();
+                    }
+                });
+                break;
+        }
     }
 }
