@@ -36,6 +36,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
+    String sourceType;
     private Map<String, Table> tableMap = new HashMap<>();
     private RecordParser parser;
     private Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
@@ -49,6 +50,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         final Config config = ConfigProvider.getConfig();
 
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
+        retrieveSourceType(config);
 
         parser = new KafkaConnectRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
@@ -62,6 +64,18 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         Thread t = new Thread(this::flush);
         t.setDaemon(true);
         t.start();
+    }
+
+    void retrieveSourceType(Config config){
+        String sourceConnector = config.getValue("debezium.source.connector.class", String.class);
+        switch (sourceConnector){
+            case "io.debezium.connector.postgresql.PostgresConnector":
+                sourceType = "postgresql"; break;
+            case "io.debezium.connector.oracle.OracleConnector":
+                sourceType = "oracle"; break;
+            case "io.debezium.connector.mysql.MySqlConnector":
+                sourceType = "mysql"; break;
+        }
     }
 
     void flush() {
@@ -118,7 +132,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         if (exportStatus.getMode() == ExportMode.SNAPSHOT) {
             RecordWriter writer = snapshotWriters.get(r.t);
             if (writer == null) {
-                writer = new TableSnapshotWriterCSV(dataDir, r.t);
+                writer = new TableSnapshotWriterCSV(dataDir, r.t, sourceType);
                 snapshotWriters.put(r.t, writer);
             }
             return writer;
