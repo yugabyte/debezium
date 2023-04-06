@@ -41,15 +41,18 @@ public class PostgresToYbValueConverter implements CustomConverter<SchemaBuilder
         }
         switch (column.typeName()) {
             case "money":
+                // money seems to be read as a java double, and java double toString
+                // uses scientific notation (1.2E7) in some cases. Therefore,
+                // we apply explicit formatting to the double to get the double as a string
+                // w/o scientific notation.
                 registration.register(SchemaBuilder.string(), x -> {
                     if (x == null) {
                         return null;
                     }
                     else {
-//                        https://stackoverflow.com/a/25307973/4434664
+                        // https://stackoverflow.com/a/25307973/4434664
                         DecimalFormat df = new DecimalFormat("0", DecimalFormatSymbols.getInstance(Locale.ENGLISH));
                         df.setMaximumFractionDigits(340); // 340 = DecimalFormat.DOUBLE_FRACTION_DIGITS
-
                         return df.format(x);
                     }
                 });
