@@ -18,14 +18,13 @@ import org.slf4j.LoggerFactory;
 import io.debezium.spi.converter.CustomConverter;
 import io.debezium.spi.converter.RelationalColumn;
 
-public class PostgresSourceConverter implements CustomConverter<SchemaBuilder, RelationalColumn> {
+public class PostgresToYbValueConverter implements CustomConverter<SchemaBuilder, RelationalColumn> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresSourceConverter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresToYbValueConverter.class);
 
     @Override
     public void configure(Properties props) {
         return;
-        // isbnSchema = SchemaBuilder.string().name(props.getProperty("schema.name"));
     }
 
     @Override
@@ -36,14 +35,7 @@ public class PostgresSourceConverter implements CustomConverter<SchemaBuilder, R
         switch (jdbcType) {
             case STRUCT:
             case ARRAY:
-                registration.register(SchemaBuilder.string(), x -> {
-                    if (x == null) {
-                        return null;
-                    }
-                    else {
-                        return x.toString();
-                    }
-                });
+                registration.register(SchemaBuilder.string(), this::stringify);
                 break;
 
         }
@@ -64,15 +56,18 @@ public class PostgresSourceConverter implements CustomConverter<SchemaBuilder, R
                 break;
             case "tsvector":
             case "tsquery":
-                registration.register(SchemaBuilder.string(), x -> {
-                    if (x == null) {
-                        return null;
-                    }
-                    else {
-                        return x.toString();
-                    }
-                });
+                registration.register(SchemaBuilder.string(), this::stringify);
                 break;
         }
     }
+
+    private Object stringify(Object x){
+        if (x == null) {
+            return null;
+        }
+        else {
+            return x.toString();
+        }
+    }
+
 }

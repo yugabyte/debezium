@@ -13,7 +13,7 @@ debezium.source.offset.storage.file.filename=data/offsets.dat
 debezium.source.offset.flush.interval.ms=0
 debezium.source.tombstones.on.delete=false
 debezium.source.converters=postgres_source_converter
-debezium.source.postgres_source_converter.type=io.debezium.server.ybexporter.PostgresSourceConverter
+debezium.source.postgres_source_converter.type=io.debezium.server.ybexporter.PostgresToYbValueConverter
 
 debezium.source.database.hostname=localhost
 debezium.source.database.port=5432
