@@ -14,6 +14,8 @@ import javax.annotation.PostConstruct;
 import javax.enterprise.context.Dependent;
 import javax.inject.Named;
 
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,9 +32,11 @@ import io.debezium.server.BaseChangeConsumer;
 public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(YbExporterConsumer.class);
     private static final String PROP_PREFIX = "debezium.sink.ybexporter.";
+    String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
+    String sourceType;
     private Map<String, Table> tableMap = new HashMap<>();
     private RecordParser parser;
     private Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
@@ -49,6 +53,11 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             // Noop.
         }
 
+        final Config config = ConfigProvider.getConfig();
+
+        snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
+        retrieveSourceType(config);
+
         parser = new KafkaConnectRecordParser(tableMap);
         exportStatus = ExportStatus.getInstance(dataDir);
         if (exportStatus.getMode() != null && exportStatus.getMode().equals(ExportMode.STREAMING)) {
@@ -61,6 +70,18 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         Thread t = new Thread(this::flush);
         t.setDaemon(true);
         t.start();
+    }
+
+    void retrieveSourceType(Config config){
+        String sourceConnector = config.getValue("debezium.source.connector.class", String.class);
+        switch (sourceConnector){
+            case "io.debezium.connector.postgresql.PostgresConnector":
+                sourceType = "postgresql"; break;
+            case "io.debezium.connector.oracle.OracleConnector":
+                sourceType = "oracle"; break;
+            case "io.debezium.connector.mysql.MySqlConnector":
+                sourceType = "mysql"; break;
+        }
     }
 
     void flush() {
@@ -84,20 +105,19 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     @Override
-    public void handleBatch(List<ChangeEvent<Object, Object>> records, DebeziumEngine.RecordCommitter<ChangeEvent<Object, Object>> committer)
+    public void handleBatch(List<ChangeEvent<Object, Object>> changeEvents, DebeziumEngine.RecordCommitter<ChangeEvent<Object, Object>> committer)
             throws InterruptedException {
-        LOGGER.info("Processing batch with {} records", records.size());
-        for (ChangeEvent<Object, Object> record : records) {
-            Object objKey = record.key();
-            Object objVal = record.value();
-            if (objVal == null) {
-                // tombstone event
-                // TODO: handle this better. try using the config to avoid altogether
-                continue;
-            }
+        LOGGER.info("Processing batch with {} records", changeEvents.size());
+        for (ChangeEvent<Object, Object> event : changeEvents) {
+            Object objKey = event.key();
+            Object objVal = event.value();
 
             // PARSE
             var r = parser.parseRecord(objKey, objVal);
+            if (r.isUnsupported()) {
+                committer.markProcessed(event);
+                continue;
+            }
             // LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
             checkIfSnapshotAlreadyComplete(r);
 
@@ -107,18 +127,18 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             // Handle snapshot->cdc transition
             checkIfSnapshotComplete(r);
 
-            committer.markProcessed(record);
+            committer.markProcessed(event);
         }
         handleBatchComplete();
         committer.markBatchFinished();
-
+        handleSnapshotOnlyComplete();
     }
 
     private RecordWriter getWriterForRecord(Record r) {
         if (exportStatus.getMode() == ExportMode.SNAPSHOT) {
             RecordWriter writer = snapshotWriters.get(r.t);
             if (writer == null) {
-                writer = new TableSnapshotWriterCSV(dataDir, r.t);
+                writer = new TableSnapshotWriterCSV(dataDir, r.t, sourceType);
                 snapshotWriters.put(r.t, writer);
             }
             return writer;
@@ -161,6 +181,14 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         closeSnapshotWriters();
         // Thread.currentThread().interrupt(); // For testing
         openCDCWriter();
+    }
+
+    private void handleSnapshotOnlyComplete() {
+        if ((exportStatus.getMode() == ExportMode.STREAMING) && (snapshotMode.equals("initial_only"))) {
+            LOGGER.info("Snapshot complete. Interrupting thread as snapshot mode = initial_only");
+            exportStatus.flushToDisk();
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void closeSnapshotWriters() {
