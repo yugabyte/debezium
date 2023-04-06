@@ -30,7 +30,7 @@ public class ExportStatus {
     private static final String EXPORT_STATUS_FILE_NAME = "export_status.json";
     private static ExportStatus instance;
     private String dataDir;
-    private Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>();
+    private Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>(); // TODO: use linked hash map?
     private ExportMode mode;
     private ObjectWriter ow;
     private File f;
@@ -90,8 +90,10 @@ public class ExportStatus {
     }
 
     public void flushToDisk() {
+        // TODO: do not create fresh objects every time, just reuse.
         HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
+        // TODO: better iteration, get value
         for (Table t : tableExportStatusMap.keySet()) {
             HashMap<String, Object> tableInfo = new HashMap<>();
             tableInfo.put("database_name", t.dbName);
@@ -116,6 +118,7 @@ public class ExportStatus {
 
     private static ExportStatus loadFromDisk(String datadirStr) {
         try {
+            // TODO: func for getting file path
             Path p = Paths.get(datadirStr + "/export_status.json");
             File f = new File(p.toUri());
             if (!f.exists()) {
@@ -123,6 +126,7 @@ public class ExportStatus {
             }
 
             String fileContent = Files.readString(p);
+            // TODO: remove unnecessary var for factory
             JsonFactory factory = new JsonFactory();
             ObjectMapper mapper = new ObjectMapper(factory);
             var exportStatusJson = mapper.readTree(fileContent);
@@ -150,6 +154,7 @@ public class ExportStatus {
     }
 }
 
+// TODO: make vars private and add proper constructor
 class TableExportStatus {
     Integer sno;
     Integer exportedRowCountSnapshot;
