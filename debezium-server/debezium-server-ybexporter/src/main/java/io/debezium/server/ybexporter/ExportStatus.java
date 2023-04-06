@@ -77,6 +77,7 @@ public class ExportStatus {
         TableExportStatus tableExportStatus = new TableExportStatus();
         tableExportStatus.snapshotFilename = tblFilename;
         tableExportStatus.exportedRowCountSnapshot = 0;
+        tableExportStatus.sno = tableExportStatusMap.size();
         tableExportStatusMap.put(t, tableExportStatus);
     }
 
@@ -97,7 +98,8 @@ public class ExportStatus {
             tableInfo.put("schema_name", t.schemaName);
             tableInfo.put("table_name", t.tableName);
             tableInfo.put("file_name", tableExportStatusMap.get(t).snapshotFilename);
-            tableInfo.put("exported_row_count", tableExportStatusMap.get(t).exportedRowCountSnapshot);
+            tableInfo.put("exported_row_count_snapshot", tableExportStatusMap.get(t).exportedRowCountSnapshot);
+            tableInfo.put("sno", tableExportStatusMap.get(t).sno);
             tablesInfo.add(tableInfo);
         }
 
@@ -135,7 +137,8 @@ public class ExportStatus {
                 Table t = new Table(tableJson.get("database_name").asText(), tableJson.get("schema_name").asText(), tableJson.get("table_name").asText());
 
                 TableExportStatus tes = new TableExportStatus();
-                tes.exportedRowCountSnapshot = tableJson.get("exported_row_count").asInt();
+                tes.exportedRowCountSnapshot = tableJson.get("exported_row_count_snapshot").asInt();
+                tes.sno = tableJson.get("sno").asInt();
                 tes.snapshotFilename = tableJson.get("file_name").asText();
                 es.tableExportStatusMap.put(t, tes);
             }
@@ -148,6 +151,7 @@ public class ExportStatus {
 }
 
 class TableExportStatus {
+    Integer sno;
     Integer exportedRowCountSnapshot;
     String snapshotFilename;
 }
