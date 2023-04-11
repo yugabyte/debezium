@@ -36,6 +36,8 @@ public class ExportStatus {
     private ExportMode mode;
     private ObjectWriter ow;
     private File f;
+    private File tempf;
+
 
     /**
      * Should only be called once in the lifetime of the process.
@@ -109,7 +111,15 @@ public class ExportStatus {
         exportStatusMap.put("mode", mode);
 
         try {
-            ow.writeValue(f, exportStatusMap);
+            // for atomic write, we write to a temp file, and then
+            // rename to destination file path. This prevents readers from reading the file in a corrupted
+            // state (for example, when the complete file has not been written)
+            tempf = new File(getTempFilePath());
+            ow.writeValue(tempf, exportStatusMap);
+            boolean success = tempf.renameTo(f);
+            if (!success){
+                throw new RuntimeException("could not rename temp file for export status");
+            }
         }
         catch (IOException e) {
             throw new RuntimeException(e);
@@ -118,6 +128,10 @@ public class ExportStatus {
 
     private static String getFilePath(String dataDirStr){
         return String.format("%s/%s", dataDirStr, EXPORT_STATUS_FILE_NAME);
+    }
+
+    private static String getTempFilePath(){
+        return getFilePath("/tmp");
     }
 
     private static ExportStatus loadFromDisk(String datadirStr) {
