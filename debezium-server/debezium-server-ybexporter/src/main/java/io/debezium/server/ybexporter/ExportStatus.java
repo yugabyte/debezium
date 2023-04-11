@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,8 +30,9 @@ public class ExportStatus {
     private static final Logger LOGGER = LoggerFactory.getLogger(ExportStatus.class);
     private static final String EXPORT_STATUS_FILE_NAME = "export_status.json";
     private static ExportStatus instance;
+    private static ObjectMapper mapper = new ObjectMapper(new JsonFactory());
     private String dataDir;
-    private Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>(); // TODO: use linked hash map?
+    private Map<Table, TableExportStatus> tableExportStatusMap = new LinkedHashMap<>();
     private ExportMode mode;
     private ObjectWriter ow;
     private File f;
@@ -46,7 +48,7 @@ public class ExportStatus {
         }
         dataDir = datadirStr;
         ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-        f = new File(String.format("%s/%s", dataDir, EXPORT_STATUS_FILE_NAME));
+        f = new File(getFilePath(datadirStr));
         instance = this;
     }
 
@@ -74,10 +76,7 @@ public class ExportStatus {
     }
 
     public void updateTableSnapshotWriterCreated(Table t, String tblFilename) {
-        TableExportStatus tableExportStatus = new TableExportStatus();
-        tableExportStatus.snapshotFilename = tblFilename;
-        tableExportStatus.exportedRowCountSnapshot = 0;
-        tableExportStatus.sno = tableExportStatusMap.size();
+        TableExportStatus tableExportStatus = new TableExportStatus(tableExportStatusMap.size(), tblFilename);
         tableExportStatusMap.put(t, tableExportStatus);
     }
 
@@ -93,15 +92,16 @@ public class ExportStatus {
         // TODO: do not create fresh objects every time, just reuse.
         HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
-        // TODO: better iteration, get value
-        for (Table t : tableExportStatusMap.keySet()) {
+        for (Map.Entry<Table, TableExportStatus> pair : tableExportStatusMap.entrySet()) {
+            Table t = pair.getKey();
+            TableExportStatus tes = pair.getValue();
             HashMap<String, Object> tableInfo = new HashMap<>();
             tableInfo.put("database_name", t.dbName);
             tableInfo.put("schema_name", t.schemaName);
             tableInfo.put("table_name", t.tableName);
-            tableInfo.put("file_name", tableExportStatusMap.get(t).snapshotFilename);
-            tableInfo.put("exported_row_count_snapshot", tableExportStatusMap.get(t).exportedRowCountSnapshot);
-            tableInfo.put("sno", tableExportStatusMap.get(t).sno);
+            tableInfo.put("file_name", tes.snapshotFilename);
+            tableInfo.put("exported_row_count_snapshot", tes.exportedRowCountSnapshot);
+            tableInfo.put("sno", tes.sno);
             tablesInfo.add(tableInfo);
         }
 
@@ -116,34 +116,32 @@ public class ExportStatus {
         }
     }
 
+    private static String getFilePath(String dataDirStr){
+        return String.format("%s/%s", dataDirStr, EXPORT_STATUS_FILE_NAME);
+    }
+
     private static ExportStatus loadFromDisk(String datadirStr) {
         try {
-            // TODO: func for getting file path
-            Path p = Paths.get(datadirStr + "/export_status.json");
+            Path p = Paths.get(getFilePath(datadirStr));
             File f = new File(p.toUri());
             if (!f.exists()) {
                 return null;
             }
 
             String fileContent = Files.readString(p);
-            // TODO: remove unnecessary var for factory
-            JsonFactory factory = new JsonFactory();
-            ObjectMapper mapper = new ObjectMapper(factory);
             var exportStatusJson = mapper.readTree(fileContent);
             LOGGER.info("Loaded export status info from disk = {}", exportStatusJson);
+
             ExportStatus es = new ExportStatus(datadirStr);
-            String exportModeText = exportStatusJson.get("mode").asText();
-            es.updateMode(ExportMode.valueOf(exportModeText));
+            es.updateMode(ExportMode.valueOf(exportStatusJson.get("mode").asText()));
 
             var tablesJson = exportStatusJson.get("tables");
             for (var tableJson : tablesJson) {
                 // TODO: creating a duplicate table here. it will again be created when parsing a record of the table for the first time.
                 Table t = new Table(tableJson.get("database_name").asText(), tableJson.get("schema_name").asText(), tableJson.get("table_name").asText());
 
-                TableExportStatus tes = new TableExportStatus();
+                TableExportStatus tes = new TableExportStatus(tableJson.get("sno").asInt(), tableJson.get("file_name").asText());
                 tes.exportedRowCountSnapshot = tableJson.get("exported_row_count_snapshot").asInt();
-                tes.sno = tableJson.get("sno").asInt();
-                tes.snapshotFilename = tableJson.get("file_name").asText();
                 es.tableExportStatusMap.put(t, tes);
             }
             return es;
@@ -154,11 +152,16 @@ public class ExportStatus {
     }
 }
 
-// TODO: make vars private and add proper constructor
 class TableExportStatus {
     Integer sno;
     Integer exportedRowCountSnapshot;
     String snapshotFilename;
+
+    public TableExportStatus(Integer sno, String snapshotFilename){
+        this.sno = sno;
+        this.snapshotFilename = snapshotFilename;
+        this.exportedRowCountSnapshot = 0;
+    }
 }
 
 enum ExportMode {
