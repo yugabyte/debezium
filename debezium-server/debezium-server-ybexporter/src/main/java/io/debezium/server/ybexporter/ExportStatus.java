@@ -31,6 +31,7 @@ public class ExportStatus {
     private static ExportStatus instance;
     private String dataDir;
     private Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>();
+    private Map<String, Long> sequenceMax;
     private ExportMode mode;
     private ObjectWriter ow;
     private File f;
@@ -88,6 +89,14 @@ public class ExportStatus {
         mode = modeEnum;
     }
 
+    public void setSequenceMaxMap(Map<String, Long> sequenceMax){
+        this.sequenceMax = sequenceMax;
+    }
+
+    public Map<String, Long> getSequenceMap(){
+        return this.sequenceMax;
+    }
+
     public void flushToDisk() {
         HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
@@ -103,6 +112,7 @@ public class ExportStatus {
 
         exportStatusMap.put("tables", tablesInfo);
         exportStatusMap.put("mode", mode);
+        exportStatusMap.put("sequences", sequenceMax);
 
         try {
             ow.writeValue(f, exportStatusMap);
@@ -139,9 +149,22 @@ public class ExportStatus {
                 tes.snapshotFilename = tableJson.get("file_name").asText();
                 es.tableExportStatusMap.put(t, tes);
             }
+            Thread.sleep(3000);
+            var sequencesJson = exportStatusJson.get("sequences");
+            LOGGER.info("sequencesjson - " + sequencesJson.getClass().getName());
+            var sequencesIterator = sequencesJson.fields();
+            HashMap<String, Long> sequenceMaxMap = new HashMap<>();
+            while (sequencesIterator.hasNext()){
+                var entry = sequencesIterator.next();
+                sequenceMaxMap.put(entry.getKey(), Long.valueOf(entry.getValue().asText()));
+            }
+            es.setSequenceMaxMap(sequenceMaxMap);
+
             return es;
         }
         catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
