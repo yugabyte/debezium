@@ -22,7 +22,6 @@ debezium.source.database.server.id=101
 debezium.source.table.include.list=dbzmtest.int_types
 debezium.source.topic.prefix=tutorial
 
-debezium.source.decimal.handling.mode=string
 debezium.source.interval.handling.mode=string
 #debezium.source.include.unknown.datatypes=true
 #debezium.source.datatype.propagate.source.type=.*BOX.*,.*LINE.*,.*LSEG.*,.*PATH.*,.*POLYGON.*,.*CIRCLE.*

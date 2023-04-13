@@ -27,7 +27,6 @@ debezium.source.table.include.list=public.test_basic
 debezium.source.plugin.name=pgoutput
 debezium.source.topic.prefix=tutorial
 
-debezium.source.decimal.handling.mode=string
 debezium.source.interval.handling.mode=string
 debezium.source.hstore.handling.mode=map
 debezium.source.include.unknown.datatypes=true
