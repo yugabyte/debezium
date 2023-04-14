@@ -42,7 +42,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
     private RecordWriter streamingWriter;
     private ExportStatus exportStatus;
-    Thread helperThread;
+    Thread flusherThread;
 
     @PostConstruct
     void connect() throws URISyntaxException {
@@ -62,9 +62,9 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             exportStatus.updateMode(ExportMode.SNAPSHOT);
         }
 
-        helperThread = new Thread(this::flush);
-        helperThread.setDaemon(true);
-        helperThread.start();
+        flusherThread = new Thread(this::flush);
+        flusherThread.setDaemon(true);
+        flusherThread.start();
     }
 
     void retrieveSourceType(Config config){
@@ -218,10 +218,10 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void checkIfHelperThreadAlive(){
-        if (!helperThread.isAlive()){
-            // if helper thread dies, export status will stop being updated,
+        if (!flusherThread.isAlive()){
+            // if the flusher thread dies, export status will stop being updated,
             // so interrupting main thread as well.
-            throw new RuntimeException("Helper Thread exited.");
+            throw new RuntimeException("Flusher Thread exited unexpectedly.");
         }
     }
 }
