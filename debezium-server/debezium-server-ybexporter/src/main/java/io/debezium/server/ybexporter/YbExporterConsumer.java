@@ -43,6 +43,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private RecordWriter streamingWriter;
     private ExportStatus exportStatus;
     private SequenceObjectUpdater sequenceObjectUpdater;
+    Thread flusherThread;
 
     @PostConstruct
     void connect() throws URISyntaxException {
@@ -64,9 +65,9 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
         sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, retrieveColumnSequenceMap(config), exportStatus.getSequenceMap());
 
-        Thread t = new Thread(this::flush);
-        t.setDaemon(true);
-        t.start();
+        flusherThread = new Thread(this::flush);
+        flusherThread.setDaemon(true);
+        flusherThread.start();
     }
 
     void retrieveSourceType(Config config){
@@ -125,6 +126,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     public void handleBatch(List<ChangeEvent<Object, Object>> changeEvents, DebeziumEngine.RecordCommitter<ChangeEvent<Object, Object>> committer)
             throws InterruptedException {
         LOGGER.info("Processing batch with {} records", changeEvents.size());
+        checkIfHelperThreadAlive();
         for (ChangeEvent<Object, Object> event : changeEvents) {
             Object objKey = event.key();
             Object objVal = event.value();
@@ -237,5 +239,13 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void openCDCWriter() {
         streamingWriter = new StreamingWriterJson(dataDir);
+    }
+
+    private void checkIfHelperThreadAlive(){
+        if (!flusherThread.isAlive()){
+            // if the flusher thread dies, export status will stop being updated,
+            // so interrupting main thread as well.
+            throw new RuntimeException("Flusher Thread exited unexpectedly.");
+        }
     }
 }
