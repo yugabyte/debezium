@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,11 +30,14 @@ public class ExportStatus {
     private static final Logger LOGGER = LoggerFactory.getLogger(ExportStatus.class);
     private static final String EXPORT_STATUS_FILE_NAME = "export_status.json";
     private static ExportStatus instance;
+    private static ObjectMapper mapper = new ObjectMapper(new JsonFactory());
     private String dataDir;
-    private Map<Table, TableExportStatus> tableExportStatusMap = new HashMap<>();
+    private Map<Table, TableExportStatus> tableExportStatusMap = new LinkedHashMap<>();
     private ExportMode mode;
     private ObjectWriter ow;
     private File f;
+    private File tempf;
+
 
     /**
      * Should only be called once in the lifetime of the process.
@@ -46,7 +50,7 @@ public class ExportStatus {
         }
         dataDir = datadirStr;
         ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-        f = new File(String.format("%s/%s", dataDir, EXPORT_STATUS_FILE_NAME));
+        f = new File(getFilePath(datadirStr));
         instance = this;
     }
 
@@ -74,9 +78,7 @@ public class ExportStatus {
     }
 
     public void updateTableSnapshotWriterCreated(Table t, String tblFilename) {
-        TableExportStatus tableExportStatus = new TableExportStatus();
-        tableExportStatus.snapshotFilename = tblFilename;
-        tableExportStatus.exportedRowCountSnapshot = 0;
+        TableExportStatus tableExportStatus = new TableExportStatus(tableExportStatusMap.size(), tblFilename);
         tableExportStatusMap.put(t, tableExportStatus);
     }
 
@@ -89,15 +91,19 @@ public class ExportStatus {
     }
 
     public void flushToDisk() {
+        // TODO: do not create fresh objects every time, just reuse.
         HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
-        for (Table t : tableExportStatusMap.keySet()) {
+        for (Map.Entry<Table, TableExportStatus> pair : tableExportStatusMap.entrySet()) {
+            Table t = pair.getKey();
+            TableExportStatus tes = pair.getValue();
             HashMap<String, Object> tableInfo = new HashMap<>();
             tableInfo.put("database_name", t.dbName);
             tableInfo.put("schema_name", t.schemaName);
             tableInfo.put("table_name", t.tableName);
-            tableInfo.put("file_name", tableExportStatusMap.get(t).snapshotFilename);
-            tableInfo.put("exported_row_count", tableExportStatusMap.get(t).exportedRowCountSnapshot);
+            tableInfo.put("file_name", tes.snapshotFilename);
+            tableInfo.put("exported_row_count_snapshot", tes.exportedRowCountSnapshot);
+            tableInfo.put("sno", tes.sno);
             tablesInfo.add(tableInfo);
         }
 
@@ -105,38 +111,51 @@ public class ExportStatus {
         exportStatusMap.put("mode", mode);
 
         try {
-            ow.writeValue(f, exportStatusMap);
+            // for atomic write, we write to a temp file, and then
+            // rename to destination file path. This prevents readers from reading the file in a corrupted
+            // state (for example, when the complete file has not been written)
+            tempf = new File(getTempFilePath());
+            ow.writeValue(tempf, exportStatusMap);
+            boolean success = tempf.renameTo(f);
+            if (!success){
+                throw new RuntimeException("could not rename temp file for export status");
+            }
         }
         catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
+    private static String getFilePath(String dataDirStr){
+        return String.format("%s/%s", dataDirStr, EXPORT_STATUS_FILE_NAME);
+    }
+
+    private static String getTempFilePath(){
+        return getFilePath("/tmp");
+    }
+
     private static ExportStatus loadFromDisk(String datadirStr) {
         try {
-            Path p = Paths.get(datadirStr + "/export_status.json");
+            Path p = Paths.get(getFilePath(datadirStr));
             File f = new File(p.toUri());
             if (!f.exists()) {
                 return null;
             }
 
             String fileContent = Files.readString(p);
-            JsonFactory factory = new JsonFactory();
-            ObjectMapper mapper = new ObjectMapper(factory);
             var exportStatusJson = mapper.readTree(fileContent);
             LOGGER.info("Loaded export status info from disk = {}", exportStatusJson);
+
             ExportStatus es = new ExportStatus(datadirStr);
-            String exportModeText = exportStatusJson.get("mode").asText();
-            es.updateMode(ExportMode.valueOf(exportModeText));
+            es.updateMode(ExportMode.valueOf(exportStatusJson.get("mode").asText()));
 
             var tablesJson = exportStatusJson.get("tables");
             for (var tableJson : tablesJson) {
                 // TODO: creating a duplicate table here. it will again be created when parsing a record of the table for the first time.
                 Table t = new Table(tableJson.get("database_name").asText(), tableJson.get("schema_name").asText(), tableJson.get("table_name").asText());
 
-                TableExportStatus tes = new TableExportStatus();
-                tes.exportedRowCountSnapshot = tableJson.get("exported_row_count").asInt();
-                tes.snapshotFilename = tableJson.get("file_name").asText();
+                TableExportStatus tes = new TableExportStatus(tableJson.get("sno").asInt(), tableJson.get("file_name").asText());
+                tes.exportedRowCountSnapshot = tableJson.get("exported_row_count_snapshot").asInt();
                 es.tableExportStatusMap.put(t, tes);
             }
             return es;
@@ -148,8 +167,15 @@ public class ExportStatus {
 }
 
 class TableExportStatus {
+    Integer sno;
     Integer exportedRowCountSnapshot;
     String snapshotFilename;
+
+    public TableExportStatus(Integer sno, String snapshotFilename){
+        this.sno = sno;
+        this.snapshotFilename = snapshotFilename;
+        this.exportedRowCountSnapshot = 0;
+    }
 }
 
 enum ExportMode {
