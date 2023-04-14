@@ -61,11 +61,8 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         else {
             exportStatus.updateMode(ExportMode.SNAPSHOT);
         }
-        HashMap<String, String> columnSequenceMap = new HashMap<>();
-        columnSequenceMap.put("public.test_seq.id", "mytable_id_seq");
-        columnSequenceMap.put("public.test_seq1.id", "seq1");
-        columnSequenceMap.put("public.test_seq11.id", "seq1");
-        sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, columnSequenceMap, exportStatus.getSequenceMap());
+
+        sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, retrieveColumnSequenceMap(config), exportStatus.getSequenceMap());
 
         Thread t = new Thread(this::flush);
         t.setDaemon(true);
@@ -82,6 +79,26 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             case "io.debezium.connector.mysql.MySqlConnector":
                 sourceType = "mysql"; break;
         }
+    }
+
+    Map<String, String> retrieveColumnSequenceMap(Config config){
+        String propertyVal = PROP_PREFIX + "column_sequence.map";
+        String columnSequenceMapString = config.getOptionalValue(propertyVal, String.class).orElse(null);
+        HashMap<String, String> columnSequenceMap = new HashMap<>();
+        if (columnSequenceMapString == null) {
+            return columnSequenceMap;
+        }
+
+        String[] columnSequenceItems = columnSequenceMapString.split(",");
+        for (String columnSequenceStr: columnSequenceItems){
+            String[] colSequence = columnSequenceStr.split(":");
+            if (colSequence.length != 2){
+                throw new RuntimeException("Incorrect config for " + propertyVal
+                        + ". Please provide comma separated list of 'col:seq' with their fully qualified names.");
+            }
+            columnSequenceMap.put(colSequence[0], colSequence[1]);
+        }
+        return columnSequenceMap;
     }
 
     void flush() {
