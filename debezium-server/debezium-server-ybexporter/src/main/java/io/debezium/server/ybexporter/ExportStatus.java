@@ -168,9 +168,7 @@ public class ExportStatus {
                 tes.exportedRowCountSnapshot = tableJson.get("exported_row_count_snapshot").asInt();
                 es.tableExportStatusMap.put(t, tes);
             }
-            Thread.sleep(3000);
             var sequencesJson = exportStatusJson.get("sequences");
-            LOGGER.info("sequencesjson - " + sequencesJson.getClass().getName());
             var sequencesIterator = sequencesJson.fields();
             HashMap<String, Long> sequenceMaxMap = new HashMap<>();
             while (sequencesIterator.hasNext()){
@@ -182,8 +180,6 @@ public class ExportStatus {
             return es;
         }
         catch (IOException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
