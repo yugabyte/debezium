@@ -17,12 +17,16 @@ else
   PATH_SEP=":"
 fi
 
-RUNNER=$(ls debezium-server-*runner.jar)
+if [ -z "$DEBEZIUM_DIST_DIR" ]; then
+    DEBEZIUM_DIST_DIR="./"
+fi
+
+RUNNER=$(ls "$DEBEZIUM_DIST_DIR"/debezium-server-*runner.jar)
 
 ENABLE_DEBEZIUM_SCRIPTING=${ENABLE_DEBEZIUM_SCRIPTING:-false}
-LIB_PATH="lib/*"
+LIB_PATH="$DEBEZIUM_DIST_DIR/lib/*"
 if [[ "${ENABLE_DEBEZIUM_SCRIPTING}" == "true" ]]; then
-    LIB_PATH=$LIB_PATH$PATH_SEP"lib_opt/*"
+    LIB_PATH=$LIB_PATH$PATH_SEP"$DEBEZIUM_DIST_DIR/lib_opt/*"
 fi
 
 
