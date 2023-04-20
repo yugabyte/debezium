@@ -32,6 +32,7 @@ public class ExportStatus {
     private static ExportStatus instance;
     private static ObjectMapper mapper = new ObjectMapper(new JsonFactory());
     private String dataDir;
+    private Map<String, Long> sequenceMax;
     private Map<Table, TableExportStatus> tableExportStatusMap = new LinkedHashMap<>();
     private ExportMode mode;
     private ObjectWriter ow;
@@ -90,6 +91,14 @@ public class ExportStatus {
         mode = modeEnum;
     }
 
+    public void setSequenceMaxMap(Map<String, Long> sequenceMax){
+        this.sequenceMax = sequenceMax;
+    }
+
+    public Map<String, Long> getSequenceMaxMap(){
+        return this.sequenceMax;
+    }
+
     public void flushToDisk() {
         // TODO: do not create fresh objects every time, just reuse.
         HashMap<String, Object> exportStatusMap = new HashMap<>();
@@ -109,6 +118,7 @@ public class ExportStatus {
 
         exportStatusMap.put("tables", tablesInfo);
         exportStatusMap.put("mode", mode);
+        exportStatusMap.put("sequences", sequenceMax);
 
         try {
             // for atomic write, we write to a temp file, and then
@@ -158,6 +168,15 @@ public class ExportStatus {
                 tes.exportedRowCountSnapshot = tableJson.get("exported_row_count_snapshot").asInt();
                 es.tableExportStatusMap.put(t, tes);
             }
+            var sequencesJson = exportStatusJson.get("sequences");
+            var sequencesIterator = sequencesJson.fields();
+            HashMap<String, Long> sequenceMaxMap = new HashMap<>();
+            while (sequencesIterator.hasNext()){
+                var entry = sequencesIterator.next();
+                sequenceMaxMap.put(entry.getKey(), Long.valueOf(entry.getValue().asText()));
+            }
+            es.setSequenceMaxMap(sequenceMaxMap);
+
             return es;
         }
         catch (IOException e) {
