@@ -95,7 +95,7 @@ public class ExportStatus {
         this.sequenceMax = sequenceMax;
     }
 
-    public Map<String, Long> getSequenceMap(){
+    public Map<String, Long> getSequenceMaxMap(){
         return this.sequenceMax;
     }
 

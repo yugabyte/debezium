@@ -88,14 +88,11 @@ public class SequenceObjectUpdater {
         if (r.op.equals("d")){
             // not processing delete events because the max would have already been updated in the
             // prior create/update events.
-            // TODO: question: should we also update the max to the second-max value if the row with max is deleted??
             return;
         }
         for(int i = 0; i < r.valueColumns.size(); i++){
-//            String fullyQualifiedColumnName = r.t.schemaName+"."+r.t.tableName+"."+r.valueColumns.get(i);
             String seqName = getFromColumnSequenceMap(r.t.schemaName, r.t.tableName, r.valueColumns.get(i));
             if (seqName != null){
-//                String seqName = columnSequenceMap.get(fullyQualifiedColumnName);
                 Long columnValue = Long.valueOf(r.valueValues.get(i).toString());
                 sequenceMax.put(seqName, Math.max(sequenceMax.get(seqName), columnValue));
             }

@@ -69,7 +69,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         }
         String propertyVal = PROP_PREFIX + "column_sequence.map";
         String columnSequenceMapString = config.getOptionalValue(propertyVal, String.class).orElse(null);
-        sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, columnSequenceMapString, exportStatus.getSequenceMap());
+        sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, columnSequenceMapString, exportStatus.getSequenceMaxMap());
 
         flusherThread = new Thread(this::flush);
         flusherThread.setDaemon(true);
