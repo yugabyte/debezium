@@ -23,7 +23,6 @@ debezium.source.schema.include.list=DBZMTEST
 debezium.source.table.include.list=DBZMTEST.FOO
 debezium.source.topic.prefix=tutorial
 
-debezium.source.decimal.handling.mode=string
 debezium.source.interval.handling.mode=string
 debezium.source.hstore.handling.mode=map
 debezium.source.include.unknown.datatypes=true

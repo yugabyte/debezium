@@ -12,6 +12,8 @@ debezium.source.topic.naming.strategy=io.debezium.server.ybexporter.DummyTopicNa
 debezium.source.offset.storage.file.filename=data/offsets.dat
 debezium.source.offset.flush.interval.ms=0
 debezium.source.tombstones.on.delete=false
+debezium.source.converters=postgres_source_converter
+debezium.source.postgres_source_converter.type=io.debezium.server.ybexporter.PostgresToYbValueConverter
 
 debezium.source.database.hostname=localhost
 debezium.source.database.port=5432
@@ -25,7 +27,6 @@ debezium.source.table.include.list=public.test_basic
 debezium.source.plugin.name=pgoutput
 debezium.source.topic.prefix=tutorial
 
-debezium.source.decimal.handling.mode=string
 debezium.source.interval.handling.mode=string
 debezium.source.hstore.handling.mode=map
 debezium.source.include.unknown.datatypes=true
