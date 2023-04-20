@@ -15,6 +15,7 @@ import java.util.Map;
 
 public class SequenceObjectUpdater {
     private static final Logger LOGGER = LoggerFactory.getLogger(SequenceObjectUpdater.class);
+    public static String propertyName = "column_sequence.map";
     String dataDirStr;
     Map<String, Map<String, Map<String, String>>> columnSequenceMap; // Schema:table:column -> sequence
     Map<String, Long> sequenceMax;
@@ -45,7 +46,7 @@ public class SequenceObjectUpdater {
             String fullyQualifiedColumnName = colSequence[0];
             String sequenceName = colSequence[1];
 
-            String columnSplit[] = fullyQualifiedColumnName.split("\\.");
+            String[] columnSplit = fullyQualifiedColumnName.split("\\.");
             if (columnSplit.length != 3){
                 throw new RuntimeException("Incorrect format for column name in config param -" + columnSequenceStr +
                         ". Use <schema>.<table>.<column> instead.");

@@ -48,11 +48,6 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
 
         final Config config = ConfigProvider.getConfig();
 
@@ -67,7 +62,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         else {
             exportStatus.updateMode(ExportMode.SNAPSHOT);
         }
-        String propertyVal = PROP_PREFIX + "column_sequence.map";
+        String propertyVal = PROP_PREFIX + SequenceObjectUpdater.propertyName;
         String columnSequenceMapString = config.getOptionalValue(propertyVal, String.class).orElse(null);
         sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, columnSequenceMapString, exportStatus.getSequenceMaxMap());
 
