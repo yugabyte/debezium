@@ -5,6 +5,7 @@
  */
 package io.debezium.server.ybexporter;
 
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,6 +17,7 @@ import java.util.BitSet;
 import java.util.HashMap;
 import java.util.Map;
 
+import io.debezium.data.VariableScaleDecimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Struct;
@@ -109,6 +111,10 @@ public class YugabyteDialectConverter {
                     Struct geometryStruct = (Struct) fieldValue;
                     byte[] wkb = (byte[]) geometryStruct.get("wkb");
                     return bytesToHex(wkb);
+                case "org.apache.kafka.connect.data.Decimal":
+                    return ((BigDecimal) fieldValue).toString();
+                case "io.debezium.data.VariableScaleDecimal":
+                    return VariableScaleDecimal.toLogical((Struct)fieldValue).toString();
             }
         }
         Type type = field.schema().type();
