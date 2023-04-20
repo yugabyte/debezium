@@ -48,6 +48,11 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
 
         final Config config = ConfigProvider.getConfig();
 
@@ -62,8 +67,9 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         else {
             exportStatus.updateMode(ExportMode.SNAPSHOT);
         }
-
-        sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, retrieveColumnSequenceMap(config), exportStatus.getSequenceMap());
+        String propertyVal = PROP_PREFIX + "column_sequence.map";
+        String columnSequenceMapString = config.getOptionalValue(propertyVal, String.class).orElse(null);
+        sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, columnSequenceMapString, exportStatus.getSequenceMap());
 
         flusherThread = new Thread(this::flush);
         flusherThread.setDaemon(true);
@@ -80,26 +86,6 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             case "io.debezium.connector.mysql.MySqlConnector":
                 sourceType = "mysql"; break;
         }
-    }
-
-    Map<String, String> retrieveColumnSequenceMap(Config config){
-        String propertyVal = PROP_PREFIX + "column_sequence.map";
-        String columnSequenceMapString = config.getOptionalValue(propertyVal, String.class).orElse(null);
-        HashMap<String, String> columnSequenceMap = new HashMap<>();
-        if (columnSequenceMapString == null) {
-            return columnSequenceMap;
-        }
-
-        String[] columnSequenceItems = columnSequenceMapString.split(",");
-        for (String columnSequenceStr: columnSequenceItems){
-            String[] colSequence = columnSequenceStr.split(":");
-            if (colSequence.length != 2){
-                throw new RuntimeException("Incorrect config for " + propertyVal
-                        + ". Please provide comma separated list of 'col:seq' with their fully qualified names.");
-            }
-            columnSequenceMap.put(colSequence[0], colSequence[1]);
-        }
-        return columnSequenceMap;
     }
 
     void flush() {
