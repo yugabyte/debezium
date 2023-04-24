@@ -36,6 +36,9 @@ public class SequenceObjectUpdater {
     }
 
     public void initColumnSequenceMap(String columnSequenceMapString){
+        if (columnSequenceMapString == null){
+            return;
+        }
         String[] columnSequenceItems = columnSequenceMapString.split(",");
         for (String columnSequenceStr: columnSequenceItems) {
             String[] colSequence = columnSequenceStr.split(":");
