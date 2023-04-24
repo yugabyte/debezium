@@ -4,7 +4,7 @@ VERSION=2.2.0
 DEBEZIUM_SERVER_LIB=debezium-server/debezium-server-dist/target/debezium-server/lib/
 
 debezium:
-	mvn clean install -Dquick -Pquick -e -pl '!debezium-quarkus-outbox/integration-tests'
+	mvn clean install -Dquick -Pquick
 
 debezium-server:
 	cd debezium-server/debezium-server-dist; \
