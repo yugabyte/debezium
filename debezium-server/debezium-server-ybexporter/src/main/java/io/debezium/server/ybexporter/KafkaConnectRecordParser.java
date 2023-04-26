@@ -43,7 +43,6 @@ class KafkaConnectRecordParser implements RecordParser {
             Struct value = (Struct) ((SourceRecord) valueObj).value();
             Struct key = (Struct) ((SourceRecord) valueObj).key();
 
-
             if (value == null) {
                 // Ideally, we should have config tombstones.on.delete=false. In case that is not set correctly,
                 // we will get those events where value field = null. Skipping those events.
