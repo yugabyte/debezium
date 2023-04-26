@@ -15,6 +15,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +24,8 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 /**
  * Singleton class that is used to update the status of the export process.
@@ -32,8 +36,8 @@ public class ExportStatus {
     private static ExportStatus instance;
     private static ObjectMapper mapper = new ObjectMapper(new JsonFactory());
     private String dataDir;
-    private Map<String, Long> sequenceMax;
-    private Map<Table, TableExportStatus> tableExportStatusMap = new LinkedHashMap<>();
+    private ConcurrentMap<String, Long> sequenceMax;
+    private ConcurrentMap<Table, TableExportStatus> tableExportStatusMap = new ConcurrentHashMap<>();
     private ExportMode mode;
     private ObjectWriter ow;
     private File f;
@@ -91,11 +95,11 @@ public class ExportStatus {
         mode = modeEnum;
     }
 
-    public void setSequenceMaxMap(Map<String, Long> sequenceMax){
+    public void setSequenceMaxMap(ConcurrentMap<String, Long> sequenceMax){
         this.sequenceMax = sequenceMax;
     }
 
-    public Map<String, Long> getSequenceMaxMap(){
+    public ConcurrentMap<String, Long> getSequenceMaxMap(){
         return this.sequenceMax;
     }
 
@@ -126,10 +130,7 @@ public class ExportStatus {
             // state (for example, when the complete file has not been written)
             tempf = new File(getTempFilePath());
             ow.writeValue(tempf, exportStatusMap);
-            boolean success = tempf.renameTo(f);
-            if (!success){
-                throw new RuntimeException("could not rename temp file for export status");
-            }
+            Files.move(tempf.toPath(), f.toPath(), REPLACE_EXISTING);
         }
         catch (IOException e) {
             throw new RuntimeException(e);
@@ -170,7 +171,7 @@ public class ExportStatus {
             }
             var sequencesJson = exportStatusJson.get("sequences");
             var sequencesIterator = sequencesJson.fields();
-            HashMap<String, Long> sequenceMaxMap = new HashMap<>();
+            ConcurrentHashMap<String, Long> sequenceMaxMap = new ConcurrentHashMap<>();
             while (sequencesIterator.hasNext()){
                 var entry = sequencesIterator.next();
                 sequenceMaxMap.put(entry.getKey(), Long.valueOf(entry.getValue().asText()));
