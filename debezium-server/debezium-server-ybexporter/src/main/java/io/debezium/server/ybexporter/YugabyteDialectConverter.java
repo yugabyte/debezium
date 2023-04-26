@@ -20,6 +20,7 @@ import java.util.Map;
 import io.debezium.data.VariableScaleDecimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema.Type;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +44,6 @@ public class YugabyteDialectConverter {
         if (fieldValue == null) {
             return fieldValue;
         }
-
         // The below types are not supported by debezium's postgres connector.
         // Therefore, we interpret the actual source column type (set by config datatype.propagate.source.type)
         // and then handle them.
@@ -120,10 +120,9 @@ public class YugabyteDialectConverter {
         Type type = field.schema().type();
         switch (type) {
             case BYTES:
-                StringBuilder hexString = new StringBuilder();
-                hexString.append("\\x");
+                String hexPrefix = "\\x";
                 byte[] byteArr = ((ByteBuffer) fieldValue).array();
-                return bytesToHex(byteArr);
+                return hexPrefix + bytesToHex(byteArr);
             case MAP:
                 StringBuilder mapString = new StringBuilder();
                 for (Map.Entry<String, String> entry : ((HashMap<String, String>) fieldValue).entrySet()) {
