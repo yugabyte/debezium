@@ -15,8 +15,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,8 +34,8 @@ public class ExportStatus {
     private static ExportStatus instance;
     private static ObjectMapper mapper = new ObjectMapper(new JsonFactory());
     private String dataDir;
-    private ConcurrentMap<String, Long> sequenceMax;
-    private ConcurrentMap<Table, TableExportStatus> tableExportStatusMap = new ConcurrentHashMap<>();
+    private Map<String, Long> sequenceMax;
+    private Map<Table, TableExportStatus> tableExportStatusMap = new LinkedHashMap<>();
     private ExportMode mode;
     private ObjectWriter ow;
     private File f;
@@ -95,11 +93,11 @@ public class ExportStatus {
         mode = modeEnum;
     }
 
-    public void setSequenceMaxMap(ConcurrentMap<String, Long> sequenceMax){
+    public void setSequenceMaxMap(Map<String, Long> sequenceMax){
         this.sequenceMax = sequenceMax;
     }
 
-    public ConcurrentMap<String, Long> getSequenceMaxMap(){
+    public Map<String, Long> getSequenceMaxMap(){
         return this.sequenceMax;
     }
 
@@ -171,7 +169,7 @@ public class ExportStatus {
             }
             var sequencesJson = exportStatusJson.get("sequences");
             var sequencesIterator = sequencesJson.fields();
-            ConcurrentHashMap<String, Long> sequenceMaxMap = new ConcurrentHashMap<>();
+            HashMap<String, Long> sequenceMaxMap = new HashMap<>();
             while (sequencesIterator.hasNext()){
                 var entry = sequencesIterator.next();
                 sequenceMaxMap.put(entry.getKey(), Long.valueOf(entry.getValue().asText()));

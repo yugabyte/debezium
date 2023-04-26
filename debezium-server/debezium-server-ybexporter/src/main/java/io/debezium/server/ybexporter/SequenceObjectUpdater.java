@@ -12,23 +12,21 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 public class SequenceObjectUpdater {
     private static final Logger LOGGER = LoggerFactory.getLogger(SequenceObjectUpdater.class);
     public static String propertyName = "column_sequence.map";
     String dataDirStr;
     Map<String, Map<String, Map<String, String>>> columnSequenceMap; // Schema:table:column -> sequence
-    ConcurrentMap<String, Long> sequenceMax;
+    Map<String, Long> sequenceMax;
     ExportStatus es;
-    public SequenceObjectUpdater(String dataDirStr, String columnSequenceMapString, ConcurrentMap<String, Long> sequenceMax){
+    public SequenceObjectUpdater(String dataDirStr, String columnSequenceMapString, Map<String, Long> sequenceMax){
         this.dataDirStr = dataDirStr;
         this.columnSequenceMap = new HashMap<>();
 
         es = ExportStatus.getInstance(dataDirStr);
         if (sequenceMax == null){
-           this.sequenceMax = new ConcurrentHashMap<>();
+           this.sequenceMax = new HashMap<>();
         }
         else{
             this.sequenceMax = sequenceMax;
