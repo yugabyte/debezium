@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -87,8 +86,8 @@ public class ExportStatus {
         tableExportStatusMap.put(t, tableExportStatus);
     }
 
-    public void updateTableSnapshotRecordWritten(Table t) {
-        tableExportStatusMap.get(t).exportedRowCountSnapshot++;
+    public void updateTableRecordWritten(Table t) {
+        tableExportStatusMap.get(t).exportedRowCount++;
     }
 
     public void updateMode(ExportMode modeEnum) {
@@ -115,7 +114,7 @@ public class ExportStatus {
             tableInfo.put("schema_name", t.schemaName);
             tableInfo.put("table_name", t.tableName);
             tableInfo.put("file_name", tes.snapshotFilename);
-            tableInfo.put("exported_row_count_snapshot", tes.exportedRowCountSnapshot);
+            tableInfo.put("exported_row_count", tes.exportedRowCount);
             tableInfo.put("sno", tes.sno);
             tablesInfo.add(tableInfo);
         }
@@ -166,7 +165,7 @@ public class ExportStatus {
                 Table t = new Table(tableJson.get("database_name").asText(), tableJson.get("schema_name").asText(), tableJson.get("table_name").asText());
 
                 TableExportStatus tes = new TableExportStatus(tableJson.get("sno").asInt(), tableJson.get("file_name").asText());
-                tes.exportedRowCountSnapshot = tableJson.get("exported_row_count_snapshot").asInt();
+                tes.exportedRowCount = tableJson.get("exported_row_count").asInt();
                 es.tableExportStatusMap.put(t, tes);
             }
             var sequencesJson = exportStatusJson.get("sequences");
@@ -188,13 +187,13 @@ public class ExportStatus {
 
 class TableExportStatus {
     Integer sno;
-    Integer exportedRowCountSnapshot;
+    Integer exportedRowCount;
     String snapshotFilename;
 
     public TableExportStatus(Integer sno, String snapshotFilename){
         this.sno = sno;
         this.snapshotFilename = snapshotFilename;
-        this.exportedRowCountSnapshot = 0;
+        this.exportedRowCount = 0;
     }
 }
 

@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectWriter;
 
 public class StreamingWriterJson implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
+    private ExportStatus es;
     private static final String QUEUE_FILE_NAME = "queue.json";
     private String dataDir;
     private BufferedWriter writer;
@@ -37,6 +38,7 @@ public class StreamingWriterJson implements RecordWriter {
             fd = fos.getFD();
             var f = new FileWriter(fd);
             writer = new BufferedWriter(f);
+            es = ExportStatus.getInstance(dataDir);
 
         }
         catch (IOException e) {
@@ -52,6 +54,7 @@ public class StreamingWriterJson implements RecordWriter {
             writer.write(cdcJson);
             writer.write("\n");
             LOGGER.info("Writing CDC message = {}", cdcJson);
+            es.updateTableRecordWritten(r.t);
         }
         catch (IOException e) {
             throw new RuntimeException(e);
