@@ -9,6 +9,7 @@ import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.Dependent;
@@ -39,7 +40,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     String sourceType;
     private Map<String, Table> tableMap = new HashMap<>();
     private RecordParser parser;
-    private Map<Table, RecordWriter> snapshotWriters = new HashMap<>();
+    private Map<Table, RecordWriter> snapshotWriters = new ConcurrentHashMap<>();
     private RecordWriter streamingWriter;
     private ExportStatus exportStatus;
     private SequenceObjectUpdater sequenceObjectUpdater;
