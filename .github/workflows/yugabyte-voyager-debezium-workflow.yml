@@ -213,4 +213,5 @@ jobs:
         uses: softprops/action-gh-release@v1
 #        if: startsWith(github.ref, 'refs/tags/r')
         with:
+          tag_name: ${{ github.sha }}
           files: debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz
