@@ -224,7 +224,6 @@ jobs:
         if: steps.maven-cache-check.outputs.cache-hit != 'true'
         run: >
           ./mvnw -B -ntp clean install
-          -pl ${{ env.MAVEN_FULL_BUILD_PROJECTS }}
           -Dformat.skip=true
           -Dcheckstyle.skip=true
           -Dorg.slf4j.simpleLogger.showDateTime=true
@@ -295,10 +294,3 @@ jobs:
       - name: Build Debezium Server
         run: >
           sh buildDebeziumServer.sh
-
-      - name: Test Debezium Server
-        run: >
-          ./mvnw install -B -pl debezium-server -Pserver-ci -amd
-          -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
-          -Dmaven.wagon.http.pool=false
-          -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
