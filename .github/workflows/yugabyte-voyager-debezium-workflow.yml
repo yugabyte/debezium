@@ -232,8 +232,8 @@ jobs:
           -DskipITs=true
 
   build_debezium_server:
-    needs: [check_style, file_changes]
-    if: ${{ needs.file_changes.outputs.common-changed == 'true' || needs.file_changes.outputs.debezium-server-changed == 'true' }}
+    needs: [file_changes]
+#    if: ${{ needs.file_changes.outputs.common-changed == 'true' || needs.file_changes.outputs.debezium-server-changed == 'true' }}
     name: "Debezium Server"
     runs-on: ubuntu-latest
     steps:
