@@ -219,3 +219,4 @@ jobs:
 #          tag_name: rel-${{ steps.vars.outputs.sha_short }}
           tag_name: voyager-debezium-latest
           files: debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz
+          target_commitish: ${{ github.sha }}
