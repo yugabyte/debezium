@@ -216,5 +216,6 @@ jobs:
         uses: softprops/action-gh-release@v1
 #        if: startsWith(github.ref, 'refs/tags/r')
         with:
-          tag_name: rel-${{ steps.vars.outputs.sha_short }}
+#          tag_name: rel-${{ steps.vars.outputs.sha_short }}
+          tag_name: voyager-debezium-latest
           files: debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz
