@@ -19,11 +19,13 @@ public class SequenceObjectUpdater {
     private static final Logger LOGGER = LoggerFactory.getLogger(SequenceObjectUpdater.class);
     public static String propertyName = "column_sequence.map";
     String dataDirStr;
+    String sourceType;
     Map<String, Map<String, Map<String, String>>> columnSequenceMap; // Schema:table:column -> sequence
     ConcurrentMap<String, Long> sequenceMax;
     ExportStatus es;
-    public SequenceObjectUpdater(String dataDirStr, String columnSequenceMapString, ConcurrentMap<String, Long> sequenceMax){
+    public SequenceObjectUpdater(String dataDirStr, String sourceType, String columnSequenceMapString, ConcurrentMap<String, Long> sequenceMax){
         this.dataDirStr = dataDirStr;
+        this.sourceType = sourceType;
         this.columnSequenceMap = new HashMap<>();
 
         es = ExportStatus.getInstance(dataDirStr);
@@ -54,7 +56,7 @@ public class SequenceObjectUpdater {
             String[] columnSplit = fullyQualifiedColumnName.split("\\.");
             if (columnSplit.length != 3){
                 throw new RuntimeException("Incorrect format for column name in config param -" + columnSequenceStr +
-                        ". Use <schema>.<table>.<column> instead.");
+                        ". Use <schema>.<table>.<column> (<database>.<table>.<name> for mysql) instead.");
             }
             insertIntoColumnSequenceMap(columnSplit[0], columnSplit[1], columnSplit[2], sequenceName);
             // add a base entry to sequenceMax. If already populated, do not update.
@@ -62,23 +64,23 @@ public class SequenceObjectUpdater {
         }
     }
 
-    private void insertIntoColumnSequenceMap(String schema, String table, String column, String sequence){
-        Map<String, Map<String, String>> schemaMap = this.columnSequenceMap.get(schema);
-        if (schemaMap == null){
-            schemaMap = new HashMap<>();
-            this.columnSequenceMap.put(schema, schemaMap);
+    private void insertIntoColumnSequenceMap(String schemaOrDb, String table, String column, String sequence){
+        Map<String, Map<String, String>> schemaOrDbMap = this.columnSequenceMap.get(schemaOrDb);
+        if (schemaOrDbMap == null){
+            schemaOrDbMap = new HashMap<>();
+            this.columnSequenceMap.put(schemaOrDb, schemaOrDbMap);
         }
 
-        Map<String, String> schemaTableMap = schemaMap.get(table);
+        Map<String, String> schemaTableMap = schemaOrDbMap.get(table);
         if (schemaTableMap == null){
             schemaTableMap = new HashMap<>();
-            schemaMap.put(table, schemaTableMap);
+            schemaOrDbMap.put(table, schemaTableMap);
         }
         schemaTableMap.put(column, sequence);
     }
 
-    private String getFromColumnSequenceMap(String schema, String table, String column){
-        Map<String, Map<String, String>> schemaMap = this.columnSequenceMap.get(schema);
+    private String getFromColumnSequenceMap(String schemaOrDb, String table, String column){
+        Map<String, Map<String, String>> schemaMap = this.columnSequenceMap.get(schemaOrDb);
         if (schemaMap == null){
             return null;
         }
@@ -97,7 +99,14 @@ public class SequenceObjectUpdater {
             return;
         }
         for(int i = 0; i < r.valueColumns.size(); i++){
-            String seqName = getFromColumnSequenceMap(r.t.schemaName, r.t.tableName, r.valueColumns.get(i));
+            String schemaOrDbname;
+            if (sourceType.equals("mysql")){
+                schemaOrDbname = r.t.dbName;
+            }
+            else {
+                schemaOrDbname = r.t.schemaName;
+            }
+            String seqName = getFromColumnSequenceMap(schemaOrDbname, r.t.tableName, r.valueColumns.get(i));
             if (seqName != null){
                 Long columnValue = Long.valueOf(r.valueValues.get(i).toString());
                 sequenceMax.put(seqName, Math.max(sequenceMax.get(seqName), columnValue));
