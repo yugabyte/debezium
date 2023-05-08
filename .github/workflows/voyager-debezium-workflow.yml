@@ -1,0 +1,58 @@
+name: Build Debezium
+
+on:
+  push:
+    branches:
+      - voyager-main
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+    branches:
+      - voyager-main
+
+jobs:
+  build_debezium_server:
+    name: "Build Debezium Server"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Action
+        uses: actions/checkout@v3
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Cache Maven Repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
+      - name: Push dist name
+        if : ${{ github.event_name == 'push' }}
+        run: |
+          echo "DIST_NAME=debezium-server-latest" >> "$GITHUB_ENV"
+      - name: Branch Dist name
+        if : ${{ github.event_name == 'pull_request' }}
+        run: |
+          echo "DIST_NAME=debezium-server-${GITHUB_HEAD_REF//\//_}" >> "$GITHUB_ENV"
+      - name: Build Debezium Server
+        run: |
+          sh buildDebeziumServer.sh
+          mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
+      - name: Publish to voyager-debezium-latest
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: voyager-debezium
+          files: debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz
+          target_commitish: ${{ github.sha }}
+      - name: Delete dist after PR closed
+        if: github.event_name == 'pull_request' && github.event.action =='closed'
+        uses: mknejp/delete-release-assets@v1
+        with:
+          token: ${{ github.token }}
+          tag: voyager-debezium
+          assets: ${{ env.DIST_NAME }}.tar.gz

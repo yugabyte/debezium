@@ -37,6 +37,10 @@ if [[ "${ENABLE_DEBEZIUM_SCRIPTING}" == "true" ]]; then
     LIB_PATH=$LIB_PATH$PATH_SEP"$SCRIPT_DIR/lib_opt/*"
 fi
 
+if [ -z "$DEBUG" ]; then
+    DEBUGGER=""
+else
+    DEBUGGER="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+fi
 
-DEBUGGER="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
-exec "$JAVA_BINARY" $DEBEZIUM_OPTS $JAVA_OPTS -cp "$RUNNER"$PATH_SEP"conf"$PATH_SEP$LIB_PATH -Dquarkus.config.locations=$PROPERTIES_FILE_PATH "$DEBUGGER" io.debezium.server.Main
+exec "$JAVA_BINARY" $DEBEZIUM_OPTS $JAVA_OPTS -Xmx3g $DEBUGGER -cp "$RUNNER"$PATH_SEP"conf"$PATH_SEP$LIB_PATH -Dquarkus.config.locations=$PROPERTIES_FILE_PATH io.debezium.server.Main
