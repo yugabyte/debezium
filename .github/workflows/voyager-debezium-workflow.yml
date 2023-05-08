@@ -31,7 +31,7 @@ jobs:
             maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
 
       - name: Build Debezium Server
-        run: >
+        run: |
           sh buildDebeziumServer.sh
           mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz debezium-server/debezium-server-dist/target/debezium-server-latest.tar.gz
       - name: Publish to voyager-debezium-latest
