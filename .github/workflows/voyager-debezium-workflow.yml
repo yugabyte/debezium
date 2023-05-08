@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - voyager-main
+  pull_request:
+    branches:
+      - voyager-main
 
 jobs:
   build_debezium_server:
@@ -30,9 +33,11 @@ jobs:
       - name: Build Debezium Server
         run: >
           sh buildDebeziumServer.sh
+          mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz debezium-server/debezium-server-dist/target/debezium-server-latest.tar.gz
       - name: Publish to voyager-debezium-latest
         uses: softprops/action-gh-release@v1
         with:
+          prerelease: true
           tag_name: voyager-debezium-latest
-          files: debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz
+          files: debezium-server/debezium-server-dist/target/debezium-server-latest.tar.gz
           target_commitish: ${{ github.sha }}
