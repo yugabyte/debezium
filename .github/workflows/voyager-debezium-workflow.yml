@@ -5,6 +5,7 @@ on:
     branches:
       - voyager-main
   pull_request:
+    types: [opened, reopened, synchronize, closed]
     branches:
       - voyager-main
 
@@ -45,6 +46,13 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
-          tag_name: voyager-debezium-latest
+          tag_name: voyager-debezium
           files: debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz
           target_commitish: ${{ github.sha }}
+      - name: Delete dist after PR closed
+        if: github.event_name == 'pull_request' && github.event.action =='closed'
+        uses: mknejp/delete-release-assets@v1
+        with:
+          token: ${{ github.token }}
+          tag: voyager-debezium
+          assets: ${{ env.DIST_NAME }}.tar.gz
