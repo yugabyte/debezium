@@ -46,5 +46,5 @@ jobs:
         with:
           prerelease: true
           tag_name: voyager-debezium-latest
-          files: debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz
+          files: debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz
           target_commitish: ${{ github.sha }}
