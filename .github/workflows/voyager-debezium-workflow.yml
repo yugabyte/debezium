@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - voyager-main
-  pull_request:
-    branches:
-      - voyager-main
 
 jobs:
   build_debezium_server:
