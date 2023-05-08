@@ -36,7 +36,7 @@ jobs:
       - name: Branch Dist name
         if : ${{ github.event_name == 'pull_request' }}
         run: |
-          echo "DIST_NAME=${GITHUB_HEAD_REF//\//_}" >> "$GITHUB_ENV"
+          echo "DIST_NAME=debezium-server-${GITHUB_HEAD_REF//\//_}" >> "$GITHUB_ENV"
       - name: Build Debezium Server
         run: |
           sh buildDebeziumServer.sh
