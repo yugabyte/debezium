@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - voyager-main
+  pull_request:
+    branches:
+      - voyager-main
 
 jobs:
   build_debezium_server:
@@ -26,15 +29,22 @@ jobs:
           key: maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
-
+      - name: Push dist name
+        if : ${{ github.event_name == 'push' }}
+        run: |
+          echo "DIST_NAME=debezium-server-latest" >> "$GITHUB_ENV"
+      - name: Branch Dist name
+        if : ${{ github.event_name == 'pull_request' }}
+        run: |
+          echo "DIST_NAME=${GITHUB_HEAD_REF//\//_}" >> "$GITHUB_ENV"
       - name: Build Debezium Server
         run: |
           sh buildDebeziumServer.sh
-          mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz debezium-server/debezium-server-dist/target/debezium-server-latest.tar.gz
+          mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
       - name: Publish to voyager-debezium-latest
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
           tag_name: voyager-debezium-latest
-          files: debezium-server/debezium-server-dist/target/debezium-server-latest.tar.gz
+          files: debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz
           target_commitish: ${{ github.sha }}
