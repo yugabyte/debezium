@@ -42,7 +42,7 @@ jobs:
         run: |
           sh buildDebeziumServer.sh
           mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
-      - name: Publish to voyager-debezium-latest
+      - name: Publish to voyager-debezium
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
