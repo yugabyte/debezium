@@ -50,7 +50,7 @@ jobs:
         with:
           upload_url: https://uploads.github.com/repos/yugabyte/debezium/releases/102178405/assets{?name,label}
           asset_path: debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz
-#          asset_name: my-artifact.zip
+          asset_name: ${{ env.DIST_NAME }}.tar.gz
 #          asset_content_type: application/zip
 #      - name: Publish to voyager-debezium
 #        uses: softprops/action-gh-release@v1
