@@ -11,6 +11,8 @@ jobs:
     name: "Clean up Release Asset"
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Action
+        uses: actions/checkout@v3
       - name: Branch Dist name
         if : ${{ github.event_name == 'pull_request' }}
         run: |
