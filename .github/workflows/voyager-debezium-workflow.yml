@@ -1,0 +1,59 @@
+# This workflow builds debezium server tar distributable and then
+# uploads it to the "voyager-debezium" release as an asset. This is used
+# internally for running automation tests.
+# The triggers are for
+# - pushes to "voyager-main"
+#   where the dist name is debezium-server-latest
+# - PRs opened against "voyaager-main"
+#   where the dist name is debezium-server-<branch_name> (with / converted to _)
+name: Build Debezium Server
+
+on:
+  push:
+    branches:
+      - voyager-main
+  pull_request:
+    branches:
+      - voyager-main
+
+jobs:
+  build_debezium_server:
+    name: "Build Debezium Server"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Action
+        uses: actions/checkout@v3
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Cache Maven Repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
+
+      - name: Compute dist name (push) # debezium-server-latest in case it is a push to voyager-main
+        if : ${{ github.event_name == 'push' }}
+        run: |
+          echo "DIST_NAME=debezium-server-latest" >> "$GITHUB_ENV"
+      - name: Compute dist name (PR) # debezium-server-<branch_name> (with / converted to _) in case it is a PR event
+        if : ${{ github.event_name == 'pull_request' }}
+        run: |
+          echo "DIST_NAME=debezium-server-${GITHUB_HEAD_REF//\//_}" >> "$GITHUB_ENV" 
+
+      - name: Build Debezium Server
+        run: |
+          sh buildDebeziumServer.sh
+          mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
+
+      - name: Publish to voyager-debezium release
+        run: |
+          gh release upload voyager-debezium debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz --clobber # clobber is to overwrite
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
