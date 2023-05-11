@@ -42,24 +42,13 @@ jobs:
         run: |
           sh buildDebeziumServer.sh
           mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          tag_name: voyager-debezium
-          release_name: voyager-debezium
-          commitish: ${{ github.sha }}
-          draft: false
-          prerelease: true
       - name: Upload Release Asset
         id: upload-release-asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+          upload_url: https://uploads.github.com/repos/yugabyte/debezium/releases/102178405/assets{?name,label}
           asset_path: debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz
 #          asset_name: my-artifact.zip
 #          asset_content_type: application/zip
