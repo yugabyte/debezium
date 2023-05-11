@@ -1,3 +1,5 @@
+# This is to clean up the release asset (debezium-server dist) created
+# by workflow job build_debezium_server upon closing of a pull request.
 name: Clean up Release Asset
 
 on:
@@ -14,7 +16,6 @@ jobs:
       - name: Checkout Action
         uses: actions/checkout@v3
       - name: Branch Dist name
-        if : ${{ github.event_name == 'pull_request' }}
         run: |
           echo "DIST_NAME=debezium-server-${GITHUB_HEAD_REF//\//_}" >> "$GITHUB_ENV"
       - name: Delete dist after PR closed
