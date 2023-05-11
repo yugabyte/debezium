@@ -15,10 +15,10 @@ jobs:
     steps:
       - name: Checkout Action
         uses: actions/checkout@v3
-      - name: Branch Dist name
+      - name: Compute dist name (PR)
         run: |
           echo "DIST_NAME=debezium-server-${GITHUB_HEAD_REF//\//_}" >> "$GITHUB_ENV"
-      - name: Delete dist after PR closed
+      - name: Delete dist
         run: |
           gh release delete-asset voyager-debezium ${{ env.DIST_NAME }}.tar.gz -y
         env:
