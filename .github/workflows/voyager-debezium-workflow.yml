@@ -61,7 +61,7 @@ jobs:
 #          target_commitish: ${{ github.sha }}
       - name: Publish to voyager-debezium 2
         run: |
-          gh release upload voyager-debezium debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz
+          gh release upload voyager-debezium debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz --clobber
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Delete dist after PR closed
