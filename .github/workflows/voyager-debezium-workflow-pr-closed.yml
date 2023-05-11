@@ -1,0 +1,22 @@
+name: Clean up Release Asset
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - voyager-main
+
+jobs:
+  clean_up_release_asset:
+    name: "Clean up Release Asset"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Branch Dist name
+        if : ${{ github.event_name == 'pull_request' }}
+        run: |
+          echo "DIST_NAME=debezium-server-${GITHUB_HEAD_REF//\//_}" >> "$GITHUB_ENV"
+      - name: Delete dist after PR closed
+        run: |
+          gh release delete-asset voyager-debezium ${{ env.DIST_NAME }}.tar.gz -y
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

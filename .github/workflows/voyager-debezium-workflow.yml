@@ -5,7 +5,6 @@ on:
     branches:
       - voyager-main
   pull_request:
-    types: [opened, reopened, synchronize, closed]
     branches:
       - voyager-main
 
@@ -59,15 +58,8 @@ jobs:
 #          tag_name: voyager-debezium
 #          files: debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz
 #          target_commitish: ${{ github.sha }}
-      - name: Publish to voyager-debezium 2
+      - name: Publish to voyager-debezium
         run: |
           gh release upload voyager-debezium debezium-server/debezium-server-dist/target/${{ env.DIST_NAME }}.tar.gz --clobber
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: Delete dist after PR closed
-        if: github.event_name == 'pull_request' && github.event.action =='closed'
-        uses: mknejp/delete-release-assets@v1
-        with:
-          token: ${{ github.token }}
-          tag: voyager-debezium
-          assets: ${{ env.DIST_NAME }}.tar.gz
