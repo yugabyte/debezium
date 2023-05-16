@@ -180,8 +180,8 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void handleSnapshotComplete() {
         exportStatus.updateMode(ExportMode.STREAMING);
+        exportStatus.flushToDisk();
         closeSnapshotWriters();
-        // Thread.currentThread().interrupt(); // For testing
         openCDCWriter();
     }
 
