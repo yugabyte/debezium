@@ -179,9 +179,9 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void handleSnapshotComplete() {
+        closeSnapshotWriters();
         exportStatus.updateMode(ExportMode.STREAMING);
         exportStatus.flushToDisk();
-        closeSnapshotWriters();
         openCDCWriter();
     }
 
