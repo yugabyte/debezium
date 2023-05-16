@@ -103,7 +103,7 @@ public class ExportStatus {
         return this.sequenceMax;
     }
 
-    public void flushToDisk() {
+    public synchronized void flushToDisk() {
         // TODO: do not create fresh objects every time, just reuse.
         HashMap<String, Object> exportStatusMap = new HashMap<>();
         List<HashMap<String, Object>> tablesInfo = new ArrayList<>();
@@ -141,8 +141,8 @@ public class ExportStatus {
         return String.format("%s/%s", dataDirStr, EXPORT_STATUS_FILE_NAME);
     }
 
-    private static String getTempFilePath(){
-        return getFilePath("/tmp");
+    private String getTempFilePath(){
+        return getFilePath(dataDir) + ".tmp";
     }
 
     private static ExportStatus loadFromDisk(String datadirStr) {
