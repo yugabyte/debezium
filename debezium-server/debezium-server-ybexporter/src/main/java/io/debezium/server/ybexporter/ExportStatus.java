@@ -166,7 +166,7 @@ public class ExportStatus {
                 Table t = new Table(tableJson.get("database_name").asText(), tableJson.get("schema_name").asText(), tableJson.get("table_name").asText());
 
                 TableExportStatus tes = new TableExportStatus(tableJson.get("sno").asInt(), tableJson.get("file_name").asText());
-                tes.exportedRowCountSnapshot = tableJson.get("exported_row_count_snapshot").asInt();
+                tes.exportedRowCountSnapshot = tableJson.get("exported_row_count_snapshot").asLong();
                 es.tableExportStatusMap.put(t, tes);
             }
             var sequencesJson = exportStatusJson.get("sequences");
@@ -188,13 +188,13 @@ public class ExportStatus {
 
 class TableExportStatus {
     Integer sno;
-    Integer exportedRowCountSnapshot;
+    Long exportedRowCountSnapshot;
     String snapshotFilename;
 
     public TableExportStatus(Integer sno, String snapshotFilename){
         this.sno = sno;
         this.snapshotFilename = snapshotFilename;
-        this.exportedRowCountSnapshot = 0;
+        this.exportedRowCountSnapshot = 0L;
     }
 }
 
