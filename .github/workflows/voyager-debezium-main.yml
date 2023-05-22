@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Compute dist name (push) # debezium-server-latest in case it is a push to voyager-main
-        if : ${{ github.event_name == 'push' }}
         run: |
           echo "DIST_NAME=debezium-server-latest" >> "$GITHUB_ENV"
           echo "RELEASE_NAME=voyager-debezium" >> "$GITHUB_ENV"
