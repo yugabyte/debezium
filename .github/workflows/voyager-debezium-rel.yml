@@ -15,7 +15,7 @@ jobs:
       - name: Compute dist name (rel)
         run: |
           RELEASE_VERSION=$(echo $GITHUB_REF | cut -d / -f 3 | sed 's/voyager-//')
-          raw_branch=$(git branch -r --contains ${{ github.ref }})
+          raw_branch=$(git branch -r --contains $GITHUB_REF)
           BRANCH_NAME=$(echo $raw_branch | cut -d / -f 2 | sed 's/voyager-rel-//')
           echo "raw branch name = $raw_branch" 
           echo "branch name = $BRANCH_NAME" 
