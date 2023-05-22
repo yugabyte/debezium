@@ -9,6 +9,9 @@ on:
 
 jobs:
   build_debezium_server:
+    name: "Build Debezium Server PR"
+    runs-on: ubuntu-latest
+    steps:
       - name: Compute dist name (PR) # debezium-server-<branch_name> (with / converted to _) in case it is a PR event
         if : ${{ github.event_name == 'pull_request' }}
         run: |

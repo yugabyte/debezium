@@ -7,6 +7,9 @@ on:
 
 jobs:
   build_debezium_server:
+    name: "Build Debezium Server PR"
+    runs-on: ubuntu-latest
+    steps:
       - name: Compute dist name (push) # debezium-server-latest in case it is a push to voyager-main
         if : ${{ github.event_name == 'push' }}
         run: |
