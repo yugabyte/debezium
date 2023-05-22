@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout Action
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       - name: Compute dist name (rel)
         run: |
           RELEASE_VERSION=$(echo $GITHUB_REF | cut -d / -f 3 | sed 's/voyager-//')
