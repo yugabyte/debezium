@@ -30,9 +30,9 @@ MIN_REQUIRED_MAJOR_VERSION='17'
 JAVA_MAJOR_VER=$(${JAVA_BINARY} -version 2>&1 | awk -F '"' '/version/ {print $2}' | awk -F. '{print $1}')
 if ([ -n "$JAVA_MAJOR_VER" ] && (( 10#${JAVA_MAJOR_VER} >= 10#${MIN_REQUIRED_MAJOR_VERSION} )) ) #integer compare of versions.
 then
-    output "Found sufficient java version = ${JAVA_MAJOR_VER}"
+    echo "Found sufficient java version = ${JAVA_MAJOR_VER}"
 else
-    output "ERROR: Java not found or insufficient version ${JAVA_MAJOR_VER}. Please install java>=${MIN_REQUIRED_MAJOR_VERSION}"
+    echo "ERROR: Java not found or insufficient version ${JAVA_MAJOR_VER}. Please install java>=${MIN_REQUIRED_MAJOR_VERSION}"
     exit 1;
 fi
 
