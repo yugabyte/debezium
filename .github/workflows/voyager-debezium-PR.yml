@@ -15,7 +15,7 @@ jobs:
           echo "DIST_NAME=debezium-server-${GITHUB_HEAD_REF//\//_}" >> "$GITHUB_ENV" 
           echo "RELEASE_NAME=voyager-debezium" >> "$GITHUB_ENV"
       - name: Build and Package Debezium Server
-        uses: yugabyte/debezium/.github/workflows/voyager-debezium-build-release.yml
+        uses: ./.github/workflows/voyager-debezium-build-release.yml
         with:
           dist_name: ${{ env.DIST_NAME }}
           release_name: ${{ env.RELEASE_NAME }}
