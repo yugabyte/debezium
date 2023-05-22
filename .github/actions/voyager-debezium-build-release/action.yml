@@ -1,0 +1,47 @@
+# This workflow builds debezium server tar distributable and then
+# uploads it to a GH release as an asset.
+# This workflow is triggered by multiple conditions
+# - pushes to "voyager-main"
+#   where the dist name is debezium-server-latest
+# - PRs opened against "voyaager-main"
+#   where the dist name is debezium-server-<branch_name> (with / converted to _)
+name: Build Debezium Server and Deploy
+description: "Builds and deploys Debezium"
+inputs:
+  dist_name:
+    required: true
+    type: string
+  release_name:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout Action
+      uses: actions/checkout@v3
+
+    - name: Set up Java 17
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'temurin'
+        java-version: 17
+
+    - name: Cache Maven Repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.m2/repository
+        key: maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
+
+    - name: Build Debezium Server
+      run: |
+        sh buildDebeziumServer.sh
+        mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz "debezium-server/debezium-server-dist/target/${{ inputs.dist_name }}.tar.gz"
+
+    - name: Publish to voyager-debezium release
+      run: |
+        gh release upload ${{ inputs.release_name }} debezium-server/debezium-server-dist/target/${{ inputs.dist_name }}.tar.gz --clobber # clobber is to overwrite
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
