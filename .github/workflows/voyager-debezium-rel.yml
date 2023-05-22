@@ -15,6 +15,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Compute release variables (rel)
+        id: vars
         run: |
           RELEASE_VERSION=$(echo $GITHUB_REF | cut -d / -f 3 | sed 's/voyager-//')
           raw_branch=$(git branch -r --contains $GITHUB_REF)
@@ -27,8 +28,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
         with:
-          tag_name: ${{ env.RELEASE_NAME }}
-          release_name: ${{ env.RELEASE_NAME }}
+          tag_name: ${{steps.vars.outputs.RELEASE_NAME}}
+          release_name: ${{steps.vars.outputs.RELEASE_NAME}}
 
   build_debezium_server:
     uses: ./.github/workflows/voyager-debezium-build-release.yml
