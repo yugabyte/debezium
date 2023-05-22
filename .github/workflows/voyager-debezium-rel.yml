@@ -31,11 +31,11 @@ jobs:
           release_name: ${{ env.RELEASE_NAME }}
 
   build_debezium_server:
-    - name: Build and Package Debezium Server
-      needs: [create_release]
-      runs-on: ubuntu-latest
-      uses: ./.github/workflows/voyager-debezium-build-release.yml
-      with:
-        dist_name: ${{ needs.create_release.outputs.DIST_NAME }}
-        release_name: ${{ needs.create_release.outputs.RELEASE_NAME }}
+    name: Build and Package Debezium Server
+    needs: [create_release]
+    runs-on: ubuntu-latest
+    uses: ./.github/workflows/voyager-debezium-build-release.yml
+    with:
+      dist_name: ${{ needs.create_release.outputs.DIST_NAME }}
+      release_name: ${{ needs.create_release.outputs.RELEASE_NAME }}
 
