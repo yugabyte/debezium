@@ -22,14 +22,14 @@ jobs:
           BRANCH_NAME=$(echo $raw_branch | cut -d / -f 2 | sed 's/voyager-rel-//')
           echo "DIST_NAME=debezium-server-${RELEASE_VERSION}" >> "$GITHUB_OUTPUT" 
           echo "RELEASE_NAME=voyager-debezium-${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-        with:
-          tag_name: ${{steps.vars.outputs.RELEASE_NAME}}
-          release_name: ${{steps.vars.outputs.RELEASE_NAME}}
+#      - name: Create Release
+#        id: create_release
+#        uses: actions/create-release@v1
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+#        with:
+#          tag_name: ${{steps.vars.outputs.RELEASE_NAME}}
+#          release_name: ${{steps.vars.outputs.RELEASE_NAME}}
 
   build_debezium_server:
     uses: ./.github/workflows/voyager-debezium-build-release.yml
