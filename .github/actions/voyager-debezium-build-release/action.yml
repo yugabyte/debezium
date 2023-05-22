@@ -36,11 +36,13 @@ runs:
           maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
 
     - name: Build Debezium Server
+      shell: bash
       run: |
         sh buildDebeziumServer.sh
         mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz "debezium-server/debezium-server-dist/target/${{ inputs.dist_name }}.tar.gz"
 
     - name: Publish to voyager-debezium release
+      shell: bash
       run: |
         gh release upload ${{ inputs.release_name }} debezium-server/debezium-server-dist/target/${{ inputs.dist_name }}.tar.gz --clobber # clobber is to overwrite
       env:
