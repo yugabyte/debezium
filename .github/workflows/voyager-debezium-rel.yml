@@ -35,6 +35,6 @@ jobs:
     uses: ./.github/workflows/voyager-debezium-build-release.yml
     needs: [create_release]
     with:
-      dist_name: ${{ needs.create_release.outputs.DIST_NAME }}
-      release_name: ${{ needs.create_release.outputs.RELEASE_NAME }}
+      dist_name: ${{needs.create_release.outputs.DIST_NAME}}
+      release_name: ${{needs.create_release.outputs.RELEASE_NAME}}
 
