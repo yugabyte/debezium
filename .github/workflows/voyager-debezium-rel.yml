@@ -1,7 +1,7 @@
 name: Build Debezium Server Release
 
 on:
-  pull_request:
+  push:
     branches:
       - 'voyager-rel-v*.*.*'
     tags:
