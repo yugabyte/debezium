@@ -288,6 +288,20 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         DISABLED("disable"),
 
         /**
+         * first try a non-SSL connection; if that fails, try an SSL connection
+         *
+         * see the {@code sslmode} Postgres JDBC driver option
+         */
+        ALLOW("allow"),
+
+        /**
+         * first try an SSL connection; if that fails, try a non-SSL connection
+         *
+         * see the {@code sslmode} Postgres JDBC driver option
+         */
+        PREFER("prefer"),
+
+        /**
          * Establish a secure connection if the server supports secure connections.
          * The connection attempt fails if a secure connection cannot be established
          *
