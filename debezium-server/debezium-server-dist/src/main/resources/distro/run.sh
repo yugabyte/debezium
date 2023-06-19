@@ -58,4 +58,4 @@ else
     DEBUGGER="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
 fi
 
-exec "$JAVA_BINARY" $DEBEZIUM_OPTS $JAVA_OPTS -cp "$RUNNER"$PATH_SEP"conf"$PATH_SEP$LIB_PATH -Dquarkus.config.locations=$PROPERTIES_FILE_PATH  -Djavax.net.debug=none -Doracle.net.wallet_location=file:$ORACLE_HOME/network/admin -Doracle.net.tns_admin=$ORACLE_HOME/network/admin  "$DEBUGGER" io.debezium.server.Main
+exec "$JAVA_BINARY" $DEBEZIUM_OPTS $JAVA_OPTS -Xmx3g $DEBUGGER -cp "$RUNNER"$PATH_SEP"conf"$PATH_SEP$LIB_PATH -Dquarkus.config.locations=$PROPERTIES_FILE_PATH -Doracle.net.wallet_location=file:$ORACLE_HOME/network/admin -Doracle.net.tns_admin=$ORACLE_HOME/network/admin io.debezium.server.Main
