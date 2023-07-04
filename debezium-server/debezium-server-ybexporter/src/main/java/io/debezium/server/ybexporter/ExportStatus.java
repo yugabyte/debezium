@@ -18,6 +18,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.kafka.connect.data.Field;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +60,15 @@ public class ExportStatus {
         dataDir = datadirStr;
         ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
         f = new File(getFilePath(datadirStr));
+
+        // mkdir schemas
+        File schemasDir = new File(String.format("%s/%s", dataDir, "schemas"));
+        if (!schemasDir.exists()){
+            boolean dirCreated = new File(String.format("%s/%s", dataDir, "schemas")).mkdir();
+            if (!dirCreated){
+                throw new RuntimeException("failed to create dir for schemas");
+            }
+        }
         instance = this;
     }
 
@@ -80,6 +93,28 @@ public class ExportStatus {
 
     public ExportMode getMode() {
         return mode;
+    }
+
+    public void tableSchemaRead(Table t){
+        ObjectMapper schemaMapper = new ObjectMapper();
+        schemaMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+        ObjectWriter schemaWriter = schemaMapper.writer().withDefaultPrettyPrinter();
+
+        HashMap<String, Field> tableSchema = new HashMap<>();
+        for (Map.Entry<String, Field> entry : t.fieldSchemas.entrySet()) {
+            String fieldName = entry.getKey();
+            Field field = entry.getValue();
+            tableSchema.put(fieldName, field);
+        }
+        try {
+            String schemaFilePath = String.format("%s/schemas/%s_schema.json", dataDir, t);
+            File schemaFile = new File(schemaFilePath);
+            schemaWriter.writeValue(schemaFile, tableSchema);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void updateTableSnapshotWriterCreated(Table t, String tblFilename) {

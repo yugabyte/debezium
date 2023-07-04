@@ -9,6 +9,11 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
@@ -19,11 +24,15 @@ import org.slf4j.LoggerFactory;
 
 class KafkaConnectRecordParser implements RecordParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConnectRecordParser.class);
+    private final ExportStatus es;
+    String dataDirStr;
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
     Record r = new Record();
 
-    public KafkaConnectRecordParser(Map<String, Table> tblMap) {
+    public KafkaConnectRecordParser(String dataDirStr, Map<String, Table> tblMap) {
+        this.dataDirStr = dataDirStr;
+        es = ExportStatus.getInstance(dataDirStr);
         tableMap = tblMap;
         jsonConverter = new JsonConverter();
         Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
@@ -96,13 +105,15 @@ class KafkaConnectRecordParser implements RecordParser {
             }
 
             tableMap.put(tableIdentifier, t);
+            es.tableSchemaRead(t);
         }
         r.t = t;
     }
 
     protected void parseKeyFields(Struct key, Record r) {
         for (Field f : key.schema().fields()) {
-            Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
+            Object fieldValue = key.get(f);
+//            Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
             r.addKeyField(f.name(), fieldValue);
 
         }
@@ -127,7 +138,8 @@ class KafkaConnectRecordParser implements RecordParser {
                     continue;
                 }
             }
-            Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
+            Object fieldValue = after.get(f);
+//            Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
             r.addValueField(f.name(), fieldValue);
         }
     }
