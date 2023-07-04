@@ -9,11 +9,6 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
@@ -105,7 +100,7 @@ class KafkaConnectRecordParser implements RecordParser {
             }
 
             tableMap.put(tableIdentifier, t);
-            es.tableSchemaRead(t);
+            es.updateTableSchema(t);
         }
         r.t = t;
     }

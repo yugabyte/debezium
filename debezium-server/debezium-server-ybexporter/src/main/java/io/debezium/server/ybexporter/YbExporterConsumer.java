@@ -57,6 +57,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
 
         exportStatus = ExportStatus.getInstance(dataDir);
+        exportStatus.setSourceType(sourceType);
         if (exportStatus.getMode() != null && exportStatus.getMode().equals(ExportMode.STREAMING)) {
             handleSnapshotComplete();
         }
