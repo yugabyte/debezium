@@ -100,12 +100,9 @@ public class ExportStatus {
         schemaMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
         ObjectWriter schemaWriter = schemaMapper.writer().withDefaultPrettyPrinter();
 
-        HashMap<String, Field> tableSchema = new HashMap<>();
-        for (Map.Entry<String, Field> entry : t.fieldSchemas.entrySet()) {
-            String fieldName = entry.getKey();
-            Field field = entry.getValue();
-            tableSchema.put(fieldName, field);
-        }
+        HashMap<String, Object> tableSchema = new HashMap<>();
+        ArrayList<Field> fields = new ArrayList<>(t.fieldSchemas.values());
+        tableSchema.put("columns", fields);
         try {
             String fileName = t.tableName;
             if ((sourceType.equals("postgresql")) && (!t.schemaName.equals("public"))){
