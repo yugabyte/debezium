@@ -39,7 +39,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             fd = fos.getFD();
             var f = new FileWriter(fd);
             var bufferedWriter = new BufferedWriter(f);
-            CSVFormat fmt = CSVFormat.POSTGRESQL_CSV;
+            CSVFormat fmt = CSVFormat.POSTGRESQL_TEXT;
             csvPrinter = new CSVPrinter(bufferedWriter, fmt);
             ArrayList<String> cols = t.getColumns();
             String header = String.join(fmt.getDelimiterString(), cols) + fmt.getRecordSeparator();
