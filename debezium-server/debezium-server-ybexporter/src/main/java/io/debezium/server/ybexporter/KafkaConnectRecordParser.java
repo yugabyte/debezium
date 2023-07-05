@@ -14,6 +14,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,7 +31,7 @@ class KafkaConnectRecordParser implements RecordParser {
         es = ExportStatus.getInstance(dataDirStr);
         tableMap = tblMap;
         jsonConverter = new JsonConverter();
-        Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
+        Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "false");
         jsonConverter.configure(jsonConfig, false);
     }
 
@@ -135,7 +136,27 @@ class KafkaConnectRecordParser implements RecordParser {
             }
             Object fieldValue = after.get(f);
 //            Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
+            // formatting
+            if ((fieldValue instanceof Struct) || (fieldValue instanceof java.nio.ByteBuffer)){
+                String jsonFriendlyString = new String(jsonConverter.fromConnectData("test", f.schema(), fieldValue));
+                LOGGER.info("field={}, fieldValue={}, fieldValueType={}, jsonFriendlyString={}", f.name(), fieldValue, fieldValue.getClass().getName(), jsonFriendlyString);
+                fieldValue = jsonFriendlyString;
+            }
+//            byte[] jsonBody = jsonConverter.fromConnectData("test", f.schema(), fieldValue);
+//            String jsonBodyString = new String(jsonBody);
+//            LOGGER.info("field={}, fieldJsonString={}", f.name(), jsonBodyString);
+//            try{
+//                JSONObject testV=new JSONObject(jsonBodyString);
+//                LOGGER.info("field={}, fieldJsonObject={}", f.name(), testV);
+//            }
+//            catch (org.json.JSONException e){
+//                LOGGER.info("field={}, failed to decode", f.name());
+//            }
+
+
             r.addValueField(f.name(), fieldValue);
+
+
         }
     }
 
