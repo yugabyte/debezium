@@ -140,7 +140,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         if (exportStatus.getMode() == ExportMode.SNAPSHOT) {
             RecordWriter writer = snapshotWriters.get(r.t);
             if (writer == null) {
-                writer = new TableSnapshotWriterCSV(dataDir, r.t, sourceType);
+                writer = new TableSnapshotWriter(dataDir, r.t, sourceType);
                 snapshotWriters.put(r.t, writer);
             }
             return writer;

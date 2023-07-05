@@ -20,7 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
 public class StreamingWriterJson implements RecordWriter {
-    private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(StreamingWriterJson.class);
     private static final String QUEUE_FILE_NAME = "queue.json";
     private String dataDir;
     private BufferedWriter writer;

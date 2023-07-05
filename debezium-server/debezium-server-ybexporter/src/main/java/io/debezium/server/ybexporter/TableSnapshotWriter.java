@@ -18,8 +18,8 @@ import org.apache.commons.csv.CSVPrinter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class TableSnapshotWriterCSV implements RecordWriter {
-    private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
+public class TableSnapshotWriter implements RecordWriter {
+    private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriter.class);
     private ExportStatus es;
     private String sourceType;
     private String dataDir;
@@ -28,7 +28,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     private FileOutputStream fos;
     private FileDescriptor fd;
 
-    public TableSnapshotWriterCSV(String datadirStr, Table tbl, String sourceType) {
+    public TableSnapshotWriter(String datadirStr, Table tbl, String sourceType) {
         dataDir = datadirStr;
         t = tbl;
         this.sourceType = sourceType;
