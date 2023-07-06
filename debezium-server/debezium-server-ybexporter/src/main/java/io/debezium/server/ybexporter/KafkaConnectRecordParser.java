@@ -5,11 +5,24 @@
  */
 package io.debezium.server.ybexporter;
 
+import java.math.BigDecimal;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
+import io.debezium.data.Bits;
+import io.debezium.data.VariableScaleDecimal;
 import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
@@ -137,27 +150,44 @@ class KafkaConnectRecordParser implements RecordParser {
             Object fieldValue = after.get(f);
 //            Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
             // formatting
-            if ((fieldValue instanceof Struct) || (fieldValue instanceof java.nio.ByteBuffer)){
-                String jsonFriendlyString = new String(jsonConverter.fromConnectData("test", f.schema(), fieldValue));
-                LOGGER.info("field={}, fieldValue={}, fieldValueType={}, jsonFriendlyString={}", f.name(), fieldValue, fieldValue.getClass().getName(), jsonFriendlyString);
-                fieldValue = jsonFriendlyString;
+            if (fieldValue!=null){
+                LOGGER.info("field={}, fieldValue={}, fieldValueType={}", f.name(), fieldValue, fieldValue.getClass().getName());
             }
-//            byte[] jsonBody = jsonConverter.fromConnectData("test", f.schema(), fieldValue);
-//            String jsonBodyString = new String(jsonBody);
-//            LOGGER.info("field={}, fieldJsonString={}", f.name(), jsonBodyString);
-//            try{
-//                JSONObject testV=new JSONObject(jsonBodyString);
-//                LOGGER.info("field={}, fieldJsonObject={}", f.name(), testV);
-//            }
-//            catch (org.json.JSONException e){
-//                LOGGER.info("field={}, failed to decode", f.name());
-//            }
-
-
+            fieldValue = serialize(fieldValue, f);
             r.addValueField(f.name(), fieldValue);
 
-
         }
+    }
+
+    private Object serialize(Object fieldValue, Field field){
+//        String logicalType = field.schema().name();
+//        if (logicalType != null) {
+//            switch (logicalType) {
+//                case "io.debezium.data.Bits":
+//                    ByteBuffer bb = ByteBuffer.wrap((byte[])fieldValue);
+//                    bb.order(ByteOrder.BIG_ENDIAN);
+//                    return toKafkaConnectJsonConverted(bb, field);
+////                case "org.apache.kafka.connect.data.Decimal":
+////                    return ((BigDecimal) fieldValue).toString();
+//            }
+//        }
+        Schema.Type type = field.schema().type();
+        switch (type){
+            case BYTES:
+            case STRUCT:
+//                String jsonFriendlyString = new String(jsonConverter.fromConnectData("test", f.schema(), fieldValue));
+//                LOGGER.info("field={}, fieldValue={}, fieldValueType={}, jsonFriendlyString={}", f.name(), fieldValue, fieldValue.getClass().getName(), jsonFriendlyString);
+                return toKafkaConnectJsonConverted(fieldValue, field);
+        }
+        return fieldValue;
+    }
+    private Object toKafkaConnectJsonConverted(Object fieldValue, Field f){
+        String jsonFriendlyString = new String(jsonConverter.fromConnectData("test", f.schema(), fieldValue));
+        LOGGER.info("field={}, fieldValue={}, fieldValueType={}, jsonFriendlyString={}", f.name(), fieldValue, fieldValue.getClass().getName(), jsonFriendlyString);
+        if ((jsonFriendlyString.charAt(0) == '"') && (jsonFriendlyString.charAt(0) == jsonFriendlyString.charAt(jsonFriendlyString.length()-1))){
+            jsonFriendlyString = jsonFriendlyString.substring(1, jsonFriendlyString.length() - 1);
+        }
+        return jsonFriendlyString;
     }
 
 }
