@@ -46,7 +46,7 @@ public class StreamingWriterJson implements RecordWriter {
         //            fos = new FileOutputStream(fileName, true);
 //            fd = fos.getFD();
 //            var f = new FileWriter(fd);
-        rfwriter = new RotatingFileWriter(fileName, 200*1000*1000, new RotatingFileWriterCallback());
+        rfwriter = new RotatingFileWriter(fileName, 500, new RotatingFileWriterCallback());
         writer = new BufferedWriter(rfwriter);
 
         ow = new ObjectMapper().writer();
