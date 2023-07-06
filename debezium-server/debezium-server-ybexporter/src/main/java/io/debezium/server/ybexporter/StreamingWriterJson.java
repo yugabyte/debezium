@@ -24,25 +24,37 @@ public class StreamingWriterJson implements RecordWriter {
     private static final String QUEUE_FILE_NAME = "queue.json";
     private String dataDir;
     private BufferedWriter writer;
+    private RotatingFileWriter rfwriter;
     private ObjectWriter ow;
-    private FileOutputStream fos;
-    private FileDescriptor fd;
+//    private FileOutputStream fos;
+//    private FileDescriptor fd;
 
     public StreamingWriterJson(String datadirStr) {
         dataDir = datadirStr;
 
         var fileName = String.format("%s/%s", dataDir, QUEUE_FILE_NAME);
-        try {
-            fos = new FileOutputStream(fileName, true);
-            fd = fos.getFD();
-            var f = new FileWriter(fd);
-            writer = new BufferedWriter(f);
+        //            fos = new FileOutputStream(fileName, true);
+//            fd = fos.getFD();
+//            var f = new FileWriter(fd);
+        rfwriter = new RotatingFileWriter(fileName, 500, new RotatingFileWriterCallback());
+        writer = new BufferedWriter(rfwriter);
 
+        ow = new ObjectMapper().writer();
+    }
+
+    class RotatingFileWriterCallback implements RotatingFileCallback{
+        @Override
+        public void preRotate(FileWriter fw, int currentIndex, long currentByteCount) {
+            LOGGER.info("Rotating queue file #{}", currentIndex);
+            String eofMarker = "\\.";
+            try {
+                fw.write(eofMarker);
+                rfwriter.flush();
+                rfwriter.sync();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
     }
 
     @Override
@@ -98,7 +110,6 @@ public class StreamingWriterJson implements RecordWriter {
             flush();
             sync();
             writer.close();
-            fos.close();
         }
         catch (IOException e) {
             throw new RuntimeException(e);
@@ -108,7 +119,7 @@ public class StreamingWriterJson implements RecordWriter {
     @Override
     public void sync() {
         try {
-            fd.sync();
+            rfwriter.sync();
         }
         catch (SyncFailedException e) {
             throw new RuntimeException(e);
