@@ -183,7 +183,7 @@ class KafkaConnectRecordParser implements RecordParser {
     }
     private Object toKafkaConnectJsonConverted(Object fieldValue, Field f){
         String jsonFriendlyString = new String(jsonConverter.fromConnectData("test", f.schema(), fieldValue));
-        LOGGER.info("field={}, fieldValue={}, fieldValueType={}, jsonFriendlyString={}", f.name(), fieldValue, fieldValue.getClass().getName(), jsonFriendlyString);
+//        LOGGER.info("field={}, fieldValue={}, fieldValueType={}, jsonFriendlyString={}", f.name(), fieldValue, fieldValue.getClass().getName(), jsonFriendlyString);
         if ((jsonFriendlyString.charAt(0) == '"') && (jsonFriendlyString.charAt(0) == jsonFriendlyString.charAt(jsonFriendlyString.length()-1))){
             jsonFriendlyString = jsonFriendlyString.substring(1, jsonFriendlyString.length() - 1);
         }
