@@ -6,6 +6,7 @@
 package io.debezium.server.ybexporter;
 
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
@@ -22,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectWriter;
 public class StreamingWriterJson implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
     private static final String QUEUE_FILE_NAME = "queue.json";
+    private static final String QUEUE_FILE_DIR = "cdc";
     private String dataDir;
     private BufferedWriter writer;
     private RotatingFileWriter rfwriter;
@@ -32,7 +34,15 @@ public class StreamingWriterJson implements RecordWriter {
     public StreamingWriterJson(String datadirStr) {
         dataDir = datadirStr;
 
-        var fileName = String.format("%s/%s", dataDir, QUEUE_FILE_NAME);
+        var fileName = String.format("%s/%s/%s", dataDir, QUEUE_FILE_DIR, QUEUE_FILE_NAME);
+        // mkdir cdc
+        File queueDir = new File(String.format("%s/%s", dataDir, QUEUE_FILE_DIR));
+        if (!queueDir.exists()){
+            boolean dirCreated = queueDir.mkdir();
+            if (!dirCreated){
+                throw new RuntimeException("failed to create dir for cdc");
+            }
+        }
         //            fos = new FileOutputStream(fileName, true);
 //            fd = fos.getFD();
 //            var f = new FileWriter(fd);
