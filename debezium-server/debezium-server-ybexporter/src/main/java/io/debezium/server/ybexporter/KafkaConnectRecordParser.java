@@ -160,6 +160,9 @@ class KafkaConnectRecordParser implements RecordParser {
     }
 
     private Object serialize(Object fieldValue, Field field){
+        if (fieldValue == null) {
+            return null;
+        }
 //        String logicalType = field.schema().name();
 //        if (logicalType != null) {
 //            switch (logicalType) {
@@ -184,9 +187,15 @@ class KafkaConnectRecordParser implements RecordParser {
     private Object toKafkaConnectJsonConverted(Object fieldValue, Field f){
         String jsonFriendlyString = new String(jsonConverter.fromConnectData("test", f.schema(), fieldValue));
 //        LOGGER.info("field={}, fieldValue={}, fieldValueType={}, jsonFriendlyString={}", f.name(), fieldValue, fieldValue.getClass().getName(), jsonFriendlyString);
-        if ((jsonFriendlyString.charAt(0) == '"') && (jsonFriendlyString.charAt(0) == jsonFriendlyString.charAt(jsonFriendlyString.length()-1))){
-            jsonFriendlyString = jsonFriendlyString.substring(1, jsonFriendlyString.length() - 1);
+        // remove leading and trailing double quotes
+        if (jsonFriendlyString.length() > 0){
+            if ((jsonFriendlyString.charAt(0) == '"') && (jsonFriendlyString.charAt(jsonFriendlyString.length()-1) == '"')){
+                jsonFriendlyString = jsonFriendlyString.substring(1, jsonFriendlyString.length() - 1);
+            }
         }
+//        if ((jsonFriendlyString.charAt(0) == '"') && (jsonFriendlyString.charAt(0) == jsonFriendlyString.charAt(jsonFriendlyString.length()-1))){
+//            jsonFriendlyString = jsonFriendlyString.substring(1, jsonFriendlyString.length() - 1);
+//        }
         return jsonFriendlyString;
     }
 
