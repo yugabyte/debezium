@@ -163,17 +163,15 @@ class KafkaConnectRecordParser implements RecordParser {
         if (fieldValue == null) {
             return null;
         }
-//        String logicalType = field.schema().name();
-//        if (logicalType != null) {
-//            switch (logicalType) {
-//                case "io.debezium.data.Bits":
-//                    ByteBuffer bb = ByteBuffer.wrap((byte[])fieldValue);
-//                    bb.order(ByteOrder.BIG_ENDIAN);
-//                    return toKafkaConnectJsonConverted(bb, field);
-////                case "org.apache.kafka.connect.data.Decimal":
-////                    return ((BigDecimal) fieldValue).toString();
-//            }
-//        }
+        String logicalType = field.schema().name();
+        if (logicalType != null) {
+            switch (logicalType) {
+                case "org.apache.kafka.connect.data.Decimal":
+                    return ((BigDecimal) fieldValue).toString();
+                case "io.debezium.data.VariableScaleDecimal":
+                    return VariableScaleDecimal.toLogical((Struct)fieldValue).toString();
+            }
+        }
         Schema.Type type = field.schema().type();
         switch (type){
             case BYTES:
