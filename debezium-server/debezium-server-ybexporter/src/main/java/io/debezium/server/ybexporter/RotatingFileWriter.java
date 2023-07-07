@@ -8,6 +8,7 @@ package io.debezium.server.ybexporter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
@@ -28,7 +29,7 @@ public class RotatingFileWriter extends Writer {
     private int maxFileByteCount;
     private RotatingFileCallback callback;
     private int currentFileSegmentIndex;
-    private FileWriter currentFileSegmentWriter;
+    private Writer currentFileSegmentWriter;
     private long currentFileSegmentByteCount;
     private FileDescriptor currentFileSegmentFd;
     private FileOutputStream currentFileSegmentOutputStream;
@@ -101,7 +102,8 @@ public class RotatingFileWriter extends Writer {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        currentFileSegmentWriter = new FileWriter(currentFileSegmentFd);
+        FileWriter fw = new FileWriter(currentFileSegmentFd);
+        currentFileSegmentWriter = new BufferedWriter(fw);
         currentFileSegmentByteCount = 0; // TODO retrieve from file if already exists.
     }
 

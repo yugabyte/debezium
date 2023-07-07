@@ -6,7 +6,8 @@
 package io.debezium.server.ybexporter;
 
 import java.io.FileWriter;
+import java.io.Writer;
 
 public interface RotatingFileCallback {
-    void preRotate(FileWriter fw, int currentIndex, long currentByteCount);
+    void preRotate(Writer underlyingWriter, int currentIndex, long currentByteCount);
 }

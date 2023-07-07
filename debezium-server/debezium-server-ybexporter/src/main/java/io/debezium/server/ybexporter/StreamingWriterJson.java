@@ -12,6 +12,7 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.SyncFailedException;
+import java.io.Writer;
 import java.util.HashMap;
 
 import org.slf4j.Logger;
@@ -25,8 +26,9 @@ public class StreamingWriterJson implements RecordWriter {
     private static final String QUEUE_FILE_NAME = "queue.json";
     private static final String QUEUE_FILE_DIR = "cdc";
     private String dataDir;
-    private BufferedWriter writer;
-    private RotatingFileWriter rfwriter;
+    private RotatingFileWriter writer;
+//    private BufferedWriter writer;
+//    private RotatingFileWriter rfwriter;
     private ObjectWriter ow;
 //    private FileOutputStream fos;
 //    private FileDescriptor fd;
@@ -46,21 +48,21 @@ public class StreamingWriterJson implements RecordWriter {
         //            fos = new FileOutputStream(fileName, true);
 //            fd = fos.getFD();
 //            var f = new FileWriter(fd);
-        rfwriter = new RotatingFileWriter(fileName, 500, new RotatingFileWriterCallback());
-        writer = new BufferedWriter(rfwriter);
+        writer = new RotatingFileWriter(fileName, 500, new RotatingFileWriterCallback());
+//        writer = new BufferedWriter(rfwriter);
 
         ow = new ObjectMapper().writer();
     }
 
     class RotatingFileWriterCallback implements RotatingFileCallback{
         @Override
-        public void preRotate(FileWriter fw, int currentIndex, long currentByteCount) {
+        public void preRotate(Writer underlyingWriter, int currentIndex, long currentByteCount) {
             LOGGER.info("Rotating queue file #{}", currentIndex);
             String eofMarker = "\\.";
             try {
-                fw.write(eofMarker);
-                rfwriter.flush();
-                rfwriter.sync();
+                underlyingWriter.write(eofMarker);
+                writer.flush();
+                writer.sync();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -70,9 +72,8 @@ public class StreamingWriterJson implements RecordWriter {
     @Override
     public void writeRecord(Record r) {
         try {
-            String cdcJson = ow.writeValueAsString(generateCdcMessageForRecord(r));
+            String cdcJson = ow.writeValueAsString(generateCdcMessageForRecord(r)) + "\n";
             writer.write(cdcJson);
-            writer.write("\n");
             LOGGER.info("Writing CDC message = {}", cdcJson);
         }
         catch (IOException e) {
@@ -129,7 +130,7 @@ public class StreamingWriterJson implements RecordWriter {
     @Override
     public void sync() {
         try {
-            rfwriter.sync();
+            writer.sync();
         }
         catch (SyncFailedException e) {
             throw new RuntimeException(e);
