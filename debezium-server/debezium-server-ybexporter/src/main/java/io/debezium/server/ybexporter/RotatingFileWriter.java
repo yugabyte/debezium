@@ -88,56 +88,56 @@ public class RotatingFileWriter extends Writer {
         return true;
     }
 
-    private void createNewFileWriter(){
-        try {
-            // close current file
-            if (currentFileSegmentWriter != null){
-                currentFileSegmentWriter.flush();
-                currentFileSegmentWriter.close();
-            }
+//    private void createNewFileWriter(){
+//        try {
+//            // close current file
+//            if (currentFileSegmentWriter != null){
+//                currentFileSegmentWriter.flush();
+//                currentFileSegmentWriter.close();
+//            }
+//
+//            // open new file
+//            currentFileSegmentOutputStream = new FileOutputStream(getFilePathWithIndex(currentFileSegmentIndex), true);
+//            currentFileSegmentFd = currentFileSegmentOutputStream.getFD();
+//        } catch (IOException e) {
+//            throw new RuntimeException(e);
+//        }
+//        FileWriter fw = new FileWriter(currentFileSegmentFd);
+//        currentFileSegmentWriter = new BufferedWriter(fw);
+//        currentFileSegmentByteCount = 0; // TODO retrieve from file if already exists.
+//    }
 
-            // open new file
-            currentFileSegmentOutputStream = new FileOutputStream(getFilePathWithIndex(currentFileSegmentIndex), true);
-            currentFileSegmentFd = currentFileSegmentOutputStream.getFD();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        FileWriter fw = new FileWriter(currentFileSegmentFd);
-        currentFileSegmentWriter = new BufferedWriter(fw);
-        currentFileSegmentByteCount = 0; // TODO retrieve from file if already exists.
-    }
-
-    private void rotate(){
-        if (callback != null){
-            callback.preRotate(currentFileSegmentWriter, currentFileSegmentIndex, currentFileSegmentByteCount);
-        }
-        currentFileSegmentIndex++;
-        createNewFileWriter();
-    }
-
-    @Override
-    public void write(char[] cbuf, int off, int len) throws IOException {
-        if (currentFileSegmentByteCount >= maxFileByteCount){
-            rotate();
-        }
-        currentFileSegmentWriter.write(cbuf, off, len);
-        currentFileSegmentByteCount += len;
-    }
-
-    @Override
-    public void flush() throws IOException {
-        currentFileSegmentWriter.flush();
-    }
-
-    @Override
-    public void close() throws IOException {
-        currentFileSegmentOutputStream.close();
-        currentFileSegmentWriter.close();
-    }
-
-    public void sync() throws SyncFailedException {
-        currentFileSegmentFd.sync();
-    }
+//    private void rotate(){
+//        if (callback != null){
+//            callback.preRotate(currentFileSegmentWriter, currentFileSegmentIndex, currentFileSegmentByteCount);
+//        }
+//        currentFileSegmentIndex++;
+//        createNewFileWriter();
+//    }
+//
+//    @Override
+//    public void write(char[] cbuf, int off, int len) throws IOException {
+//        if (currentFileSegmentByteCount >= maxFileByteCount){
+//            rotate();
+//        }
+//        currentFileSegmentWriter.write(cbuf, off, len);
+//        currentFileSegmentByteCount += len;
+//    }
+//
+//    @Override
+//    public void flush() throws IOException {
+//        currentFileSegmentWriter.flush();
+//    }
+//
+//    @Override
+//    public void close() throws IOException {
+//        currentFileSegmentOutputStream.close();
+//        currentFileSegmentWriter.close();
+//    }
+//
+//    public void sync() throws SyncFailedException {
+//        currentFileSegmentFd.sync();
+//    }
 }
 
 
