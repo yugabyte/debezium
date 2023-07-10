@@ -11,6 +11,7 @@ public class Record {
     public Table t;
     public String snapshot;
     public String op;
+    public long vsn; // Voyager Sequence Number.
     // public HashMap<String, Object> keyFields = new HashMap<>();
     // public LinkedHashMap<String, Object> valueFields = new LinkedHashMap<>();
 

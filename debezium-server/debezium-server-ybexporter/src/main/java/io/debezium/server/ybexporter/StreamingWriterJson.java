@@ -32,6 +32,7 @@ public class StreamingWriterJson implements RecordWriter {
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
     private static final long QUEUE_SEGMENT_MAX_BYTES = 500;
+    private SequenceNumberGenerator sng;
 
     public StreamingWriterJson(String datadirStr) {
         dataDir = datadirStr;
@@ -45,10 +46,12 @@ public class StreamingWriterJson implements RecordWriter {
                 throw new RuntimeException("failed to create dir for cdc");
             }
         }
+        sng = new SequenceNumberGenerator(1);
         recoverStateFromDisk();
         if (currentQueueSegment == null){
             createNewQueueSegment();
         }
+
     }
 
     private void createNewQueueSegment(){
@@ -57,6 +60,10 @@ public class StreamingWriterJson implements RecordWriter {
 
     private void recoverStateFromDisk(){
         recoverLatestQueueSegment();
+        // recover sequence numberof last written record and resume
+        if (currentQueueSegment != null){
+            sng.advanceTo(currentQueueSegment.getSequenceNumberOfLastRecord() + 1);
+        }
     }
 
     private void recoverLatestQueueSegment(){
@@ -131,9 +138,13 @@ public class StreamingWriterJson implements RecordWriter {
     @Override
     public void writeRecord(Record r) {
         if (shouldRotateQueueSegment()) rotateQueueSegment();
+        augmentRecordWithSequenceNo(r);
         currentQueueSegment.write(r);
     }
 
+    private void augmentRecordWithSequenceNo(Record r){
+        r.vsn = sng.getNextValue();
+    }
 //    private HashMap<String, Object> generateCdcMessageForRecord(Record r) {
 //        // TODO: optimize, don't create objects every time.
 //        HashMap<String, Object> key = new HashMap<>();
@@ -186,5 +197,20 @@ public class StreamingWriterJson implements RecordWriter {
         catch (SyncFailedException e) {
             throw new RuntimeException(e);
         }
+    }
+}
+
+class SequenceNumberGenerator{
+    long currentValue;
+    public SequenceNumberGenerator(long start){
+        currentValue = start;
+    }
+
+    public long getNextValue(){
+        return currentValue++;
+    }
+
+    public void advanceTo(long val){
+        currentValue = val;
     }
 }

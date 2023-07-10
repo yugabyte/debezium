@@ -5,15 +5,19 @@
  */
 package io.debezium.server.ybexporter;
 
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.SyncFailedException;
@@ -78,6 +82,7 @@ public class QueueSegment {
 
         HashMap<String, Object> cdcInfo = new HashMap<>();
         cdcInfo.put("op", r.op);
+        cdcInfo.put("vsn", r.vsn);
         cdcInfo.put("schema_name", r.t.schemaName);
         cdcInfo.put("table_name", r.t.tableName);
         cdcInfo.put("key", key);
@@ -97,5 +102,25 @@ public class QueueSegment {
     }
     public void sync() throws SyncFailedException {
         fd.sync();
+    }
+
+    public long getSequenceNumberOfLastRecord(){
+        ObjectMapper mapper = new ObjectMapper(new JsonFactory());
+        long vsn = 0;
+        String last = null, line;
+        BufferedReader input;
+        try {
+            input = new BufferedReader(new FileReader(filePath));
+            while ((line = input.readLine()) != null) {
+                last = line;
+            }
+            if (last != null){
+                JsonNode lastRecordJson = mapper.readTree(last);
+                vsn = lastRecordJson.get("vsn").asLong();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return vsn;
     }
 }
