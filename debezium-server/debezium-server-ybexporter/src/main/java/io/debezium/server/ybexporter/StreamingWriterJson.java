@@ -20,7 +20,8 @@ import static java.lang.Math.max;
 
 public class StreamingWriterJson implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(StreamingWriterJson.class);
-    private static final String QUEUE_FILE_NAME = "queue.json";
+    private static final String QUEUE_FILE_NAME = "queue";
+    private static final String QUEUE_FILE_EXTENSION = "ndjson";
     private static final String QUEUE_FILE_DIR = "cdc";
     private String dataDir;
 //    private RotatingFileWriter writer;
@@ -62,7 +63,7 @@ public class StreamingWriterJson implements RecordWriter {
     private void recoverLatestQueueSegment(){
         // read dir to find all queue files
         Path queueDirPath = Path.of(dataDir, QUEUE_FILE_DIR);
-        String searchGlob = String.format("%s.*", QUEUE_FILE_NAME);
+        String searchGlob = String.format("%s.*.%s", QUEUE_FILE_NAME, QUEUE_FILE_EXTENSION);
         ArrayList<Path> filePaths = new ArrayList<>();
         try {
             DirectoryStream<Path> stream = Files.newDirectoryStream(queueDirPath, searchGlob);
@@ -79,7 +80,8 @@ public class StreamingWriterJson implements RecordWriter {
             int maxIndex = 0;
             for(Path p: filePaths){
                 // get the substring after the last occurence of "." and convert to ind
-                int index = Integer.parseInt(p.toString().substring(p.toString().lastIndexOf('.') + 1));
+                String pathWithoutExtention = p.toString().replace("."+QUEUE_FILE_EXTENSION, "");
+                int index = Integer.parseInt(pathWithoutExtention.substring(pathWithoutExtention.lastIndexOf('.') + 1));
                 maxIndex = max(maxIndex, index);
             }
             // create file writer for last file segment
@@ -94,7 +96,7 @@ public class StreamingWriterJson implements RecordWriter {
     }
 
     private String getFilePathWithIndex(long index){
-        String queueSegmentFileName = String.format("%s.%d", QUEUE_FILE_NAME, index);
+        String queueSegmentFileName = String.format("%s.%d.%s", QUEUE_FILE_NAME, index, QUEUE_FILE_EXTENSION);
         return Path.of(dataDir, QUEUE_FILE_DIR, queueSegmentFileName).toString();
     }
 
