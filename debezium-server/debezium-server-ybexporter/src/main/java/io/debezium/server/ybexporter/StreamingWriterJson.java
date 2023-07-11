@@ -112,8 +112,9 @@ public class StreamingWriterJson implements RecordWriter {
     }
 
     /**
-     * each queue segment's file name is of the format queue.<N>.ndjson
-     * where N is the segment number.
+     * each queue segment's file name is of the format queue.<N>.<starting vsn>.ndjson
+     * where N is the segment number, and the starting vsn (voyager sequence number) of records
+     * in the segment.
     */
     private String getFilePathWithIndex(long index, long startingSequenceNumber){
         String queueSegmentFileName = String.format("%s.%d.%d.%s", QUEUE_FILE_NAME, index, startingSequenceNumber, QUEUE_FILE_EXTENSION);
