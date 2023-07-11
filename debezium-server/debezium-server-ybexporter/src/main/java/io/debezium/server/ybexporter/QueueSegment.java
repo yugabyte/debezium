@@ -22,6 +22,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 
+/**
+ * A QueueSegment represents a segment of the cdc queue.
+ */
 public class QueueSegment {
     private static final Logger LOGGER = LoggerFactory.getLogger(QueueSegment.class);
 

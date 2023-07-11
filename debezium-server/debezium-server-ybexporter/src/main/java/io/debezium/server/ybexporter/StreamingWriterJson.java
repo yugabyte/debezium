@@ -18,6 +18,14 @@ import org.slf4j.LoggerFactory;
 
 import static java.lang.Math.max;
 
+/**
+ * This takes care of writing to the cdc queue file.
+ * Using a single queue.ndjson to represent the entire cdc is not desirable
+ * as the file size may become too large. Therefore, we break it into smaller QueueSegments
+ * and rotate them as soon as we reach a size threshold.
+ * If shutdown abruptly, this class is capable of resuming by retrieving the latest queue
+ * segment that was written to, and continues writing from that segment.
+ */
 public class StreamingWriterJson implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(StreamingWriterJson.class);
     private static final String QUEUE_FILE_NAME = "queue";
@@ -54,6 +62,12 @@ public class StreamingWriterJson implements RecordWriter {
         recoverLatestQueueSegment();
     }
 
+    /**
+     * This function reads the /cdc dir for all the queue segment files.
+     * Then it retrieves the index number from the paths, and then finds
+     * the max index - which is the latest queue segment that was written to.
+     * If no files are found, we just return.
+     */
     private void recoverLatestQueueSegment(){
         // read dir to find all queue files
         Path queueDirPath = Path.of(dataDir, QUEUE_FILE_DIR);
@@ -64,7 +78,6 @@ public class StreamingWriterJson implements RecordWriter {
             for (Path entry: stream) {
                 filePaths.add(entry);
             }
-
             if (filePaths.size() == 0){
                 // no files found. nothing to recover.
                 LOGGER.info("No files found matching {}. Nothing to recover", searchGlob);
@@ -78,7 +91,7 @@ public class StreamingWriterJson implements RecordWriter {
                 int index = Integer.parseInt(pathWithoutExtention.substring(pathWithoutExtention.lastIndexOf('.') + 1));
                 maxIndex = max(maxIndex, index);
             }
-            // create file writer for last file segment
+            // create queue segment for last file segment
             currentQueueSegmentIndex = maxIndex;
             createNewQueueSegment();
 
@@ -89,6 +102,10 @@ public class StreamingWriterJson implements RecordWriter {
         }
     }
 
+    /**
+     * each queue segment's file name is of the format queue.<N>.ndjson
+     * where N is the segment number.
+    */
     private String getFilePathWithIndex(long index){
         String queueSegmentFileName = String.format("%s.%d.%s", QUEUE_FILE_NAME, index, QUEUE_FILE_EXTENSION);
         return Path.of(dataDir, QUEUE_FILE_DIR, queueSegmentFileName).toString();
