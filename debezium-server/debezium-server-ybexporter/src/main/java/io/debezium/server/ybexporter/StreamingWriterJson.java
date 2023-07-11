@@ -18,26 +18,28 @@ import org.slf4j.LoggerFactory;
 
 import static java.lang.Math.max;
 
+/**
+ * This takes care of writing to the cdc queue file.
+ * Using a single queue.ndjson to represent the entire cdc is not desirable
+ * as the file size may become too large. Therefore, we break it into smaller QueueSegments
+ * and rotate them as soon as we reach a size threshold.
+ * If shutdown abruptly, this class is capable of resuming by retrieving the latest queue
+ * segment that was written to, and continues writing from that segment.
+ */
 public class StreamingWriterJson implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(StreamingWriterJson.class);
-    private static final String QUEUE_FILE_NAME = "queue.json";
+    private static final String QUEUE_FILE_NAME = "queue";
+    private static final String QUEUE_FILE_EXTENSION = "ndjson";
     private static final String QUEUE_FILE_DIR = "cdc";
+    private static final long QUEUE_SEGMENT_MAX_BYTES = 200 * 1000 * 1000; // 200 MB
     private String dataDir;
-//    private RotatingFileWriter writer;
-//    private BufferedWriter writer;
-//    private RotatingFileWriter rfwriter;
-//    private ObjectWriter ow;
-//    private FileOutputStream fos;
-//    private FileDescriptor fd;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
-    private static final long QUEUE_SEGMENT_MAX_BYTES = 500;
     private SequenceNumberGenerator sng;
 
     public StreamingWriterJson(String datadirStr) {
         dataDir = datadirStr;
 
-        var fileName = String.format("%s/%s/%s", dataDir, QUEUE_FILE_DIR, QUEUE_FILE_NAME);
         // mkdir cdc
         File queueDir = new File(String.format("%s/%s", dataDir, QUEUE_FILE_DIR));
         if (!queueDir.exists()){
@@ -66,17 +68,22 @@ public class StreamingWriterJson implements RecordWriter {
         }
     }
 
+    /**
+     * This function reads the /cdc dir for all the queue segment files.
+     * Then it retrieves the index number from the paths, and then finds
+     * the max index - which is the latest queue segment that was written to.
+     * If no files are found, we just return.
+     */
     private void recoverLatestQueueSegment(){
         // read dir to find all queue files
         Path queueDirPath = Path.of(dataDir, QUEUE_FILE_DIR);
-        String searchGlob = String.format("%s.*", QUEUE_FILE_NAME);
+        String searchGlob = String.format("%s.*.%s", QUEUE_FILE_NAME, QUEUE_FILE_EXTENSION);
         ArrayList<Path> filePaths = new ArrayList<>();
         try {
             DirectoryStream<Path> stream = Files.newDirectoryStream(queueDirPath, searchGlob);
             for (Path entry: stream) {
                 filePaths.add(entry);
             }
-
             if (filePaths.size() == 0){
                 // no files found. nothing to recover.
                 LOGGER.info("No files found matching {}. Nothing to recover", searchGlob);
@@ -86,10 +93,11 @@ public class StreamingWriterJson implements RecordWriter {
             int maxIndex = 0;
             for(Path p: filePaths){
                 // get the substring after the last occurence of "." and convert to ind
-                int index = Integer.parseInt(p.toString().substring(p.toString().lastIndexOf('.') + 1));
+                String pathWithoutExtention = p.toString().replace("."+QUEUE_FILE_EXTENSION, "");
+                int index = Integer.parseInt(pathWithoutExtention.substring(pathWithoutExtention.lastIndexOf('.') + 1));
                 maxIndex = max(maxIndex, index);
             }
-            // create file writer for last file segment
+            // create queue segment for last file segment
             currentQueueSegmentIndex = maxIndex;
             createNewQueueSegment();
 
@@ -100,8 +108,12 @@ public class StreamingWriterJson implements RecordWriter {
         }
     }
 
+    /**
+     * each queue segment's file name is of the format queue.<N>.ndjson
+     * where N is the segment number.
+    */
     private String getFilePathWithIndex(long index){
-        String queueSegmentFileName = String.format("%s.%d", QUEUE_FILE_NAME, index);
+        String queueSegmentFileName = String.format("%s.%d.%s", QUEUE_FILE_NAME, index, QUEUE_FILE_EXTENSION);
         return Path.of(dataDir, QUEUE_FILE_DIR, queueSegmentFileName).toString();
     }
 
@@ -120,21 +132,6 @@ public class StreamingWriterJson implements RecordWriter {
         createNewQueueSegment();
     }
 
-//    class RotatingFileWriterCallback implements RotatingFileCallback{
-//        @Override
-//        public void preRotate(Writer underlyingWriter, int currentIndex, long currentByteCount) {
-//            LOGGER.info("Rotating queue file #{}", currentIndex);
-//            String eofMarker = "\\.";
-//            try {
-//                underlyingWriter.write(eofMarker);
-//                writer.flush();
-//                writer.sync();
-//            } catch (IOException e) {
-//                throw new RuntimeException(e);
-//            }
-//        }
-//    }
-
     @Override
     public void writeRecord(Record r) {
         if (shouldRotateQueueSegment()) rotateQueueSegment();
@@ -145,29 +142,6 @@ public class StreamingWriterJson implements RecordWriter {
     private void augmentRecordWithSequenceNo(Record r){
         r.vsn = sng.getNextValue();
     }
-//    private HashMap<String, Object> generateCdcMessageForRecord(Record r) {
-//        // TODO: optimize, don't create objects every time.
-//        HashMap<String, Object> key = new HashMap<>();
-//        HashMap<String, Object> fields = new HashMap<>();
-//
-//        for (int i = 0; i < r.keyValues.size(); i++) {
-//            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(r.keyValues.get(i));
-//            key.put(r.keyColumns.get(i), formattedVal);
-//        }
-//
-//        for (int i = 0; i < r.valueValues.size(); i++) {
-//            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(r.valueValues.get(i));
-//            fields.put(r.valueColumns.get(i), formattedVal);
-//        }
-//
-//        HashMap<String, Object> cdcInfo = new HashMap<>();
-//        cdcInfo.put("op", r.op);
-//        cdcInfo.put("schema_name", r.t.schemaName);
-//        cdcInfo.put("table_name", r.t.tableName);
-//        cdcInfo.put("key", key);
-//        cdcInfo.put("fields", fields);
-//        return cdcInfo;
-//    }
 
     @Override
     public void flush() {

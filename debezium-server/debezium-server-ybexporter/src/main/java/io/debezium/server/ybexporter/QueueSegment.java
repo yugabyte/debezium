@@ -26,6 +26,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 
+/**
+ * A QueueSegment represents a segment of the cdc queue.
+ */
 public class QueueSegment {
     private static final Logger LOGGER = LoggerFactory.getLogger(QueueSegment.class);
 
@@ -35,6 +38,7 @@ public class QueueSegment {
     private Writer writer;
     private long byteCount;
     private ObjectWriter ow;
+
     public QueueSegment(String filePath){
         this.filePath = filePath;
         ow = new ObjectMapper().writer();
@@ -89,9 +93,11 @@ public class QueueSegment {
         cdcInfo.put("fields", fields);
         return cdcInfo;
     }
+
     public void flush() throws IOException {
         writer.flush();
     }
+
     public void close() throws IOException {
         LOGGER.info("Closing queue file {}", filePath);
         String eofMarker = "\\.";
@@ -100,6 +106,7 @@ public class QueueSegment {
         sync();
         writer.close();
     }
+
     public void sync() throws SyncFailedException {
         fd.sync();
     }
