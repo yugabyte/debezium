@@ -31,7 +31,8 @@ public class StreamingWriterJson implements RecordWriter {
     private static final String QUEUE_FILE_NAME = "queue";
     private static final String QUEUE_FILE_EXTENSION = "ndjson";
     private static final String QUEUE_FILE_DIR = "cdc";
-    private static final long QUEUE_SEGMENT_MAX_BYTES = 200 * 1000 * 1000; // 200 MB
+    private static final long QUEUE_SEGMENT_MAX_BYTES = 500;
+//    private static final long QUEUE_SEGMENT_MAX_BYTES = 200 * 1000 * 1000; // 200 MB
     private String dataDir;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
@@ -51,13 +52,8 @@ public class StreamingWriterJson implements RecordWriter {
         sng = new SequenceNumberGenerator(1);
         recoverStateFromDisk();
         if (currentQueueSegment == null){
-            createNewQueueSegment();
+            currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex, sng.peekNextValue()));
         }
-
-    }
-
-    private void createNewQueueSegment(){
-        currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex));
     }
 
     private void recoverStateFromDisk(){
@@ -91,17 +87,24 @@ public class StreamingWriterJson implements RecordWriter {
             }
             // extract max index of all files
             int maxIndex = 0;
+            Path maxIndexPath = null;
             for(Path p: filePaths){
-                // get the substring after the last occurence of "." and convert to ind
+                // remove extension
                 String pathWithoutExtention = p.toString().replace("."+QUEUE_FILE_EXTENSION, "");
-                int index = Integer.parseInt(pathWithoutExtention.substring(pathWithoutExtention.lastIndexOf('.') + 1));
-                maxIndex = max(maxIndex, index);
+                // remove starting sequence number
+                String pathWithoutExtensionAndStartingSequenceNumber = pathWithoutExtention.substring(0, pathWithoutExtention.lastIndexOf('.'));
+                // extract index.
+                int index = Integer.parseInt(pathWithoutExtensionAndStartingSequenceNumber.substring(pathWithoutExtensionAndStartingSequenceNumber.lastIndexOf('.') + 1));
+                if (index >= maxIndex){
+                    maxIndex = index;
+                    maxIndexPath = p;
+                }
             }
             // create queue segment for last file segment
             currentQueueSegmentIndex = maxIndex;
-            createNewQueueSegment();
+            currentQueueSegment = new QueueSegment(maxIndexPath.toString());
 
-            LOGGER.info("Recovered from queue segment-{} with byte count={}", getFilePathWithIndex(currentQueueSegmentIndex), currentQueueSegment.getByteCount());
+            LOGGER.info("Recovered from queue segment-{} with byte count={}", maxIndexPath, currentQueueSegment.getByteCount());
         }
         catch (IOException x) {
             throw new RuntimeException(x);
@@ -112,8 +115,8 @@ public class StreamingWriterJson implements RecordWriter {
      * each queue segment's file name is of the format queue.<N>.ndjson
      * where N is the segment number.
     */
-    private String getFilePathWithIndex(long index){
-        String queueSegmentFileName = String.format("%s.%d.%s", QUEUE_FILE_NAME, index, QUEUE_FILE_EXTENSION);
+    private String getFilePathWithIndex(long index, long startingSequenceNumber){
+        String queueSegmentFileName = String.format("%s.%d.%d.%s", QUEUE_FILE_NAME, index, startingSequenceNumber, QUEUE_FILE_EXTENSION);
         return Path.of(dataDir, QUEUE_FILE_DIR, queueSegmentFileName).toString();
     }
 
@@ -129,7 +132,7 @@ public class StreamingWriterJson implements RecordWriter {
             throw new RuntimeException(e);
         }
         currentQueueSegmentIndex++;
-        createNewQueueSegment();
+        currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex, sng.peekNextValue()));
     }
 
     @Override
@@ -175,16 +178,20 @@ public class StreamingWriterJson implements RecordWriter {
 }
 
 class SequenceNumberGenerator{
-    long currentValue;
+    private long nextValue;
     public SequenceNumberGenerator(long start){
-        currentValue = start;
+        nextValue = start;
     }
 
     public long getNextValue(){
-        return currentValue++;
+        return nextValue++;
+    }
+
+    public long peekNextValue(){
+        return nextValue;
     }
 
     public void advanceTo(long val){
-        currentValue = val;
+        nextValue = val;
     }
 }
