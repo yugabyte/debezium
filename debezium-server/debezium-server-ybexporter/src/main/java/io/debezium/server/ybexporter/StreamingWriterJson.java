@@ -31,7 +31,7 @@ public class StreamingWriterJson implements RecordWriter {
     private static final String QUEUE_FILE_NAME = "queue";
     private static final String QUEUE_FILE_EXTENSION = "ndjson";
     private static final String QUEUE_FILE_DIR = "cdc";
-    private static final long QUEUE_SEGMENT_MAX_BYTES = 500;
+    private static final long QUEUE_SEGMENT_MAX_BYTES = 200 * 1000 * 1000; // 200 MB
     private String dataDir;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
