@@ -122,7 +122,6 @@ class KafkaConnectRecordParser implements RecordParser {
     protected void parseKeyFields(Struct key, Record r) {
         for (Field f : key.schema().fields()) {
             Object fieldValue = key.get(f);
-//            Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
             r.addKeyField(f.name(), fieldValue);
 
         }
@@ -148,18 +147,17 @@ class KafkaConnectRecordParser implements RecordParser {
                 }
             }
             Object fieldValue = after.get(f);
-//            Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
-            // formatting
-            if (fieldValue!=null){
-                LOGGER.info("field={}, fieldValue={}, fieldValueType={}", f.name(), fieldValue, fieldValue.getClass().getName());
-            }
-            fieldValue = serialize(fieldValue, f);
+            fieldValue = makeSerializable(fieldValue, f);
             r.addValueField(f.name(), fieldValue);
-
         }
     }
 
-    private Object serialize(Object fieldValue, Field field){
+    /**
+     * For certain data-types like decimals/bytes/structs, we convert them
+     * to certain formats that is serializable by downstream snapshot/streaming
+     * writers
+     */
+    private Object makeSerializable(Object fieldValue, Field field){
         if (fieldValue == null) {
             return null;
         }
@@ -176,24 +174,21 @@ class KafkaConnectRecordParser implements RecordParser {
         switch (type){
             case BYTES:
             case STRUCT:
-//                String jsonFriendlyString = new String(jsonConverter.fromConnectData("test", f.schema(), fieldValue));
-//                LOGGER.info("field={}, fieldValue={}, fieldValueType={}, jsonFriendlyString={}", f.name(), fieldValue, fieldValue.getClass().getName(), jsonFriendlyString);
                 return toKafkaConnectJsonConverted(fieldValue, field);
         }
         return fieldValue;
     }
-    private Object toKafkaConnectJsonConverted(Object fieldValue, Field f){
+
+    /**
+     * Use the kafka connect json converter to convert it to a json friendly string
+     */
+    private String toKafkaConnectJsonConverted(Object fieldValue, Field f){
         String jsonFriendlyString = new String(jsonConverter.fromConnectData("test", f.schema(), fieldValue));
-//        LOGGER.info("field={}, fieldValue={}, fieldValueType={}, jsonFriendlyString={}", f.name(), fieldValue, fieldValue.getClass().getName(), jsonFriendlyString);
-        // remove leading and trailing double quotes
         if (jsonFriendlyString.length() > 0){
             if ((jsonFriendlyString.charAt(0) == '"') && (jsonFriendlyString.charAt(jsonFriendlyString.length()-1) == '"')){
                 jsonFriendlyString = jsonFriendlyString.substring(1, jsonFriendlyString.length() - 1);
             }
         }
-//        if ((jsonFriendlyString.charAt(0) == '"') && (jsonFriendlyString.charAt(0) == jsonFriendlyString.charAt(jsonFriendlyString.length()-1))){
-//            jsonFriendlyString = jsonFriendlyString.substring(1, jsonFriendlyString.length() - 1);
-//        }
         return jsonFriendlyString;
     }
 

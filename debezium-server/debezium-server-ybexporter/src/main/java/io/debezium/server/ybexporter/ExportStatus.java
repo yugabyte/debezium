@@ -111,8 +111,6 @@ public class ExportStatus {
             String schemaFilePath = String.format("%s/schemas/%s_schema.json", dataDir, fileName);
             File schemaFile = new File(schemaFilePath);
             schemaWriter.writeValue(schemaFile, tableSchema);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
