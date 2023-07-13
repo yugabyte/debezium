@@ -32,6 +32,7 @@ public class StreamingWriterJson implements RecordWriter {
     private static final String QUEUE_FILE_EXTENSION = "ndjson";
     private static final String QUEUE_FILE_DIR = "cdc";
     private static final long QUEUE_SEGMENT_MAX_BYTES = 200 * 1000 * 1000; // 200 MB
+//    private static final long QUEUE_SEGMENT_MAX_BYTES = 500;
     private String dataDir;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
@@ -71,7 +72,7 @@ public class StreamingWriterJson implements RecordWriter {
     private void recoverLatestQueueSegment(){
         // read dir to find all queue files
         Path queueDirPath = Path.of(dataDir, QUEUE_FILE_DIR);
-        String searchGlob = String.format("%s.[0-9]+.%s", QUEUE_FILE_NAME, QUEUE_FILE_EXTENSION);
+        String searchGlob = String.format("%s.[0-9]*.%s", QUEUE_FILE_NAME, QUEUE_FILE_EXTENSION);
         ArrayList<Path> filePaths = new ArrayList<>();
         try {
             DirectoryStream<Path> stream = Files.newDirectoryStream(queueDirPath, searchGlob);
