@@ -71,7 +71,7 @@ public class StreamingWriterJson implements RecordWriter {
     private void recoverLatestQueueSegment(){
         // read dir to find all queue files
         Path queueDirPath = Path.of(dataDir, QUEUE_FILE_DIR);
-        String searchGlob = String.format("%s.*.%s", QUEUE_FILE_NAME, QUEUE_FILE_EXTENSION);
+        String searchGlob = String.format("%s.[0-9]+.%s", QUEUE_FILE_NAME, QUEUE_FILE_EXTENSION);
         ArrayList<Path> filePaths = new ArrayList<>();
         try {
             DirectoryStream<Path> stream = Files.newDirectoryStream(queueDirPath, searchGlob);
@@ -84,11 +84,11 @@ public class StreamingWriterJson implements RecordWriter {
                 return;
             }
             // extract max index of all files
-            int maxIndex = 0;
+            long maxIndex = 0;
             for(Path p: filePaths){
                 // get the substring after the last occurence of "." and convert to ind
                 String pathWithoutExtention = p.toString().replace("."+QUEUE_FILE_EXTENSION, "");
-                int index = Integer.parseInt(pathWithoutExtention.substring(pathWithoutExtention.lastIndexOf('.') + 1));
+                long index = Integer.parseInt(pathWithoutExtention.substring(pathWithoutExtention.lastIndexOf('.') + 1));
                 maxIndex = max(maxIndex, index);
             }
             // create queue segment for last file segment

@@ -28,6 +28,7 @@ import java.util.HashMap;
 public class QueueSegment {
     private static final Logger LOGGER = LoggerFactory.getLogger(QueueSegment.class);
 
+    private static final String EOF_MARKER = "\\.";
     private String filePath;
     private FileOutputStream fos;
     private FileDescriptor fd;
@@ -57,7 +58,6 @@ public class QueueSegment {
         try {
             String cdcJson = ow.writeValueAsString(generateCdcMessageForRecord(r)) + "\n";
             writer.write(cdcJson);
-            LOGGER.info("Writing CDC message = {}", cdcJson);
             byteCount += cdcJson.length();
         }
         catch (IOException e) {
@@ -95,8 +95,7 @@ public class QueueSegment {
 
     public void close() throws IOException {
         LOGGER.info("Closing queue file {}", filePath);
-        String eofMarker = "\\.";
-        writer.write(eofMarker);
+        writer.write(EOF_MARKER);
         writer.flush();
         sync();
         writer.close();
