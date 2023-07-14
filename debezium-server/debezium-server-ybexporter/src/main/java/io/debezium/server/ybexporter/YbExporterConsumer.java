@@ -220,7 +220,9 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void openCDCWriter() {
-        streamingWriter = new StreamingWriterJson(dataDir);
+        final Config config = ConfigProvider.getConfig();
+        Long queueSegmentMaxBytes = config.getOptionalValue(PROP_PREFIX+"queueSegmentMaxBytes", Long.class).orElse(null);
+        streamingWriter = new StreamingWriterJson(dataDir, queueSegmentMaxBytes);
     }
 
     private void checkIfHelperThreadAlive(){

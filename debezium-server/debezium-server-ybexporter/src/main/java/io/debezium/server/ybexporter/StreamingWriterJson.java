@@ -31,15 +31,17 @@ public class StreamingWriterJson implements RecordWriter {
     private static final String QUEUE_FILE_NAME = "queue";
     private static final String QUEUE_FILE_EXTENSION = "ndjson";
     private static final String QUEUE_FILE_DIR = "cdc";
-    private static final long QUEUE_SEGMENT_MAX_BYTES = 200 * 1000 * 1000; // 200 MB
-//    private static final long QUEUE_SEGMENT_MAX_BYTES = 500;
+    private long queueSegmentMaxBytes = 1000 * 1000 * 1000; // default 1 GB
     private String dataDir;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
 
 
-    public StreamingWriterJson(String datadirStr) {
+    public StreamingWriterJson(String datadirStr, Long queueSegmentMaxBytes) {
         dataDir = datadirStr;
+        if (queueSegmentMaxBytes != null){
+            this.queueSegmentMaxBytes = queueSegmentMaxBytes;
+        }
 
         // mkdir cdc
         File queueDir = new File(String.format("%s/%s", dataDir, QUEUE_FILE_DIR));
@@ -113,7 +115,7 @@ public class StreamingWriterJson implements RecordWriter {
     }
 
     private boolean shouldRotateQueueSegment(){
-        return (currentQueueSegment.getByteCount() >= QUEUE_SEGMENT_MAX_BYTES);
+        return (currentQueueSegment.getByteCount() >= queueSegmentMaxBytes);
     }
 
     private void rotateQueueSegment(){
@@ -124,6 +126,7 @@ public class StreamingWriterJson implements RecordWriter {
             throw new RuntimeException(e);
         }
         currentQueueSegmentIndex++;
+        LOGGER.info("rotating queue segment to #{}", currentQueueSegmentIndex);
         createNewQueueSegment();
     }
 
