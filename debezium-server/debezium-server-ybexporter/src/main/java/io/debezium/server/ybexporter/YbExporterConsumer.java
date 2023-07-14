@@ -41,7 +41,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private Map<String, Table> tableMap = new HashMap<>();
     private RecordParser parser;
     private Map<Table, RecordWriter> snapshotWriters = new ConcurrentHashMap<>();
-    private RecordWriter streamingWriter;
+    private RecordWriter eventQueue;
     private ExportStatus exportStatus;
     private SequenceObjectUpdater sequenceObjectUpdater;
     Thread flusherThread;
@@ -146,7 +146,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             return writer;
         }
         else {
-            return streamingWriter;
+            return eventQueue;
         }
     }
 
@@ -212,15 +212,17 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
      */
     private void flushSyncStreamingData() {
         if (exportStatus.getMode().equals(ExportMode.STREAMING)) {
-            if (streamingWriter != null) {
-                streamingWriter.flush();
-                streamingWriter.sync();
+            if (eventQueue != null) {
+                eventQueue.flush();
+                eventQueue.sync();
             }
         }
     }
 
     private void openCDCWriter() {
-        streamingWriter = new StreamingWriterJson(dataDir);
+        final Config config = ConfigProvider.getConfig();
+        Long queueSegmentMaxBytes = config.getOptionalValue(PROP_PREFIX+"queueSegmentMaxBytes", Long.class).orElse(null);
+        eventQueue = new EventQueue(dataDir, queueSegmentMaxBytes);
     }
 
     private void checkIfHelperThreadAlive(){
