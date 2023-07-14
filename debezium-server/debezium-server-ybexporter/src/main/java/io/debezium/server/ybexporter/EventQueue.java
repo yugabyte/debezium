@@ -66,7 +66,7 @@ public class EventQueue implements RecordWriter {
     }
 
     /**
-     * This function reads the /cdc dir for all the queue segment files.
+     * This function reads the /queue dir for all the queue segment files.
      * Then it retrieves the index number from the paths, and then finds
      * the max index - which is the latest queue segment that was written to.
      * If no files are found, we just return.
@@ -106,7 +106,7 @@ public class EventQueue implements RecordWriter {
     }
 
     /**
-     * each queue segment's file name is of the format queue.<N>.ndjson
+     * each queue segment's file name is of the format segment.<N>.ndjson
      * where N is the segment number.
     */
     private String getFilePathWithIndex(long index){
