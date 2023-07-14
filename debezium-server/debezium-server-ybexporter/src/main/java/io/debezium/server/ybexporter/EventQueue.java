@@ -89,9 +89,8 @@ public class EventQueue implements RecordWriter {
             // extract max index of all files
             long maxIndex = 0;
             for(Path p: filePaths){
-                // get the substring after the last occurence of "." and convert to ind
-                String pathWithoutExtention = p.toString().replace("."+ QUEUE_SEGMENT_FILE_EXTENSION, "");
-                long index = Integer.parseInt(pathWithoutExtention.substring(pathWithoutExtention.lastIndexOf('.') + 1));
+                String filename = p.getFileName().toString();
+                long index = Long.parseLong(filename.substring(QUEUE_SEGMENT_FILE_NAME.length() + 1, filename.length() - (QUEUE_SEGMENT_FILE_EXTENSION.length() + 1)));
                 maxIndex = max(maxIndex, index);
             }
             // create queue segment for last file segment
