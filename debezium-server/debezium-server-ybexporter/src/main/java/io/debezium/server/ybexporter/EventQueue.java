@@ -26,18 +26,18 @@ import static java.lang.Math.max;
  * If shutdown abruptly, this class is capable of resuming by retrieving the latest queue
  * segment that was written to, and continues writing from that segment.
  */
-public class StreamingWriterJson implements RecordWriter {
-    private static final Logger LOGGER = LoggerFactory.getLogger(StreamingWriterJson.class);
-    private static final String QUEUE_FILE_NAME = "queue";
-    private static final String QUEUE_FILE_EXTENSION = "ndjson";
-    private static final String QUEUE_FILE_DIR = "cdc";
+public class EventQueue implements RecordWriter {
+    private static final Logger LOGGER = LoggerFactory.getLogger(EventQueue.class);
+    private static final String QUEUE_SEGMENT_FILE_NAME = "segment";
+    private static final String QUEUE_SEGMENT_FILE_EXTENSION = "ndjson";
+    private static final String QUEUE_FILE_DIR = "queue";
     private long queueSegmentMaxBytes = 1000 * 1000 * 1000; // default 1 GB
     private String dataDir;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
 
 
-    public StreamingWriterJson(String datadirStr, Long queueSegmentMaxBytes) {
+    public EventQueue(String datadirStr, Long queueSegmentMaxBytes) {
         dataDir = datadirStr;
         if (queueSegmentMaxBytes != null){
             this.queueSegmentMaxBytes = queueSegmentMaxBytes;
@@ -74,7 +74,7 @@ public class StreamingWriterJson implements RecordWriter {
     private void recoverLatestQueueSegment(){
         // read dir to find all queue files
         Path queueDirPath = Path.of(dataDir, QUEUE_FILE_DIR);
-        String searchGlob = String.format("%s.[0-9]*.%s", QUEUE_FILE_NAME, QUEUE_FILE_EXTENSION);
+        String searchGlob = String.format("%s.[0-9]*.%s", QUEUE_SEGMENT_FILE_NAME, QUEUE_SEGMENT_FILE_EXTENSION);
         ArrayList<Path> filePaths = new ArrayList<>();
         try {
             DirectoryStream<Path> stream = Files.newDirectoryStream(queueDirPath, searchGlob);
@@ -90,7 +90,7 @@ public class StreamingWriterJson implements RecordWriter {
             long maxIndex = 0;
             for(Path p: filePaths){
                 // get the substring after the last occurence of "." and convert to ind
-                String pathWithoutExtention = p.toString().replace("."+QUEUE_FILE_EXTENSION, "");
+                String pathWithoutExtention = p.toString().replace("."+ QUEUE_SEGMENT_FILE_EXTENSION, "");
                 long index = Integer.parseInt(pathWithoutExtention.substring(pathWithoutExtention.lastIndexOf('.') + 1));
                 maxIndex = max(maxIndex, index);
             }
@@ -110,7 +110,7 @@ public class StreamingWriterJson implements RecordWriter {
      * where N is the segment number.
     */
     private String getFilePathWithIndex(long index){
-        String queueSegmentFileName = String.format("%s.%d.%s", QUEUE_FILE_NAME, index, QUEUE_FILE_EXTENSION);
+        String queueSegmentFileName = String.format("%s.%d.%s", QUEUE_SEGMENT_FILE_NAME, index, QUEUE_SEGMENT_FILE_EXTENSION);
         return Path.of(dataDir, QUEUE_FILE_DIR, queueSegmentFileName).toString();
     }
 
