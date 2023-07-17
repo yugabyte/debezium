@@ -55,7 +55,7 @@ public class EventQueue implements RecordWriter {
         sng = new SequenceNumberGenerator(1);
         recoverStateFromDisk();
         if (currentQueueSegment == null){
-            currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex, sng.peekNextValue()));
+            currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex));
         }
     }
 
@@ -76,7 +76,7 @@ public class EventQueue implements RecordWriter {
     private void recoverLatestQueueSegment(){
         // read dir to find all queue files
         Path queueDirPath = Path.of(dataDir, QUEUE_FILE_DIR);
-        String searchGlob = String.format("%s.[0-9]*.[0-9]*.%s", QUEUE_SEGMENT_FILE_NAME, QUEUE_SEGMENT_FILE_EXTENSION);
+        String searchGlob = String.format("%s.[0-9]*.%s", QUEUE_SEGMENT_FILE_NAME, QUEUE_SEGMENT_FILE_EXTENSION);
         ArrayList<Path> filePaths = new ArrayList<>();
         try {
             DirectoryStream<Path> stream = Files.newDirectoryStream(queueDirPath, searchGlob);
@@ -93,9 +93,10 @@ public class EventQueue implements RecordWriter {
             Path maxIndexPath = null;
             for(Path p: filePaths){
                 String filename = p.getFileName().toString();
-                String[] indexAndStartingSequenceNumber = filename.substring(QUEUE_SEGMENT_FILE_NAME.length() + 1, filename.length() - (QUEUE_SEGMENT_FILE_EXTENSION.length() + 1)).split("\\.");
+                String indexStr = filename.substring(QUEUE_SEGMENT_FILE_NAME.length() + 1, filename.length() - (QUEUE_SEGMENT_FILE_EXTENSION.length() + 1));
+//                String[] indexAndStartingSequenceNumber = filename.substring(QUEUE_SEGMENT_FILE_NAME.length() + 1, filename.length() - (QUEUE_SEGMENT_FILE_EXTENSION.length() + 1)).split("\\.");
 
-                long index = Long.parseLong(indexAndStartingSequenceNumber[0]);
+                long index = Long.parseLong(indexStr);
                 if (index >= maxIndex){
                     maxIndex = index;
                     maxIndexPath = p;
@@ -113,12 +114,11 @@ public class EventQueue implements RecordWriter {
     }
 
     /**
-     * each queue segment's file name is of the format segment.<N>.<starting vsn>.ndjson
-     * where N is the segment number, and the starting vsn (voyager sequence number) of records
-     * in the segment.
+     * each queue segment's file name is of the format segment.<N>.ndjson
+     * where N is the segment number
     */
-    private String getFilePathWithIndex(long index, long startingSequenceNumber){
-        String queueSegmentFileName = String.format("%s.%d.%d.%s", QUEUE_SEGMENT_FILE_NAME, index, startingSequenceNumber, QUEUE_SEGMENT_FILE_EXTENSION);
+    private String getFilePathWithIndex(long index){
+        String queueSegmentFileName = String.format("%s.%d.%s", QUEUE_SEGMENT_FILE_NAME, index, QUEUE_SEGMENT_FILE_EXTENSION);
         return Path.of(dataDir, QUEUE_FILE_DIR, queueSegmentFileName).toString();
     }
 
@@ -135,7 +135,7 @@ public class EventQueue implements RecordWriter {
         }
         currentQueueSegmentIndex++;
         LOGGER.info("rotating queue segment to #{}", currentQueueSegmentIndex);
-        currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex, sng.peekNextValue()));
+        currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex));
     }
 
     @Override
