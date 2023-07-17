@@ -223,7 +223,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private void openCDCWriter() {
         final Config config = ConfigProvider.getConfig();
         Long queueSegmentMaxBytes = config.getOptionalValue(PROP_PREFIX+"queueSegmentMaxBytes", Long.class).orElse(null);
-        eventQueue = new EventQueue(dataDir, queueSegmentMaxBytes);
+        eventQueue = new EventQueue(dataDir, sourceType, queueSegmentMaxBytes);
     }
 
     private void checkIfHelperThreadAlive(){

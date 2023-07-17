@@ -34,12 +34,16 @@ public class EventQueue implements RecordWriter {
     private static final String QUEUE_FILE_DIR = "queue";
     private long queueSegmentMaxBytes = 1000 * 1000 * 1000; // default 1 GB
     private String dataDir;
+    private String sourceType;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
     private SequenceNumberGenerator sng;
+    private Comparable<?> lastWrittenSourceLogLocation;
+    private int lastWrittenSourceLogLocationCount;
 
-    public EventQueue(String datadirStr, Long queueSegmentMaxBytes) {
+    public EventQueue(String datadirStr, String sourceType, Long queueSegmentMaxBytes) {
         dataDir = datadirStr;
+        this.sourceType = sourceType;
         if (queueSegmentMaxBytes != null){
             this.queueSegmentMaxBytes = queueSegmentMaxBytes;
         }
@@ -141,12 +145,36 @@ public class EventQueue implements RecordWriter {
     @Override
     public void writeRecord(Record r) {
         if (shouldRotateQueueSegment()) rotateQueueSegment();
-        augmentRecordWithSequenceNo(r);
+        augmentRecordWithVoyagerSequenceNo(r);
+        augmentRecordWithSourceSequenceId(r);
         currentQueueSegment.write(r);
     }
 
-    private void augmentRecordWithSequenceNo(Record r){
+    private void augmentRecordWithVoyagerSequenceNo(Record r){
         r.vsn = sng.getNextValue();
+    }
+
+    private void augmentRecordWithSourceSequenceId(Record r){
+        switch (sourceType){
+            case "oracle":
+                Long sourceSequenceId = (Long) r.sourceLogLocation;
+                sourceSequenceId *= 1000;
+                if (lastWrittenSourceLogLocation != null){
+                    if (r.sourceLogLocation.equals(lastWrittenSourceLogLocation)){
+                        // same scn as previous record. need to deduplicate
+                        sourceSequenceId += ++lastWrittenSourceLogLocationCount;
+                    } else{
+                        lastWrittenSourceLogLocation = r.sourceLogLocation;
+                        lastWrittenSourceLogLocationCount = 0;
+                    }
+                } else{
+                    lastWrittenSourceLogLocation = r.sourceLogLocation;
+                    lastWrittenSourceLogLocationCount = 0;
+                }
+                r.sourceSequenceId = sourceSequenceId;
+            default:
+                throw new RuntimeException("Unsupported source type for parsing source log location");
+        }
     }
 
     @Override
