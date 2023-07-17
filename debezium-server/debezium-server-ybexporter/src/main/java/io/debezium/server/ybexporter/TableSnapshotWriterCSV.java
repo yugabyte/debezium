@@ -36,6 +36,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
         var fileName = getFullFileNameForTable();
         try {
             fos = new FileOutputStream(fileName);
+            fos = new FileOutputStream(fileName);
             fd = fos.getFD();
             var f = new FileWriter(fd);
             var bufferedWriter = new BufferedWriter(f);

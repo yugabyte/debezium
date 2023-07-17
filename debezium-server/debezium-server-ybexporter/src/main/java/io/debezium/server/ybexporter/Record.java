@@ -12,6 +12,7 @@ public class Record {
     public String snapshot;
     public String op;
     public long vsn; // Voyager Sequence Number.
+    public Comparable<?> sourceLogLocation;
     // public HashMap<String, Object> keyFields = new HashMap<>();
     // public LinkedHashMap<String, Object> valueFields = new LinkedHashMap<>();
 

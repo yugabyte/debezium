@@ -37,6 +37,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
 
+    // TODO: use enum instead of String
     String sourceType;
     private Map<String, Table> tableMap = new HashMap<>();
     private RecordParser parser;
@@ -55,7 +56,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
         retrieveSourceType(config);
 
-        parser = new KafkaConnectRecordParser(tableMap);
+        parser = new KafkaConnectRecordParser(tableMap, sourceType);
         exportStatus = ExportStatus.getInstance(dataDir);
         if (exportStatus.getMode() != null && exportStatus.getMode().equals(ExportMode.STREAMING)) {
             handleSnapshotComplete();

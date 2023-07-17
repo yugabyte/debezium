@@ -21,10 +21,12 @@ class KafkaConnectRecordParser implements RecordParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConnectRecordParser.class);
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
+    private String sourceType;
     Record r = new Record();
 
-    public KafkaConnectRecordParser(Map<String, Table> tblMap) {
+    public KafkaConnectRecordParser(Map<String, Table> tblMap, String sourceType) {
         tableMap = tblMap;
+        this.sourceType = sourceType;
         jsonConverter = new JsonConverter();
         Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
         jsonConverter.configure(jsonConfig, false);
@@ -54,6 +56,8 @@ class KafkaConnectRecordParser implements RecordParser {
             r.op = value.getString("op");
             r.snapshot = source.getString("snapshot");
 
+            parseSourceLogLocation(source, r);
+
             // Parse table/schema the first time to be able to format specific field values
             parseTable(value, source, r);
 
@@ -68,6 +72,15 @@ class KafkaConnectRecordParser implements RecordParser {
         catch (Exception ex) {
             LOGGER.error("Failed to parse msg: {}", ex);
             throw new RuntimeException(ex);
+        }
+    }
+
+    protected void parseSourceLogLocation(Struct sourceNode, Record r){
+        switch (sourceType){
+            case "oracle":
+                r.sourceLogLocation = Long.parseLong(sourceNode.getString("scn"));
+            default:
+                throw new RuntimeException("Unsupported source type for parsing source log location");
         }
     }
 
