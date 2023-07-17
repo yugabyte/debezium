@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +40,7 @@ public class EventQueue implements RecordWriter {
     private long currentQueueSegmentIndex = 0;
     private SequenceNumberGenerator sng;
     private Comparable<?> lastWrittenSourceLogLocation;
+    private Comparable<?> lastWrittenSourceSequenceId;
     private int lastWrittenSourceLogLocationCount;
 
     public EventQueue(String datadirStr, String sourceType, Long queueSegmentMaxBytes) {
@@ -68,6 +70,19 @@ public class EventQueue implements RecordWriter {
         // recover sequence numberof last written record and resume
         if (currentQueueSegment != null){
             sng.advanceTo(currentQueueSegment.getSequenceNumberOfLastRecord() + 1);
+            switch (sourceType){
+                case "oracle":
+                    JsonNode lastWrittenRecordJson = currentQueueSegment.getLastRecordJson();
+                    if (lastWrittenRecordJson != null){
+                        lastWrittenSourceLogLocation = lastWrittenRecordJson.get("source_log_location").asLong();
+                        lastWrittenSourceSequenceId = lastWrittenRecordJson.get("source_sequence_id").asLong();
+                        lastWrittenSourceLogLocationCount = (int) (((Long) lastWrittenSourceSequenceId) - ((Long) lastWrittenSourceLogLocation * 1000));
+                    }
+                default:
+                    throw new RuntimeException("Unsupported source type for parsing source log location");
+            }
+
+
         }
     }
 

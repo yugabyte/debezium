@@ -87,6 +87,8 @@ public class QueueSegment {
         HashMap<String, Object> cdcInfo = new HashMap<>();
         cdcInfo.put("op", r.op);
         cdcInfo.put("vsn", r.vsn);
+        cdcInfo.put("source_log_location", r.sourceLogLocation);
+        cdcInfo.put("source_sequence_id", r.sourceSequenceId)
         cdcInfo.put("schema_name", r.t.schemaName);
         cdcInfo.put("table_name", r.t.tableName);
         cdcInfo.put("key", key);
@@ -108,6 +110,25 @@ public class QueueSegment {
 
     public void sync() throws SyncFailedException {
         fd.sync();
+    }
+
+    public JsonNode getLastRecordJson(){
+        ObjectMapper mapper = new ObjectMapper(new JsonFactory());
+        String last = null, line;
+        BufferedReader input;
+        try {
+            input = new BufferedReader(new FileReader(filePath));
+            while ((line = input.readLine()) != null) {
+                last = line;
+            }
+            if (last != null){
+                JsonNode lastRecordJson = mapper.readTree(last);
+                return lastRecordJson;
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return null;
     }
 
     public long getSequenceNumberOfLastRecord(){
