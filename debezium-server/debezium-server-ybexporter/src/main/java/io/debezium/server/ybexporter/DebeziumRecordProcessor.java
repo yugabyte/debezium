@@ -16,6 +16,11 @@ import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.Map;
 
+/**
+ * This class ensures of doing any processing of the record received from debezium
+ * before actually writing that record.
+ * This could range from transformations, generating sequence numbers, etc.
+ */
 public class DebeziumRecordProcessor implements RecordProcessor{
 
     private JsonConverter jsonConverter;
