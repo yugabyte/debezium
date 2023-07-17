@@ -147,49 +147,10 @@ class KafkaConnectRecordParser implements RecordParser {
                 }
             }
             Object fieldValue = after.get(f);
-            fieldValue = makeSerializable(fieldValue, f);
             r.addValueField(f.name(), fieldValue);
         }
     }
 
-    /**
-     * For certain data-types like decimals/bytes/structs, we convert them
-     * to certain formats that is serializable by downstream snapshot/streaming
-     * writers
-     */
-    private Object makeSerializable(Object fieldValue, Field field){
-        if (fieldValue == null) {
-            return null;
-        }
-        String logicalType = field.schema().name();
-        if (logicalType != null) {
-            switch (logicalType) {
-                case "org.apache.kafka.connect.data.Decimal":
-                    return ((BigDecimal) fieldValue).toString();
-                case "io.debezium.data.VariableScaleDecimal":
-                    return VariableScaleDecimal.toLogical((Struct)fieldValue).toString();
-            }
-        }
-        Schema.Type type = field.schema().type();
-        switch (type){
-            case BYTES:
-            case STRUCT:
-                return toKafkaConnectJsonConverted(fieldValue, field);
-        }
-        return fieldValue;
-    }
 
-    /**
-     * Use the kafka connect json converter to convert it to a json friendly string
-     */
-    private String toKafkaConnectJsonConverted(Object fieldValue, Field f){
-        String jsonFriendlyString = new String(jsonConverter.fromConnectData("test", f.schema(), fieldValue));
-        if (jsonFriendlyString.length() > 0){
-            if ((jsonFriendlyString.charAt(0) == '"') && (jsonFriendlyString.charAt(jsonFriendlyString.length()-1) == '"')){
-                jsonFriendlyString = jsonFriendlyString.substring(1, jsonFriendlyString.length() - 1);
-            }
-        }
-        return jsonFriendlyString;
-    }
 
 }

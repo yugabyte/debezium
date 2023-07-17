@@ -44,6 +44,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private RecordWriter streamingWriter;
     private ExportStatus exportStatus;
     private SequenceObjectUpdater sequenceObjectUpdater;
+    private RecordProcessor recordProcessor;
     Thread flusherThread;
 
     @PostConstruct
@@ -68,6 +69,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         String propertyVal = PROP_PREFIX + SequenceObjectUpdater.propertyName;
         String columnSequenceMapString = config.getOptionalValue(propertyVal, String.class).orElse(null);
         sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, sourceType, columnSequenceMapString, exportStatus.getSequenceMaxMap());
+        recordProcessor = new DebeziumRecordProcessor();
 
         flusherThread = new Thread(this::flush);
         flusherThread.setDaemon(true);
@@ -123,6 +125,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             }
             // LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
             checkIfSnapshotAlreadyComplete(r);
+            recordProcessor.processRecord(r);
             sequenceObjectUpdater.processRecord(r);
 
             // WRITE
