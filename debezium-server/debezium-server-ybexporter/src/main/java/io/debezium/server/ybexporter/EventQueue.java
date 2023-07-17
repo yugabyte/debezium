@@ -39,8 +39,8 @@ public class EventQueue implements RecordWriter {
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
     private SequenceNumberGenerator sng;
-    private Comparable<?> lastWrittenSourceLogLocation;
-    private Comparable<?> lastWrittenSourceSequenceId;
+    private Comparable lastWrittenSourceLogLocation;
+    private Comparable lastWrittenSourceSequenceId;
     private int lastWrittenSourceLogLocationCount;
 
     public EventQueue(String datadirStr, String sourceType, Long queueSegmentMaxBytes) {
@@ -162,9 +162,25 @@ public class EventQueue implements RecordWriter {
         if (shouldRotateQueueSegment()) rotateQueueSegment();
         augmentRecordWithVoyagerSequenceNo(r);
         augmentRecordWithSourceSequenceId(r);
+        if (shouldSkip(r)) {
+            return;
+        }
         currentQueueSegment.write(r);
     }
 
+    private boolean shouldSkip(Record r){
+        if (lastWrittenSourceSequenceId != null) {
+            // in recovery mode
+            if (r.sourceSequenceId.compareTo(lastWrittenSourceSequenceId) <= 0){
+                return true;
+            } else{
+                // recovery over
+                lastWrittenSourceSequenceId = null;
+                return false;
+            }
+        }
+        return false;
+    }
     private void augmentRecordWithVoyagerSequenceNo(Record r){
         r.vsn = sng.getNextValue();
     }
