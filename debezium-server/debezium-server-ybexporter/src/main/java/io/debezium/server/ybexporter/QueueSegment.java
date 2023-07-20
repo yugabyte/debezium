@@ -28,7 +28,7 @@ import java.util.HashMap;
 public class QueueSegment {
     private static final Logger LOGGER = LoggerFactory.getLogger(QueueSegment.class);
 
-    private static final String EOF_MARKER = "\\.\n";
+    private static final String EOF_MARKER = "\\.\n\n";
     private String filePath;
     private FileOutputStream fos;
     private FileDescriptor fd;
