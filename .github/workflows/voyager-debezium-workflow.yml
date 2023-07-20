@@ -65,7 +65,7 @@ jobs:
       - name: Build Debezium Server
         run: |
           sh buildDebeziumServer.sh
-          mv debezium-server/debezium-server-dist/target/debezium-server-dist-1.9.5.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
+          mv debezium-server/debezium-server-dist/target/debezium-server-dist-1.9.5.Final.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
 
       - name: Publish to voyager-debezium release
         run: |
