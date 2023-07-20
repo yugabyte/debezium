@@ -1,6 +1,6 @@
 .PHONY: debezium debezium-server yb-exporter debezium-server-core postgres-connector debezium-core
 
-VERSION=1.9.5-Final
+VERSION=1.9.5.Final
 DEBEZIUM_SERVER_LIB=debezium-server/debezium-server-dist/target/debezium-server/lib/
 
 debezium:
