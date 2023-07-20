@@ -48,7 +48,7 @@ jobs:
         if : ${{ github.event_name == 'push' }}
         run: |
           echo "RELEASE_NAME=voyager-debezium" >> "$GITHUB_ENV"
-          echo "DIST_NAME=debezium-server-latest" >> "$GITHUB_ENV"
+          echo "DIST_NAME=debezium-server-latest-1.9.5" >> "$GITHUB_ENV"
       - name: Compute release vars (PR) # debezium-server-<branch_name> (with / converted to _) in case it is a PR event
         if : ${{ github.event_name == 'pull_request' }}
         run: |
