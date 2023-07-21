@@ -26,17 +26,18 @@ import static java.lang.Math.max;
  * If shutdown abruptly, this class is capable of resuming by retrieving the latest queue
  * segment that was written to, and continues writing from that segment.
  */
-
 public class EventQueue implements RecordWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventQueue.class);
     private static final String QUEUE_SEGMENT_FILE_NAME = "segment";
     private static final String QUEUE_SEGMENT_FILE_EXTENSION = "ndjson";
     private static final String QUEUE_FILE_DIR = "queue";
-    private long queueSegmentMaxBytes = 1000 * 1000 * 1000; // default 1 GB
+
+    private long queueSegmentMaxBytes = 1024 * 1024 * 1024; // default 1 GB
     private String dataDir;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
     private SequenceNumberGenerator sng;
+
 
     public EventQueue(String datadirStr, Long queueSegmentMaxBytes) {
         dataDir = datadirStr;
@@ -115,7 +116,7 @@ public class EventQueue implements RecordWriter {
 
     /**
      * each queue segment's file name is of the format segment.<N>.ndjson
-     * where N is the segment number
+     * where N is the segment number.
     */
     private String getFilePathWithIndex(long index){
         String queueSegmentFileName = String.format("%s.%d.%s", QUEUE_SEGMENT_FILE_NAME, index, QUEUE_SEGMENT_FILE_EXTENSION);
