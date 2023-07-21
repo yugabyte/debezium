@@ -31,7 +31,7 @@ public class EventQueue implements RecordWriter {
     private static final String QUEUE_SEGMENT_FILE_NAME = "segment";
     private static final String QUEUE_SEGMENT_FILE_EXTENSION = "ndjson";
     private static final String QUEUE_FILE_DIR = "queue";
-    private long queueSegmentMaxBytes = 1000 * 1000 * 1000; // default 1 GB
+    private long queueSegmentMaxBytes = 1024 * 1024 * 1024; // default 1 GB
     private String dataDir;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
