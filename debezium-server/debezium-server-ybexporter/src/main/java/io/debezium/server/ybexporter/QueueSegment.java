@@ -5,53 +5,60 @@
  */
 package io.debezium.server.ybexporter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedWriter;
 import java.io.FileDescriptor;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.SyncFailedException;
+import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+/**
+ * A QueueSegment represents a segment of the cdc queue.
+ */
+public class QueueSegment {
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueueSegment.class);
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
-
-public class StreamingWriterJson implements RecordWriter {
-    private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotWriterCSV.class);
-    private static final String QUEUE_FILE_NAME = "queue.json";
-    private String dataDir;
-    private BufferedWriter writer;
-    private ObjectWriter ow;
+    private static final String EOF_MARKER = "\\.\n\n";
+    private String filePath;
     private FileOutputStream fos;
     private FileDescriptor fd;
+    private Writer writer;
+    private long byteCount;
+    private ObjectWriter ow;
 
-    public StreamingWriterJson(String datadirStr) {
-        dataDir = datadirStr;
-
-        var fileName = String.format("%s/%s", dataDir, QUEUE_FILE_NAME);
+    public QueueSegment(String filePath){
+        this.filePath = filePath;
+        ow = new ObjectMapper().writer();
         try {
-            fos = new FileOutputStream(fileName, true);
+            fos = new FileOutputStream(filePath, true);
             fd = fos.getFD();
-            var f = new FileWriter(fd);
-            writer = new BufferedWriter(f);
-
-        }
-        catch (IOException e) {
+            FileWriter fw = new FileWriter(fd);
+            writer = new BufferedWriter(fw);
+            byteCount = Files.size(Path.of(filePath));
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
     }
 
-    @Override
-    public void writeRecord(Record r) {
+    public long getByteCount() {
+        return byteCount;
+    }
+
+    public void write(Record r){
         try {
-            String cdcJson = ow.writeValueAsString(generateCdcMessageForRecord(r));
+            String cdcJson = ow.writeValueAsString(generateCdcMessageForRecord(r)) + "\n";
             writer.write(cdcJson);
-            writer.write("\n");
-            LOGGER.info("Writing CDC message = {}", cdcJson);
+            byteCount += cdcJson.length();
         }
         catch (IOException e) {
             throw new RuntimeException(e);
@@ -82,36 +89,19 @@ public class StreamingWriterJson implements RecordWriter {
         return cdcInfo;
     }
 
-    @Override
-    public void flush() {
-        try {
-            writer.flush();
-        }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public void flush() throws IOException {
+        writer.flush();
     }
 
-    @Override
-    public void close() {
-        try {
-            flush();
-            sync();
-            writer.close();
-            fos.close();
-        }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public void close() throws IOException {
+        LOGGER.info("Closing queue file {}", filePath);
+        writer.write(EOF_MARKER);
+        writer.flush();
+        sync();
+        writer.close();
     }
 
-    @Override
-    public void sync() {
-        try {
-            fd.sync();
-        }
-        catch (SyncFailedException e) {
-            throw new RuntimeException(e);
-        }
+    public void sync() throws SyncFailedException {
+        fd.sync();
     }
 }
