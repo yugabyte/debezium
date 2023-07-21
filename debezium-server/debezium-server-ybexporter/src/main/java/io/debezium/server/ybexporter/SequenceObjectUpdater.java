@@ -52,7 +52,7 @@ public class SequenceObjectUpdater {
             }
             String fullyQualifiedColumnName = colSequence[0];
             String sequenceName = colSequence[1];
-
+y
             String[] columnSplit = fullyQualifiedColumnName.split("\\.");
             if (columnSplit.length != 3){
                 throw new RuntimeException("Incorrect format for column name in config param -" + columnSequenceStr +
