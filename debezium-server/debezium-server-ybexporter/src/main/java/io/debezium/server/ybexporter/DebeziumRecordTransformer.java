@@ -13,6 +13,7 @@ import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 
@@ -28,22 +29,22 @@ public class DebeziumRecordTransformer implements RecordTransformer {
         Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "false");
         jsonConverter.configure(jsonConfig, false);
     }
+
     @Override
     public void transformRecord(Record r) {
-        for (int i = 0; i < r.keyValues.size(); i++) {
-            Object val = r.keyValues.get(i);
-            String column = r.keyColumns.get(i);
-            Object formattedVal = makeFieldValueSerializable(val, r.t.fieldSchemas.get(column));
-            r.keyValues.set(i, formattedVal);
-        }
+        transformColumnValues(r.keyColumns, r.keyValues, r.t.fieldSchemas);
+        transformColumnValues(r.valueColumns, r.valueValues, r.t.fieldSchemas);
+    }
 
-        for (int i = 0; i < r.valueValues.size(); i++) {
-            Object val = r.valueValues.get(i);
-            String column = r.valueColumns.get(i);
-            Object formattedVal = makeFieldValueSerializable(val, r.t.fieldSchemas.get(column));
-            r.valueValues.set(i, formattedVal);
+    private void transformColumnValues(ArrayList<String> columnNames, ArrayList<Object> values, Map<String, Field> fieldSchemas){
+        for (int i = 0; i < values.size(); i++) {
+            Object val = values.get(i);
+            String columnName = columnNames.get(i);
+            Object formattedVal = makeFieldValueSerializable(val, fieldSchemas.get(columnName));
+            values.set(i, formattedVal);
         }
     }
+
     /**
      * For certain data-types like decimals/bytes/structs, we convert them
      * to certain formats that is serializable by downstream snapshot/streaming

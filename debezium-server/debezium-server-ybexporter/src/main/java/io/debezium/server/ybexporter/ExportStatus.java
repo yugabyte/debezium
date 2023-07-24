@@ -221,6 +221,7 @@ public class ExportStatus {
         }
     }
 
+    // TODO: refactor to retrieve config from a static class instead of having to set/pass it to each class.
     public void setSourceType(String sourceType) {
         this.sourceType = sourceType;
     }
