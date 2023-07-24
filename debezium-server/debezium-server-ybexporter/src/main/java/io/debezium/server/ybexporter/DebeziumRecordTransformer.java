@@ -17,20 +17,19 @@ import java.util.Collections;
 import java.util.Map;
 
 /**
- * This class ensures of doing any processing of the record received from debezium
+ * This class ensures of doing any transformation of the record received from debezium
  * before actually writing that record.
- * This could range from transformations, generating sequence numbers, etc.
  */
-public class DebeziumRecordProcessor implements RecordProcessor{
+public class DebeziumRecordTransformer implements RecordTransformer {
 
     private JsonConverter jsonConverter;
-    public DebeziumRecordProcessor(){
+    public DebeziumRecordTransformer(){
         jsonConverter = new JsonConverter();
         Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "false");
         jsonConverter.configure(jsonConfig, false);
     }
     @Override
-    public void processRecord(Record r) {
+    public void transformRecord(Record r) {
         for (int i = 0; i < r.keyValues.size(); i++) {
             Object val = r.keyValues.get(i);
             String column = r.keyColumns.get(i);
@@ -48,9 +47,9 @@ public class DebeziumRecordProcessor implements RecordProcessor{
     /**
      * For certain data-types like decimals/bytes/structs, we convert them
      * to certain formats that is serializable by downstream snapshot/streaming
-     * writers
+     * writers. For the rest, we just stringify them.
      */
-    private Object makeFieldValueSerializable(Object fieldValue, Field field){
+    private String makeFieldValueSerializable(Object fieldValue, Field field){
         if (fieldValue == null) {
             return null;
         }
@@ -69,7 +68,7 @@ public class DebeziumRecordProcessor implements RecordProcessor{
             case STRUCT:
                 return toKafkaConnectJsonConverted(fieldValue, field);
         }
-        return fieldValue;
+        return fieldValue.toString();
     }
 
     /**

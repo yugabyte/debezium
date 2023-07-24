@@ -5,6 +5,6 @@
  */
 package io.debezium.server.ybexporter;
 
-public interface RecordProcessor {
-    void processRecord(Record r);
+public interface RecordTransformer {
+    void transformRecord(Record r);
 }
