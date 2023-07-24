@@ -65,7 +65,22 @@ jobs:
       - name: Build Debezium Server
         run: |
           sh buildDebeziumServer.sh
-          mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
+      - name: Package Debezium Server
+        run: |
+          cd debezium-server/debezium-server-dist/target/debezium-server
+          # get latest 1.9.5 version of debezium
+          wget https://github.com/yugabyte/debezium/releases/download/voyager-debezium/debezium-server-latest-1.9.5.tar.gz
+          tar -xvzf  debezium-server-latest-1.9.5.tar.gz
+          rm debezium-server-latest-1.9.5.tar.gz
+          mv debezium-server debezium-server-fall-forward
+          # include the yugabytedb connector
+          cd debezium-server-fall-forward/lib
+          wget https://github.com/yugabyte/debezium-connector-yugabytedb/releases/download/v1.9.5.y.31/debezium-connector-yugabytedb-1.9.5.y.31.jar
+          
+          # package
+          cd debezium-server/debezium-server-dist/target
+          tar -zcvf ${DIST_NAME}.tar.gz debezium-server
+#          mv debezium-server/debezium-server-dist/target/debezium-server-dist-2.2.0-SNAPSHOT.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
 
       - name: Publish to voyager-debezium release
         run: |
