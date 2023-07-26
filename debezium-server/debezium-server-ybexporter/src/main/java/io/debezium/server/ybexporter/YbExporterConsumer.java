@@ -107,33 +107,36 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     @Override
     public void handleBatch(List<ChangeEvent<Object, Object>> changeEvents, DebeziumEngine.RecordCommitter<ChangeEvent<Object, Object>> committer)
             throws InterruptedException {
-        LOGGER.info("Processing batch with {} records", changeEvents.size());
+//        LOGGER.info("Processing batch with {} records", changeEvents.size());
         checkIfHelperThreadAlive();
+        long eventCount = 0;
         for (ChangeEvent<Object, Object> event : changeEvents) {
-            Object objKey = event.key();
-            Object objVal = event.value();
-
-            // PARSE
-            var r = parser.parseRecord(objKey, objVal);
-            if (r.isUnsupported()) {
-                committer.markProcessed(event);
-                continue;
-            }
-            // LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
-            checkIfSnapshotAlreadyComplete(r);
-            sequenceObjectUpdater.processRecord(r);
-
-            // WRITE
-            RecordWriter writer = getWriterForRecord(r);
-            writer.writeRecord(r);
-            // Handle snapshot->cdc transition
-            checkIfSnapshotComplete(r);
+//            Object objKey = event.key();
+//            Object objVal = event.value();
+//
+//            // PARSE
+//            var r = parser.parseRecord(objKey, objVal);
+//            if (r.isUnsupported()) {
+//                committer.markProcessed(event);
+//                continue;
+//            }
+//            // LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
+//            checkIfSnapshotAlreadyComplete(r);
+//            sequenceObjectUpdater.processRecord(r);
+//
+//            // WRITE
+//            RecordWriter writer = getWriterForRecord(r);
+//            writer.writeRecord(r);
+//            // Handle snapshot->cdc transition
+//            checkIfSnapshotComplete(r);
 
             committer.markProcessed(event);
+            eventCount++;
         }
-        handleBatchComplete();
+//        handleBatchComplete();
         committer.markBatchFinished();
-        handleSnapshotOnlyComplete();
+        LOGGER.info("Processed {} total events", eventCount);
+//        handleSnapshotOnlyComplete();
     }
 
     private RecordWriter getWriterForRecord(Record r) {
