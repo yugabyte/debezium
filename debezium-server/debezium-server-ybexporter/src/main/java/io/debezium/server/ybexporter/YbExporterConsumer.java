@@ -48,11 +48,6 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
     @PostConstruct
     void connect() throws URISyntaxException {
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
         LOGGER.info("connect() called: dataDir = {}", dataDir);
 
         final Config config = ConfigProvider.getConfig();
