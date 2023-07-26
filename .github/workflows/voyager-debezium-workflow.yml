@@ -13,12 +13,12 @@ name: Build Debezium Server
 on:
   push:
     branches:
-      - 'voyager-main*'
+      - 'voyager-main-1.9.5'
     tags:
       - '*.*.*-*.*.*'
   pull_request:
     branches:
-      - voyager-main
+      - 'voyager-main-1.9.5'
 
 jobs:
   build_debezium_server:
@@ -65,7 +65,10 @@ jobs:
       - name: Build Debezium Server
         run: |
           sh buildDebeziumServer.sh
-          mv debezium-server/debezium-server-dist/target/debezium-server-dist-1.9.5.Final.tar.gz "debezium-server/debezium-server-dist/target/${DIST_NAME}.tar.gz"
+          
+          # package
+          cd debezium-server/debezium-server-dist/target/          
+          tar -zcvf ${DIST_NAME}.tar.gz debezium-server
 
       - name: Publish to voyager-debezium release
         run: |
