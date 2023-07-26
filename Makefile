@@ -10,9 +10,8 @@ debezium-server:
 	cd debezium-server/debezium-server-dist; \
 	mvn -ntp clean install -Passembly; \
 	cd target; \
-	tar -xvzf debezium-server-dist-$(VERSION).tar.gz;
-	cd debezium-server/lib
-	wget -nv https://github.com/yugabyte/debezium-connector-yugabytedb/releases/download/v1.9.5.y.31/debezium-connector-yugabytedb-1.9.5.y.31.jar
+	tar -xvzf debezium-server-dist-$(VERSION).tar.gz; \
+	wget -nv https://github.com/yugabyte/debezium-connector-yugabytedb/releases/download/v1.9.5.y.31/debezium-connector-yugabytedb-1.9.5.y.31.jar -P debezium-server/lib
 
 debezium-server-core:
 	mvn -ntp clean install -Dquick -Pquick -pl :debezium-server-core; \
