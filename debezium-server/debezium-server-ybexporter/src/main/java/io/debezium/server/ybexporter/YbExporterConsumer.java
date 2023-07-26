@@ -45,6 +45,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private ExportStatus exportStatus;
     private SequenceObjectUpdater sequenceObjectUpdater;
     Thread flusherThread;
+    long eventCount = 0;
 
     @PostConstruct
     void connect() throws URISyntaxException {
@@ -109,7 +110,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             throws InterruptedException {
 //        LOGGER.info("Processing batch with {} records", changeEvents.size());
         checkIfHelperThreadAlive();
-        long eventCount = 0;
+
         for (ChangeEvent<Object, Object> event : changeEvents) {
 //            Object objKey = event.key();
 //            Object objVal = event.value();
