@@ -90,6 +90,10 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
                 sourceType = "oracle"; break;
             case "io.debezium.connector.mysql.MySqlConnector":
                 sourceType = "mysql"; break;
+            case "io.debezium.connector.yugabytedb.YugabyteDBConnector":
+                sourceType = "yb"; break;
+            default:
+                throw new RuntimeException("Invalid source type");
         }
     }
 
