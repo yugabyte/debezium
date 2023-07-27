@@ -12,12 +12,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.kafka.connect.data.Field;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +39,7 @@ public class ExportStatus {
     private static ExportStatus instance;
     private static ObjectMapper mapper = new ObjectMapper(new JsonFactory());
     private String dataDir;
+    private String sourceType;
     private ConcurrentMap<String, Long> sequenceMax;
     private ConcurrentMap<Table, TableExportStatus> tableExportStatusMap = new ConcurrentHashMap<>();
     private ExportMode mode;
@@ -56,6 +60,15 @@ public class ExportStatus {
         dataDir = datadirStr;
         ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
         f = new File(getFilePath(datadirStr));
+
+        // mkdir schemas
+        File schemasDir = new File(String.format("%s/%s", dataDir, "schemas"));
+        if (!schemasDir.exists()){
+            boolean dirCreated = new File(String.format("%s/%s", dataDir, "schemas")).mkdir();
+            if (!dirCreated){
+                throw new RuntimeException("failed to create dir for schemas");
+            }
+        }
         instance = this;
     }
 
@@ -80,6 +93,27 @@ public class ExportStatus {
 
     public ExportMode getMode() {
         return mode;
+    }
+
+    public void updateTableSchema(Table t){
+        ObjectMapper schemaMapper = new ObjectMapper();
+        schemaMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+        ObjectWriter schemaWriter = schemaMapper.writer().withDefaultPrettyPrinter();
+
+        HashMap<String, Object> tableSchema = new HashMap<>();
+        ArrayList<Field> fields = new ArrayList<>(t.fieldSchemas.values());
+        tableSchema.put("columns", fields);
+        try {
+            String fileName = t.tableName;
+            if ((sourceType.equals("postgresql")) && (!t.schemaName.equals("public"))){
+                fileName = t.schemaName + "." + fileName;
+            }
+            String schemaFilePath = String.format("%s/schemas/%s_schema.json", dataDir, fileName);
+            File schemaFile = new File(schemaFilePath);
+            schemaWriter.writeValue(schemaFile, tableSchema);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void updateTableSnapshotWriterCreated(Table t, String tblFilename) {
@@ -120,6 +154,7 @@ public class ExportStatus {
             tablesInfo.add(tableInfo);
         }
 
+        exportStatusMap.put("source_type", sourceType);
         exportStatusMap.put("tables", tablesInfo);
         exportStatusMap.put("mode", mode);
         exportStatusMap.put("sequences", sequenceMax);
@@ -159,6 +194,7 @@ public class ExportStatus {
 
             ExportStatus es = new ExportStatus(datadirStr);
             es.updateMode(ExportMode.valueOf(exportStatusJson.get("mode").asText()));
+            es.setSourceType(exportStatusJson.get("source_type").asText());
 
             var tablesJson = exportStatusJson.get("tables");
             for (var tableJson : tablesJson) {
@@ -183,6 +219,11 @@ public class ExportStatus {
         catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // TODO: refactor to retrieve config from a static class instead of having to set/pass it to each class.
+    public void setSourceType(String sourceType) {
+        this.sourceType = sourceType;
     }
 }
 

@@ -44,6 +44,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private RecordWriter eventQueue;
     private ExportStatus exportStatus;
     private SequenceObjectUpdater sequenceObjectUpdater;
+    private RecordTransformer recordTransformer;
     Thread flusherThread;
 
     @PostConstruct
@@ -55,17 +56,20 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
         retrieveSourceType(config);
 
-        parser = new KafkaConnectRecordParser(tableMap);
+
         exportStatus = ExportStatus.getInstance(dataDir);
+        exportStatus.setSourceType(sourceType);
         if (exportStatus.getMode() == null){
             exportStatus.updateMode(getExportModeToStartWith(snapshotMode));
         }
         if (exportStatus.getMode().equals(ExportMode.STREAMING)) {
             handleSnapshotComplete();
         }
+        parser = new KafkaConnectRecordParser(dataDir, tableMap);
         String propertyVal = PROP_PREFIX + SequenceObjectUpdater.propertyName;
         String columnSequenceMapString = config.getOptionalValue(propertyVal, String.class).orElse(null);
         sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, sourceType, columnSequenceMapString, exportStatus.getSequenceMaxMap());
+        recordTransformer = new DebeziumRecordTransformer();
 
         flusherThread = new Thread(this::flush);
         flusherThread.setDaemon(true);
@@ -134,6 +138,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             }
             // LOGGER.info("Processing record {} => {}", r.getTableIdentifier(), r.getValueFieldValues());
             checkIfSnapshotAlreadyComplete(r);
+            recordTransformer.transformRecord(r);
             sequenceObjectUpdater.processRecord(r);
 
             // WRITE

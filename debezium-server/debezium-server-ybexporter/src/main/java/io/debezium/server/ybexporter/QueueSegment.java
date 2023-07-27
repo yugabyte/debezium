@@ -21,6 +21,7 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.Objects;
 
 /**
  * A QueueSegment represents a segment of the cdc queue.
@@ -71,12 +72,12 @@ public class QueueSegment {
         HashMap<String, Object> fields = new HashMap<>();
 
         for (int i = 0; i < r.keyValues.size(); i++) {
-            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(r.keyValues.get(i));
+            Object formattedVal = r.keyValues.get(i);
             key.put(r.keyColumns.get(i), formattedVal);
         }
 
         for (int i = 0; i < r.valueValues.size(); i++) {
-            String formattedVal = YugabyteDialectConverter.makeSqlStatementCompatible(r.valueValues.get(i));
+            Object formattedVal = r.valueValues.get(i);
             fields.put(r.valueColumns.get(i), formattedVal);
         }
 

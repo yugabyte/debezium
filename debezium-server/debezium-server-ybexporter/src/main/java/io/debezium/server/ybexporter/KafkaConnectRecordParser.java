@@ -5,28 +5,46 @@
  */
 package io.debezium.server.ybexporter;
 
+import java.math.BigDecimal;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
+import io.debezium.data.Bits;
+import io.debezium.data.VariableScaleDecimal;
 import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class KafkaConnectRecordParser implements RecordParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConnectRecordParser.class);
+    private final ExportStatus es;
+    String dataDirStr;
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
     Record r = new Record();
 
-    public KafkaConnectRecordParser(Map<String, Table> tblMap) {
+    public KafkaConnectRecordParser(String dataDirStr, Map<String, Table> tblMap) {
+        this.dataDirStr = dataDirStr;
+        es = ExportStatus.getInstance(dataDirStr);
         tableMap = tblMap;
         jsonConverter = new JsonConverter();
-        Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
+        Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "false");
         jsonConverter.configure(jsonConfig, false);
     }
 
@@ -96,13 +114,14 @@ class KafkaConnectRecordParser implements RecordParser {
             }
 
             tableMap.put(tableIdentifier, t);
+            es.updateTableSchema(t);
         }
         r.t = t;
     }
 
     protected void parseKeyFields(Struct key, Record r) {
         for (Field f : key.schema().fields()) {
-            Object fieldValue = YugabyteDialectConverter.fromConnect(f, key.get(f));
+            Object fieldValue = key.get(f);
             r.addKeyField(f.name(), fieldValue);
 
         }
@@ -127,9 +146,11 @@ class KafkaConnectRecordParser implements RecordParser {
                     continue;
                 }
             }
-            Object fieldValue = YugabyteDialectConverter.fromConnect(f, after.get(f));
+            Object fieldValue = after.get(f);
             r.addValueField(f.name(), fieldValue);
         }
     }
+
+
 
 }
