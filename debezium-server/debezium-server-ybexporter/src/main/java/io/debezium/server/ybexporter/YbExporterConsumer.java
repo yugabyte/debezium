@@ -59,11 +59,11 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
         exportStatus = ExportStatus.getInstance(dataDir);
         exportStatus.setSourceType(sourceType);
-        if (exportStatus.getMode() != null && exportStatus.getMode().equals(ExportMode.STREAMING)) {
-            handleSnapshotComplete();
+        if (exportStatus.getMode() == null){
+            exportStatus.updateMode(getExportModeToStartWith(snapshotMode));
         }
-        else {
-            exportStatus.updateMode(ExportMode.SNAPSHOT);
+        if (exportStatus.getMode().equals(ExportMode.STREAMING)) {
+            handleSnapshotComplete();
         }
         parser = new KafkaConnectRecordParser(dataDir, tableMap);
         String propertyVal = PROP_PREFIX + SequenceObjectUpdater.propertyName;
@@ -76,6 +76,15 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         flusherThread.start();
     }
 
+    private ExportMode getExportModeToStartWith(String snapshotMode){
+        if (snapshotMode.equals("never")){
+            return ExportMode.STREAMING;
+        }
+        else{
+            return ExportMode.SNAPSHOT;
+        }
+    }
+
     void retrieveSourceType(Config config){
         String sourceConnector = config.getValue("debezium.source.connector.class", String.class);
         switch (sourceConnector){
@@ -85,6 +94,10 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
                 sourceType = "oracle"; break;
             case "io.debezium.connector.mysql.MySqlConnector":
                 sourceType = "mysql"; break;
+            case "io.debezium.connector.yugabytedb.YugabyteDBConnector":
+                sourceType = "yb"; break;
+            default:
+                throw new RuntimeException("Invalid source type");
         }
     }
 
@@ -171,13 +184,13 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
      * This is because debezium expected there to be more records in the subsequent table(s),
      * but the last table scanned ended up having 0 rows.
      *
-     * To work around this, we check if we're still in snapshot phase, and if we get a record with snapshot=null
+     * To work around this, we check if we're still in snapshot phase, and if we get a record with snapshot=null/false
      * (which is indicative of streaming phase), we transition to streaming phase.
      * Note that this method would have to be called before the record is written.
      * @param r
      */
     private void checkIfSnapshotAlreadyComplete(Record r) {
-        if ((exportStatus.getMode() == ExportMode.SNAPSHOT) && (r.snapshot == null)) {
+        if ((exportStatus.getMode() == ExportMode.SNAPSHOT) && (r.snapshot == null || r.snapshot.equals("false"))) {
             LOGGER.debug("Interpreting snapshot as complete since snapshot field of record is null");
             handleSnapshotComplete();
         }
