@@ -31,10 +31,12 @@ public class EventQueue implements RecordWriter {
     private static final String QUEUE_SEGMENT_FILE_NAME = "segment";
     private static final String QUEUE_SEGMENT_FILE_EXTENSION = "ndjson";
     private static final String QUEUE_FILE_DIR = "queue";
+
     private long queueSegmentMaxBytes = 1024 * 1024 * 1024; // default 1 GB
     private String dataDir;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
+    private SequenceNumberGenerator sng;
 
 
     public EventQueue(String datadirStr, Long queueSegmentMaxBytes) {
@@ -51,18 +53,19 @@ public class EventQueue implements RecordWriter {
                 throw new RuntimeException("failed to create dir for cdc");
             }
         }
+        sng = new SequenceNumberGenerator(1);
         recoverStateFromDisk();
         if (currentQueueSegment == null){
-            createNewQueueSegment();
+            currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex));
         }
-    }
-
-    private void createNewQueueSegment(){
-        currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex));
     }
 
     private void recoverStateFromDisk(){
         recoverLatestQueueSegment();
+        // recover sequence numberof last written record and resume
+        if (currentQueueSegment != null){
+            sng.advanceTo(currentQueueSegment.getSequenceNumberOfLastRecord() + 1);
+        }
     }
 
     /**
@@ -88,16 +91,21 @@ public class EventQueue implements RecordWriter {
             }
             // extract max index of all files
             long maxIndex = 0;
+            Path maxIndexPath = null;
             for(Path p: filePaths){
                 String filename = p.getFileName().toString();
-                long index = Long.parseLong(filename.substring(QUEUE_SEGMENT_FILE_NAME.length() + 1, filename.length() - (QUEUE_SEGMENT_FILE_EXTENSION.length() + 1)));
-                maxIndex = max(maxIndex, index);
+                String indexStr = filename.substring(QUEUE_SEGMENT_FILE_NAME.length() + 1, filename.length() - (QUEUE_SEGMENT_FILE_EXTENSION.length() + 1));
+                long index = Long.parseLong(indexStr);
+                if (index >= maxIndex){
+                    maxIndex = index;
+                    maxIndexPath = p;
+                }
             }
             // create queue segment for last file segment
             currentQueueSegmentIndex = maxIndex;
-            createNewQueueSegment();
+            currentQueueSegment = new QueueSegment(maxIndexPath.toString());
 
-            LOGGER.info("Recovered from queue segment-{} with byte count={}", getFilePathWithIndex(currentQueueSegmentIndex), currentQueueSegment.getByteCount());
+            LOGGER.info("Recovered from queue segment-{} with byte count={}", maxIndexPath, currentQueueSegment.getByteCount());
         }
         catch (IOException x) {
             throw new RuntimeException(x);
@@ -126,13 +134,18 @@ public class EventQueue implements RecordWriter {
         }
         currentQueueSegmentIndex++;
         LOGGER.info("rotating queue segment to #{}", currentQueueSegmentIndex);
-        createNewQueueSegment();
+        currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex));
     }
 
     @Override
     public void writeRecord(Record r) {
         if (shouldRotateQueueSegment()) rotateQueueSegment();
+        augmentRecordWithSequenceNo(r);
         currentQueueSegment.write(r);
+    }
+
+    private void augmentRecordWithSequenceNo(Record r){
+        r.vsn = sng.getNextValue();
     }
 
     @Override
@@ -163,5 +176,24 @@ public class EventQueue implements RecordWriter {
         catch (SyncFailedException e) {
             throw new RuntimeException(e);
         }
+    }
+}
+
+class SequenceNumberGenerator{
+    private long nextValue;
+    public SequenceNumberGenerator(long start){
+        nextValue = start;
+    }
+
+    public long getNextValue(){
+        return nextValue++;
+    }
+
+    public long peekNextValue(){
+        return nextValue;
+    }
+
+    public void advanceTo(long val){
+        nextValue = val;
     }
 }
