@@ -21,6 +21,7 @@ public class Record {
         t = null;
         snapshot = "";
         op = "";
+        vsn = 0;
         keyColumns.clear();
         keyValues.clear();
         valueColumns.clear();
