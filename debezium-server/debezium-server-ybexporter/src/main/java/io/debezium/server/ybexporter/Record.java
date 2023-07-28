@@ -11,9 +11,7 @@ public class Record {
     public Table t;
     public String snapshot;
     public String op;
-    // public HashMap<String, Object> keyFields = new HashMap<>();
-    // public LinkedHashMap<String, Object> valueFields = new LinkedHashMap<>();
-
+    public long vsn; // Voyager Sequence Number.
     public ArrayList<String> keyColumns = new ArrayList<>();
     public ArrayList<Object> keyValues = new ArrayList<>();
     public ArrayList<String> valueColumns = new ArrayList<>();
@@ -23,6 +21,7 @@ public class Record {
         t = null;
         snapshot = "";
         op = "";
+        vsn = 0;
         keyColumns.clear();
         keyValues.clear();
         valueColumns.clear();
