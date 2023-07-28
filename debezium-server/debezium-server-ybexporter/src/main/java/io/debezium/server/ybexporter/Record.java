@@ -12,9 +12,6 @@ public class Record {
     public String snapshot;
     public String op;
     public long vsn; // Voyager Sequence Number.
-    // public HashMap<String, Object> keyFields = new HashMap<>();
-    // public LinkedHashMap<String, Object> valueFields = new LinkedHashMap<>();
-
     public ArrayList<String> keyColumns = new ArrayList<>();
     public ArrayList<Object> keyValues = new ArrayList<>();
     public ArrayList<String> valueColumns = new ArrayList<>();

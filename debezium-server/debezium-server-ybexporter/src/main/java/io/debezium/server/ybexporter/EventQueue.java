@@ -95,8 +95,6 @@ public class EventQueue implements RecordWriter {
             for(Path p: filePaths){
                 String filename = p.getFileName().toString();
                 String indexStr = filename.substring(QUEUE_SEGMENT_FILE_NAME.length() + 1, filename.length() - (QUEUE_SEGMENT_FILE_EXTENSION.length() + 1));
-//                String[] indexAndStartingSequenceNumber = filename.substring(QUEUE_SEGMENT_FILE_NAME.length() + 1, filename.length() - (QUEUE_SEGMENT_FILE_EXTENSION.length() + 1)).split("\\.");
-
                 long index = Long.parseLong(indexStr);
                 if (index >= maxIndex){
                     maxIndex = index;
