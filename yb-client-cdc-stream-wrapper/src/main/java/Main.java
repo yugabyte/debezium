@@ -11,7 +11,7 @@ public class Main {
     public static void main(String[] args) throws Exception {
         CmdLineParams parameters = CmdLineParams.createFromArgs(args);
         AsyncYBClient asyncClient = new AsyncYBClient.AsyncYBClientBuilder(parameters.masterAddresses)
-                .sslCertFile(parameters.certFilePath)
+                .sslCertFile(parameters.certFilePath) // TODO: support sslClientCertFiles(clientCert, clientKey)
                 .build();
 
         YBClient client = new YBClient(asyncClient);
@@ -27,7 +27,7 @@ public class Main {
             throw ex;
         }
         if (table == null) {
-            throw new NullPointerException("No table found with the specified name");
+            throw new RuntimeException("No table found with the specified name");
         }
         String streamID = client.createCDCStream(table, parameters.dbName, "PROTO", "IMPLICIT", "ALL").getStreamId();
         System.out.println("CDC Stream ID: " + streamID);

@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.example</groupId>
-    <artifactId>yb-client-wrapper</artifactId>
+    <artifactId>yb-client-cdc-stream-wrapper</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>
@@ -112,7 +112,7 @@
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>${version.assembly.plugin}</version>
                 <configuration>
-                    <finalName>yb-client-wrapper</finalName>
+                    <finalName>yb-client-cdc-stream-wrapper</finalName>
                     <appendAssemblyId>false</appendAssemblyId>
                     <archive>
                         <manifest>
