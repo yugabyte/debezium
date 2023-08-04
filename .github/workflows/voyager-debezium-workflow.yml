@@ -69,6 +69,7 @@ jobs:
           mvn clean package
       - name: Package Debezium Server
         run: |
+          # package yb-client-wrapper.jar into debezium-server
            mv yb-client-wrapper/target/yb-client-wrapper.jar  debezium-server/debezium-server-dist/target/debezium-server
           cd debezium-server/debezium-server-dist/target/debezium-server
           # get latest 1.9.5 version of debezium. Change this during release to point to exact 1.9.5 release.
