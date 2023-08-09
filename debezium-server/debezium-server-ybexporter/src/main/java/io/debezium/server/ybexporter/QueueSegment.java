@@ -125,8 +125,6 @@ public class QueueSegment {
     }
 
     public void sync() throws SyncFailedException, IOException{
-        // flushing the buffer before we sync.
-        flush();
         fd.sync();
         // TODO: is Files.size going to be slow? Maybe just use byteCount?
         es.updateQueueSegmentCommittedSize(segmentNo, Files.size(Path.of(filePath)));
