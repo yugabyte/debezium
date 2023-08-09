@@ -128,7 +128,8 @@ public class QueueSegment {
         // flushing the buffer before we sync.
         flush();
         fd.sync();
-        es.updateQueueSegmentCommittedSize(segmentNo, byteCount);
+        // TODO: is Files.size going to be slow? Maybe just use byteCount?
+        es.updateQueueSegmentCommittedSize(segmentNo, Files.size(Path.of(filePath)));
     }
 
     public long getSequenceNumberOfLastRecord(){
@@ -154,6 +155,7 @@ public class QueueSegment {
     private void truncateFileAfterOffset(long offset){
         try {
             close();
+            LOGGER.info("Truncating queue segment {} at path {} to size {}", segmentNo, filePath, offset);
             RandomAccessFile f = new RandomAccessFile(filePath, "rw");
             f.setLength(offset);
             f.close();
