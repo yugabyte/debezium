@@ -22,6 +22,7 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.io.SyncFailedException;
 import java.io.Writer;
 import java.nio.file.Files;
@@ -51,11 +52,7 @@ public class QueueSegment {
         es = ExportStatus.getInstance(datadirStr);
         ow = new ObjectMapper().writer();
         try {
-            fos = new FileOutputStream(filePath, true);
-            fd = fos.getFD();
-            FileWriter fw = new FileWriter(fd);
-            writer = new BufferedWriter(fw);
-            byteCount = Files.size(Path.of(filePath));
+            openFile();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -65,6 +62,14 @@ public class QueueSegment {
         if (committedSize > 0){
             truncateFileAfterOffset(committedSize);
         }
+    }
+
+    private void openFile() throws IOException {
+        fos = new FileOutputStream(filePath, true);
+        fd = fos.getFD();
+        FileWriter fw = new FileWriter(fd);
+        writer = new BufferedWriter(fw);
+        byteCount = Files.size(Path.of(filePath));
     }
 
     public long getByteCount() {
@@ -147,6 +152,15 @@ public class QueueSegment {
     }
 
     private void truncateFileAfterOffset(long offset){
-        // TODO
+        try {
+            close();
+            RandomAccessFile f = new RandomAccessFile(filePath, "rw");
+            f.setLength(offset);
+            f.close();
+            openFile();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 }
