@@ -128,7 +128,7 @@ public class QueueSegment {
         // flushing the buffer before we sync.
         flush();
         fd.sync();
-        es.updateQueueSegmentCommittedSize(segmentNo, filePath, byteCount);
+        es.updateQueueSegmentCommittedSize(segmentNo, byteCount);
     }
 
     public long getSequenceNumberOfLastRecord(){

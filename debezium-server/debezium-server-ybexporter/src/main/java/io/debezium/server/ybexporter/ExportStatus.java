@@ -12,7 +12,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -53,6 +55,7 @@ public class ExportStatus {
     private File tempf;
     private String metadataDBPath;
     private Connection metadataDBConn;
+    private static String QUEUE_SEGMENT_META_TABLE_NAME = "queue_segment_meta";
 
 
     /**
@@ -250,17 +253,52 @@ public class ExportStatus {
         this.sourceType = sourceType;
     }
 
-    public void updateQueueSegmentCommittedSize(long segmentNo, String segmentPath, long committedSize){
+    public void updateQueueSegmentCommittedSize(long segmentNo, long committedSize){
         // TODO: update to metadata DB.
+        Statement updateStmt;
+        try {
+            updateStmt = metadataDBConn.createStatement();
+            int updatedRows = updateStmt.executeUpdate(String.format("UPDATE %s SET size_committed = %d WHERE segment_no=%d", QUEUE_SEGMENT_META_TABLE_NAME, committedSize, segmentNo));
+            if (updatedRows != 1){
+                throw new RuntimeException(String.format("Update of queue segment metadata failed with query-%s, rowsAffected -%d", updateStmt, updatedRows));
+            }
+            updateStmt.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(String.format("Failed to run update queue segment size " +
+                    "- segmentNo: %d, committedSize:%d", segmentNo, committedSize), e);
+        }
     }
 
     public void queueSegmentCreated(long segmentNo, String segmentPath){
         // TODO : insert to metadata DB.
+        Statement insertStmt;
+        try {
+            insertStmt = metadataDBConn.createStatement();
+            insertStmt.executeUpdate(String.format("INSERT into %s VALUES(%d, '%s', 0)", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath));
+            insertStmt.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(String.format("Failed to run update queue segment size " +
+                    "- segmentNo: %d", segmentNo), e);
+        }
     }
 
     public long getQueueSegmentCommittedSize(long segmentNo){
         // TODO: read from metadata DB
-        return 0;
+        Statement selectStmt;
+        long sizeCommitted;
+        try {
+            selectStmt = metadataDBConn.createStatement();
+            ResultSet rs = selectStmt.executeQuery(String.format("SELECT size_committed from %s where segment_no=%s", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo));
+            if (!rs.first()){
+                throw new RuntimeException(String.format("Could not fetch committedSize for queue segment - %d", segmentNo));
+            }
+            sizeCommitted = rs.getLong("size_committed");
+            selectStmt.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(String.format("Failed to run update queue segment size " +
+                    "- segmentNo: %d", segmentNo), e);
+        }
+        return sizeCommitted;
     }
 }
 
