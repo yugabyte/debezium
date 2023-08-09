@@ -10,10 +10,14 @@ public class CmdLineParams {
 
     String certFilePath = null;
 
+    Boolean toCreate = false;
+    String deleteStreamId = null;
 
     public static CmdLineParams createFromArgs(String[] args) {
         Options options = new Options();
 
+        options.addOption("create", false, "To create CDC stream id");
+        options.addOption("delete_stream", true, "To delete CDC stream id");
         options.addOption("master_addresses", true, "Addresses of the master process");
         options.addOption("table_name", true, "Any table name in the database");
         options.addOption("db_name", true, "Database for which stream needs to be created");
@@ -48,6 +52,14 @@ public class CmdLineParams {
 
         if (commandLine.hasOption("ssl_cert_file")) {
             certFilePath = commandLine.getOptionValue("ssl_cert_file");
+        }
+
+        if (commandLine.hasOption("create")) {
+            toCreate = true;
+        }
+
+        if (commandLine.hasOption("delete_stream")) {
+            deleteStreamId = commandLine.getOptionValue("delete_stream");
         }
     }
 

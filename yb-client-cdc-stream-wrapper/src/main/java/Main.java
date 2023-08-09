@@ -3,6 +3,8 @@ import org.yb.client.ListTablesResponse;
 import org.yb.client.YBClient;
 import org.yb.client.YBTable;
 import org.yb.master.MasterDdlOuterClass.ListTablesResponsePB.TableInfo;
+import java.util.Set;   
+import java.util.HashSet;
 
 import java.util.Objects;
 
@@ -29,7 +31,15 @@ public class Main {
         if (table == null) {
             throw new RuntimeException("No table found with the specified name");
         }
-        String streamID = client.createCDCStream(table, parameters.dbName, "PROTO", "IMPLICIT", "ALL").getStreamId();
-        System.out.println("CDC Stream ID: " + streamID);
+        if (parameters.toCreate) {
+            String streamID = client.createCDCStream(table, parameters.dbName, "PROTO", "IMPLICIT", "ALL").getStreamId();
+            System.out.println("CDC Stream ID: " + streamID);
+        } else if (parameters.deleteStreamId != null) {
+            Set<String> streamIds = new HashSet<String>();
+            streamIds.add(parameters.deleteStreamId);
+            client.deleteCDCStream(streamIds, false, true);
+        } else {
+            throw new RuntimeException("Either create or delete stream id should be specified");
+        }
     }
 }
