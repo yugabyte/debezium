@@ -254,7 +254,6 @@ public class ExportStatus {
     }
 
     public void updateQueueSegmentCommittedSize(long segmentNo, long committedSize){
-        // TODO: update to metadata DB.
         Statement updateStmt;
         try {
             updateStmt = metadataDBConn.createStatement();
@@ -270,7 +269,6 @@ public class ExportStatus {
     }
 
     public void queueSegmentCreated(long segmentNo, String segmentPath){
-        // TODO : insert to metadata DB.
         Statement insertStmt;
         try {
             insertStmt = metadataDBConn.createStatement();
@@ -283,7 +281,6 @@ public class ExportStatus {
     }
 
     public long getQueueSegmentCommittedSize(long segmentNo){
-        // TODO: read from metadata DB
         Statement selectStmt;
         long sizeCommitted;
         try {

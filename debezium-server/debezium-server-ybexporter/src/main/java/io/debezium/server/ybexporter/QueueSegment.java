@@ -59,7 +59,7 @@ public class QueueSegment {
 
         es.queueSegmentCreated(segmentNo, filePath);
         long committedSize = es.getQueueSegmentCommittedSize(segmentNo);
-        if (committedSize > 0){
+        if (committedSize < byteCount){
             truncateFileAfterOffset(committedSize);
         }
     }
@@ -124,7 +124,7 @@ public class QueueSegment {
         writer.close();
     }
 
-    public void sync() throws SyncFailedException, IOException{
+    public void sync() throws IOException{
         fd.sync();
         // TODO: is Files.size going to be slow? Maybe just use byteCount?
         es.updateQueueSegmentCommittedSize(segmentNo, Files.size(Path.of(filePath)));
@@ -152,7 +152,7 @@ public class QueueSegment {
 
     private void truncateFileAfterOffset(long offset){
         try {
-            close();
+            writer.close();
             LOGGER.info("Truncating queue segment {} at path {} to size {}", segmentNo, filePath, offset);
             RandomAccessFile f = new RandomAccessFile(filePath, "rw");
             f.setLength(offset);
