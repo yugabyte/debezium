@@ -10,6 +10,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,6 +24,8 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.kafka.connect.data.Field;
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +51,8 @@ public class ExportStatus {
     private ObjectWriter ow;
     private File f;
     private File tempf;
+    private String metadataDBPath;
+    private Connection metadataDBConn;
 
 
     /**
@@ -69,6 +76,23 @@ public class ExportStatus {
                 throw new RuntimeException("failed to create dir for schemas");
             }
         }
+
+        // open connection to metadataDB
+        // TODO: interpret config vars once and make them globally available to all classes
+        final Config config = ConfigProvider.getConfig();
+        metadataDBPath = config.getValue("debezium.sink.ybexporter.metadata.db.path", String.class);
+        if (metadataDBPath == null){
+            throw new RuntimeException("please provide value for debezium.sink.ybexporter.metadata.db.path.");
+        }
+        metadataDBConn = null;
+        try {
+            String url = "jdbc:sqlite:" + metadataDBPath;
+            metadataDBConn = DriverManager.getConnection(url);
+            LOGGER.info("Connected to metadata db at {}", metadataDBPath);
+        } catch (SQLException e) {
+            throw new RuntimeException(String.format("Couldn't connect to metadata DB at %s", metadataDBPath), e);
+        }
+
         instance = this;
     }
 
@@ -224,6 +248,19 @@ public class ExportStatus {
     // TODO: refactor to retrieve config from a static class instead of having to set/pass it to each class.
     public void setSourceType(String sourceType) {
         this.sourceType = sourceType;
+    }
+
+    public void updateQueueSegmentCommittedSize(long segmentNo, String segmentPath, long committedSize){
+        // TODO: update to metadata DB.
+    }
+
+    public void queueSegmentCreated(long segmentNo, String segmentPath){
+        // TODO : insert to metadata DB.
+    }
+
+    public long getQueueSegmentCommittedSize(long segmentNo){
+        // TODO: read from metadata DB
+        return 0;
     }
 }
 

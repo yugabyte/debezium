@@ -37,14 +37,18 @@ public class QueueSegment {
 
     private static final String EOF_MARKER = "\\.\n\n";
     private String filePath;
+    private long segmentNo;
     private FileOutputStream fos;
     private FileDescriptor fd;
     private Writer writer;
     private long byteCount;
     private ObjectWriter ow;
+    private ExportStatus es;
 
-    public QueueSegment(String filePath){
+    public QueueSegment(String datadirStr, long segmentNo, String filePath){
+        this.segmentNo = segmentNo;
         this.filePath = filePath;
+        es = ExportStatus.getInstance(datadirStr);
         ow = new ObjectMapper().writer();
         try {
             fos = new FileOutputStream(filePath, true);
@@ -54,6 +58,12 @@ public class QueueSegment {
             byteCount = Files.size(Path.of(filePath));
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+
+        es.queueSegmentCreated(segmentNo, filePath);
+        long committedSize = es.getQueueSegmentCommittedSize(segmentNo);
+        if (committedSize > 0){
+            truncateFileAfterOffset(committedSize);
         }
     }
 
@@ -109,8 +119,11 @@ public class QueueSegment {
         writer.close();
     }
 
-    public void sync() throws SyncFailedException {
+    public void sync() throws SyncFailedException, IOException{
+        // flushing the buffer before we sync.
+        flush();
         fd.sync();
+        es.updateQueueSegmentCommittedSize(segmentNo, filePath, byteCount);
     }
 
     public long getSequenceNumberOfLastRecord(){
@@ -131,5 +144,9 @@ public class QueueSegment {
             throw new RuntimeException(e);
         }
         return vsn;
+    }
+
+    private void truncateFileAfterOffset(long offset){
+        // TODO
     }
 }
