@@ -56,7 +56,7 @@ public class EventQueue implements RecordWriter {
         sng = new SequenceNumberGenerator(1);
         recoverStateFromDisk();
         if (currentQueueSegment == null){
-            currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex));
+            currentQueueSegment = new QueueSegment(datadirStr, currentQueueSegmentIndex, getFilePathWithIndex(currentQueueSegmentIndex));
         }
     }
 
@@ -129,7 +129,7 @@ public class EventQueue implements RecordWriter {
             }
             // create queue segment for last file segment
             currentQueueSegmentIndex = maxIndex;
-            currentQueueSegment = new QueueSegment(maxIndexPath.toString());
+            currentQueueSegment = new QueueSegment(dataDir, currentQueueSegmentIndex, maxIndexPath.toString());
 
             LOGGER.info("Recovered from queue segment-{} with byte count={}", maxIndexPath, currentQueueSegment.getByteCount());
         }
@@ -160,7 +160,7 @@ public class EventQueue implements RecordWriter {
         }
         currentQueueSegmentIndex++;
         LOGGER.info("rotating queue segment to #{}", currentQueueSegmentIndex);
-        currentQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex));
+        currentQueueSegment = new QueueSegment(dataDir, currentQueueSegmentIndex, getFilePathWithIndex(currentQueueSegmentIndex));
     }
 
     @Override
@@ -199,7 +199,7 @@ public class EventQueue implements RecordWriter {
         try {
             currentQueueSegment.sync();
         }
-        catch (SyncFailedException e) {
+        catch (IOException e) {
             throw new RuntimeException(e);
         }
     }

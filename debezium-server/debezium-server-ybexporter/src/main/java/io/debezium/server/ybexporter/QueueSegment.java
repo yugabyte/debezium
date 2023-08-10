@@ -22,6 +22,7 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.io.SyncFailedException;
 import java.io.Writer;
 import java.nio.file.Files;
@@ -37,24 +38,38 @@ public class QueueSegment {
 
     private static final String EOF_MARKER = "\\.";
     private String filePath;
+    private long segmentNo;
     private FileOutputStream fos;
     private FileDescriptor fd;
     private Writer writer;
     private long byteCount;
     private ObjectWriter ow;
+    private ExportStatus es;
 
-    public QueueSegment(String filePath){
+    public QueueSegment(String datadirStr, long segmentNo, String filePath){
+        this.segmentNo = segmentNo;
         this.filePath = filePath;
+        es = ExportStatus.getInstance(datadirStr);
         ow = new ObjectMapper().writer();
         try {
-            fos = new FileOutputStream(filePath, true);
-            fd = fos.getFD();
-            FileWriter fw = new FileWriter(fd);
-            writer = new BufferedWriter(fw);
-            byteCount = Files.size(Path.of(filePath));
+            openFile();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        es.queueSegmentCreated(segmentNo, filePath);
+        long committedSize = es.getQueueSegmentCommittedSize(segmentNo);
+        if (committedSize < byteCount){
+            truncateFileAfterOffset(committedSize);
+        }
+    }
+
+    private void openFile() throws IOException {
+        fos = new FileOutputStream(filePath, true);
+        fd = fos.getFD();
+        FileWriter fw = new FileWriter(fd);
+        writer = new BufferedWriter(fw);
+        byteCount = Files.size(Path.of(filePath));
     }
 
     public long getByteCount() {
@@ -111,8 +126,10 @@ public class QueueSegment {
         writer.close();
     }
 
-    public void sync() throws SyncFailedException {
+    public void sync() throws IOException{
         fd.sync();
+        // TODO: is Files.size going to be slow? Maybe just use byteCount?
+        es.updateQueueSegmentCommittedSize(segmentNo, Files.size(Path.of(filePath)));
     }
 
     public long getSequenceNumberOfLastRecord(){
@@ -136,5 +153,19 @@ public class QueueSegment {
             throw new RuntimeException(e);
         }
         return vsn;
+    }
+
+    private void truncateFileAfterOffset(long offset){
+        try {
+            writer.close();
+            LOGGER.info("Truncating queue segment {} at path {} to size {}", segmentNo, filePath, offset);
+            RandomAccessFile f = new RandomAccessFile(filePath, "rw");
+            f.setLength(offset);
+            f.close();
+            openFile();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 }

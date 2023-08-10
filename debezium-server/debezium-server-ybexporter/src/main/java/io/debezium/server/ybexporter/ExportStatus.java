@@ -10,6 +10,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,6 +26,8 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.kafka.connect.data.Field;
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +53,9 @@ public class ExportStatus {
     private ObjectWriter ow;
     private File f;
     private File tempf;
+    private String metadataDBPath;
+    private Connection metadataDBConn;
+    private static String QUEUE_SEGMENT_META_TABLE_NAME = "queue_segment_meta";
 
 
     /**
@@ -69,6 +79,23 @@ public class ExportStatus {
                 throw new RuntimeException("failed to create dir for schemas");
             }
         }
+
+        // open connection to metadataDB
+        // TODO: interpret config vars once and make them globally available to all classes
+        final Config config = ConfigProvider.getConfig();
+        metadataDBPath = config.getValue("debezium.sink.ybexporter.metadata.db.path", String.class);
+        if (metadataDBPath == null){
+            throw new RuntimeException("please provide value for debezium.sink.ybexporter.metadata.db.path.");
+        }
+        metadataDBConn = null;
+        try {
+            String url = "jdbc:sqlite:" + metadataDBPath;
+            metadataDBConn = DriverManager.getConnection(url);
+            LOGGER.info("Connected to metadata db at {}", metadataDBPath);
+        } catch (SQLException e) {
+            throw new RuntimeException(String.format("Couldn't connect to metadata DB at %s", metadataDBPath), e);
+        }
+
         instance = this;
     }
 
@@ -224,6 +251,51 @@ public class ExportStatus {
     // TODO: refactor to retrieve config from a static class instead of having to set/pass it to each class.
     public void setSourceType(String sourceType) {
         this.sourceType = sourceType;
+    }
+
+    public void updateQueueSegmentCommittedSize(long segmentNo, long committedSize){
+        Statement updateStmt;
+        try {
+            updateStmt = metadataDBConn.createStatement();
+            int updatedRows = updateStmt.executeUpdate(String.format("UPDATE %s SET size_committed = %d WHERE segment_no=%d", QUEUE_SEGMENT_META_TABLE_NAME, committedSize, segmentNo));
+            if (updatedRows != 1){
+                throw new RuntimeException(String.format("Update of queue segment metadata failed with query-%s, rowsAffected -%d", updateStmt, updatedRows));
+            }
+            updateStmt.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(String.format("Failed to run update queue segment size " +
+                    "- segmentNo: %d, committedSize:%d", segmentNo, committedSize), e);
+        }
+    }
+
+    public void queueSegmentCreated(long segmentNo, String segmentPath){
+        Statement insertStmt;
+        try {
+            insertStmt = metadataDBConn.createStatement();
+            insertStmt.executeUpdate(String.format("INSERT OR IGNORE into %s VALUES(%d, '%s', 0)", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath));
+            insertStmt.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(String.format("Failed to run update queue segment size " +
+                    "- segmentNo: %d", segmentNo), e);
+        }
+    }
+
+    public long getQueueSegmentCommittedSize(long segmentNo){
+        Statement selectStmt;
+        long sizeCommitted;
+        try {
+            selectStmt = metadataDBConn.createStatement();
+            ResultSet rs = selectStmt.executeQuery(String.format("SELECT size_committed from %s where segment_no=%s", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo));
+            if (!rs.next()){
+                throw new RuntimeException(String.format("Could not fetch committedSize for queue segment - %d", segmentNo));
+            }
+            sizeCommitted = rs.getLong("size_committed");
+            selectStmt.close();
+        } catch (SQLException e) {
+            throw new RuntimeException(String.format("Failed to run update queue segment size " +
+                    "- segmentNo: %d", segmentNo), e);
+        }
+        return sizeCommitted;
     }
 }
 
