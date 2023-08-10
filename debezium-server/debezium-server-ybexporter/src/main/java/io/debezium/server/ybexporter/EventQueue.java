@@ -74,7 +74,7 @@ public class EventQueue implements RecordWriter {
                         nextSequenceNumber = 1;
                     }
                     else {
-                        QueueSegment secondLastQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex-1));
+                        QueueSegment secondLastQueueSegment = new QueueSegment(dataDir, currentQueueSegmentIndex-1, getFilePathWithIndex(currentQueueSegmentIndex-1));
                         nextSequenceNumber = secondLastQueueSegment.getSequenceNumberOfLastRecord() + 1;
                         secondLastQueueSegment.close();
                     }
