@@ -117,7 +117,7 @@ public class QueueSegment {
 
     public long getSequenceNumberOfLastRecord(){
         ObjectMapper mapper = new ObjectMapper(new JsonFactory());
-        long vsn = 0;
+        long vsn = -1;
         String last = null, line;
         BufferedReader input;
         try {

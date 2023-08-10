@@ -64,7 +64,29 @@ public class EventQueue implements RecordWriter {
         recoverLatestQueueSegment();
         // recover sequence numberof last written record and resume
         if (currentQueueSegment != null){
-            sng.advanceTo(currentQueueSegment.getSequenceNumberOfLastRecord() + 1);
+            long nextSequenceNumber;
+            try {
+                long lastRecordSequenceNumber = currentQueueSegment.getSequenceNumberOfLastRecord();
+                if (lastRecordSequenceNumber == -1){
+                    // current queue segment is empty, we need to look at the second last segment
+                    if (currentQueueSegmentIndex == 0){
+                        // there is no second last segment, start from 1
+                        nextSequenceNumber = 1;
+                    }
+                    else {
+                        QueueSegment secondLastQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex-1));
+                        nextSequenceNumber = secondLastQueueSegment.getSequenceNumberOfLastRecord() + 1;
+                        secondLastQueueSegment.close();
+                    }
+                }
+                else {
+                    nextSequenceNumber = lastRecordSequenceNumber + 1;
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            LOGGER.info("advancing sequence number to {}", nextSequenceNumber);
+            sng.advanceTo(nextSequenceNumber);
         }
     }
 
