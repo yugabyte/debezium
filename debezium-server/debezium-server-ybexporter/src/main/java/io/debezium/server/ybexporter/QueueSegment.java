@@ -35,7 +35,7 @@ import java.util.Objects;
 public class QueueSegment {
     private static final Logger LOGGER = LoggerFactory.getLogger(QueueSegment.class);
 
-    private static final String EOF_MARKER = "\\.\n\n";
+    private static final String EOF_MARKER = "\\.";
     private String filePath;
     private FileOutputStream fos;
     private FileDescriptor fd;
@@ -104,6 +104,8 @@ public class QueueSegment {
     public void close() throws IOException {
         LOGGER.info("Closing queue file {}", filePath);
         writer.write(EOF_MARKER);
+        writer.write("\n");
+        writer.write("\n");
         writer.flush();
         sync();
         writer.close();
@@ -121,6 +123,9 @@ public class QueueSegment {
         try {
             input = new BufferedReader(new FileReader(filePath));
             while ((line = input.readLine()) != null) {
+                if (line.equals(EOF_MARKER)){
+                    break;
+                }
                 last = line;
             }
             if (last != null){

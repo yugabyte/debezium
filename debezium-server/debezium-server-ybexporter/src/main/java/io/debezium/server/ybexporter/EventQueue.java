@@ -73,6 +73,10 @@ public class EventQueue implements RecordWriter {
      * Then it retrieves the index number from the paths, and then finds
      * the max index - which is the latest queue segment that was written to.
      * If no files are found, we just return.
+     * TODO handle edge case: even if the  latest queue segment was already closed (i.e. EOF marker was written),
+     * we would still consider it to be the latest and open it. when the next write arrives, we will rotate the
+     * queue segment, which would again write an EOF marker, leading to two EOF markers sequentially.
+     * Voyager import data will proceed to next segment upon seeing the first EOF so it's not a concern.
      */
     private void recoverLatestQueueSegment(){
         // read dir to find all queue files
