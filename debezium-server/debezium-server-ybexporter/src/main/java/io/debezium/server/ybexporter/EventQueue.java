@@ -64,21 +64,26 @@ public class EventQueue implements RecordWriter {
         recoverLatestQueueSegment();
         // recover sequence numberof last written record and resume
         if (currentQueueSegment != null){
-            long lastRecordSequenceNumber = currentQueueSegment.getSequenceNumberOfLastRecord();
             long nextSequenceNumber;
-            if (lastRecordSequenceNumber == -1){
-                // current queue segment is empty, we need to look at the second last segment
-                if (currentQueueSegmentIndex == 0){
-                    // there is no second last segment, start from 1
-                    nextSequenceNumber = 1;
+            try {
+                long lastRecordSequenceNumber = currentQueueSegment.getSequenceNumberOfLastRecord();
+                if (lastRecordSequenceNumber == -1){
+                    // current queue segment is empty, we need to look at the second last segment
+                    if (currentQueueSegmentIndex == 0){
+                        // there is no second last segment, start from 1
+                        nextSequenceNumber = 1;
+                    }
+                    else {
+                        QueueSegment secondLastQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex-1));
+                        nextSequenceNumber = secondLastQueueSegment.getSequenceNumberOfLastRecord() + 1;
+                        secondLastQueueSegment.close();
+                    }
                 }
                 else {
-                    QueueSegment secondLastQueueSegment = new QueueSegment(getFilePathWithIndex(currentQueueSegmentIndex-1));
-                    nextSequenceNumber = secondLastQueueSegment.getSequenceNumberOfLastRecord() + 1;
+                    nextSequenceNumber = lastRecordSequenceNumber + 1;
                 }
-            }
-            else {
-                nextSequenceNumber = lastRecordSequenceNumber + 1;
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
             sng.advanceTo(nextSequenceNumber);
         }
