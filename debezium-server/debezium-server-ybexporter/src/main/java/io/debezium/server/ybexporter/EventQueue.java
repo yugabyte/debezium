@@ -85,6 +85,7 @@ public class EventQueue implements RecordWriter {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
+            LOGGER.info("advancing sequence number to {}", nextSequenceNumber);
             sng.advanceTo(nextSequenceNumber);
         }
     }
