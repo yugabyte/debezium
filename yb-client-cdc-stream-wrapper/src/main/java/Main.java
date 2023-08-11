@@ -1,3 +1,4 @@
+import com.google.common.net.HostAndPort;
 import org.yb.client.AsyncYBClient;
 import org.yb.client.ListTablesResponse;
 import org.yb.client.YBClient;
@@ -40,6 +41,12 @@ public class Main {
             }
             String streamID = client.createCDCStream(table, parameters.dbName, "PROTO", "IMPLICIT", "ALL").getStreamId();
             System.out.println("CDC Stream ID: " + streamID);
+        } else if (parameters.listMasters) {
+            String tserverNode = parameters.masterAddresses.split(",")[0].split(":")[0] + ":9100";
+            String masterAddressesList = client.getMasterAddresses(HostAndPort.fromString(tserverNode)); // {<ip1>:7100},{<ip2>:7100},{<ip3>:7100}
+            masterAddressesList = masterAddressesList.replace("{", ""); //removing {}
+            masterAddressesList = masterAddressesList.replace("}", "");
+            System.out.println("Master Addresses: " + masterAddressesList);
         } else {
             throw new RuntimeException("Either create or delete stream id should be specified");
         }
