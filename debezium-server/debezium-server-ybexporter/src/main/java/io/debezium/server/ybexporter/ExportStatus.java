@@ -15,6 +15,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -54,6 +56,7 @@ public class ExportStatus {
     private File f;
     private File tempf;
     private String metadataDBPath;
+    private String runId;
     private Connection metadataDBConn;
     private static String QUEUE_SEGMENT_META_TABLE_NAME = "queue_segment_meta";
     private static String EVENT_STATS_TABLE_NAME = "exported_events_stats";
@@ -85,6 +88,8 @@ public class ExportStatus {
         // open connection to metadataDB
         // TODO: interpret config vars once and make them globally available to all classes
         final Config config = ConfigProvider.getConfig();
+        runId = config.getValue("debezium.sink.ybexporter.run.id", String.class);
+
         metadataDBPath = config.getValue("debezium.sink.ybexporter.metadata.db.path", String.class);
         if (metadataDBPath == null){
             throw new RuntimeException("please provide value for debezium.sink.ybexporter.metadata.db.path.");
@@ -273,6 +278,7 @@ public class ExportStatus {
             long numDeletesDelta = 0;
 
             for (var entry : eventCountDeltaPerTable.entrySet()) {
+                // CREATE TABLE exported_events_stats_per_table (schema_name TEXT, table_name TEXT, num_total INTEGER, num_inserts INTEGER, num_updates INTEGER, num_deletes INTEGER, PRIMARY KEY(schema_name, table_name) );
                 Statement tableWiseStatsUpdateStmt = metadataDBConn.createStatement();
                 Pair<String, String> tableQualifiedName = entry.getKey();
                 Map<String, Long> eventCountDeltaTable = entry.getValue();
@@ -308,6 +314,33 @@ public class ExportStatus {
                 numUpdatesDelta += eventCountDeltaTable.getOrDefault("u", 0L);
                 numDeletesDelta += eventCountDeltaTable.getOrDefault("d", 0L);
             }
+
+            // update overall stats
+            // CREATE TABLE exported_events_stats (run_id TEXT, timestamp_minute INTEGER, num_total INTEGER, num_inserts INTEGER, num_updates INTEGER, num_deletes INTEGER, PRIMARY KEY(run_id, timestamp_minute) );
+            LocalDateTime now = LocalDateTime.now();
+            now = now.minusSeconds(now.getSecond());
+            Long curTimeFloorMinuteInEpoch = now.toEpochSecond(ZoneOffset.UTC); // HH:mm:00 (floor of the minute) in epoch seconds
+            Statement updateStatement = metadataDBConn.createStatement();
+            String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
+                            " num_inserts = num_inserts + %d," +
+                            " num_updates = num_updates + %d," +
+                            " num_deletes = num_deletes + %d" +
+                            " WHERE run_id = '%s' and timestamp_minute = %d", EVENT_STATS_TABLE_NAME,
+                    numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta,
+                    runId, curTimeFloorMinuteInEpoch);
+            updatedRows = updateStatement.executeUpdate(updateQuery);
+            if (updatedRows == 0){
+                // first insert for the minute.
+                Statement insertStatment = metadataDBConn.createStatement();
+                String insertQuery = String.format("INSERT INTO %s (run_id, timestamp_minute, num_total, num_inserts, num_updates, num_deletes) " +
+                                "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, curTimeFloorMinuteInEpoch,
+                        numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta);
+                insertStatment.executeUpdate(insertQuery);
+            }
+            else if (updatedRows != 1){
+                throw new RuntimeException(String.format("Update of stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
+            }
+
 
         } catch (SQLException e) {
             metadataDBConn.rollback();
