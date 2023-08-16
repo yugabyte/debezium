@@ -281,7 +281,7 @@ public class ExportStatus {
                         " num_inserts = num_inserts + %d," +
                         " num_updates = num_updates + %d," +
                         " num_deletes = num_deletes + %d" +
-                        " WHERE schema_name = %s and table_name = %s", EVENT_STATS_PER_TABLE_TABLE_NAME,
+                        " WHERE schema_name = '%s' and table_name = '%s'", EVENT_STATS_PER_TABLE_TABLE_NAME,
                         numTotalDeltaTable,
                         eventCountDeltaTable.getOrDefault("c", 0L),
                         eventCountDeltaTable.getOrDefault("u", 0L),
@@ -292,8 +292,8 @@ public class ExportStatus {
                 if (updatedRows == 0){
                     // need to insert for the first time
                     Statement insertStatment = metadataDBConn.createStatement();
-                    String insertQuery = String.format("INSERT INTO %s (schema_name, table_name, num_total, num_inserts, num_udpates, num_deletes) " +
-                            "VALUES(%s, %s, %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, tableQualifiedName.getLeft(), tableQualifiedName.getRight(),
+                    String insertQuery = String.format("INSERT INTO %s (schema_name, table_name, num_total, num_inserts, num_updates, num_deletes) " +
+                            "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, tableQualifiedName.getLeft(), tableQualifiedName.getRight(),
                             numTotalDeltaTable,
                             eventCountDeltaTable.getOrDefault("c", 0L),
                             eventCountDeltaTable.getOrDefault("u", 0L),
