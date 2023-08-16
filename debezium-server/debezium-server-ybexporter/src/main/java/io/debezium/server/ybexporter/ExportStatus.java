@@ -24,10 +24,10 @@ import java.util.concurrent.ConcurrentMap;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.kafka.connect.data.Field;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
+import org.graalvm.collections.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +56,8 @@ public class ExportStatus {
     private String metadataDBPath;
     private Connection metadataDBConn;
     private static String QUEUE_SEGMENT_META_TABLE_NAME = "queue_segment_meta";
+    private static String EVENT_STATS_TABLE_NAME = "exported_events_stats";
+    private static String EVENT_STATS_PER_TABLE_TABLE_NAME = "exported_events_stats_per_table";
 
 
     /**
@@ -253,7 +255,7 @@ public class ExportStatus {
         this.sourceType = sourceType;
     }
 
-    public void updateQueueSegmentCommittedSize(long segmentNo, long committedSize){
+    public void updateQueueSegmentCommitted(long segmentNo, long committedSize, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable){
         Statement updateStmt;
         try {
             updateStmt = metadataDBConn.createStatement();

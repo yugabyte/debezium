@@ -44,6 +44,7 @@ public class QueueSegment {
     private long byteCount;
     private ObjectWriter ow;
     private ExportStatus es;
+    private Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable;
     private Map<Pair<String, String>, Long> insertEventCountDeltaPerTable;
     private Map<Pair<String, String>, Long> updateEventCountDeltaPerTable;
     private Map<Pair<String, String>, Long> deleteEventCountDeltaPerTable;
@@ -91,21 +92,25 @@ public class QueueSegment {
     }
     private void updateStats(Record r){
         Pair<String, String> fullyQualifiedTableName =  Pair.create(r.t.schemaName, r.t.tableName);
-        Long currentCount;
-        switch (r.op) {
-            case "c":
-                currentCount = insertEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
-                insertEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
-                break;
-            case "u":
-                currentCount = updateEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
-                updateEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
-                break;
-            case "d":
-                currentCount = deleteEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
-                deleteEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
-                break;
-        }
+
+        Map<String, Long> tableMap = eventCountDeltaPerTable.computeIfAbsent(fullyQualifiedTableName, k -> new HashMap<>());
+        tableMap.put(r.op, tableMap.getOrDefault(r.op, 0L) + 1);
+
+//        Long currentCount;
+//        switch (r.op) {
+//            case "c":
+//                currentCount = insertEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
+//                insertEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
+//                break;
+//            case "u":
+//                currentCount = updateEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
+//                updateEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
+//                break;
+//            case "d":
+//                currentCount = deleteEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
+//                deleteEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
+//                break;
+//        }
     }
 
     private HashMap<String, Object> generateCdcMessageForRecord(Record r) {
@@ -149,8 +154,12 @@ public class QueueSegment {
 
     public void sync() throws IOException{
         fd.sync();
-        // TODO: is Files.size going to be slow? Maybe just use byteCount?
-        es.updateQueueSegmentCommittedSize(segmentNo, Files.size(Path.of(filePath)));
+        es.updateQueueSegmentCommitted(segmentNo, Files.size(Path.of(filePath)), eventCountDeltaPerTable);
+        // TODO: optimize to reset counters to 0 instead of clearing the map.
+        eventCountDeltaPerTable.clear();
+//        insertEventCountDeltaPerTable.clear();
+//        updateEventCountDeltaPerTable.clear();
+//        deleteEventCountDeltaPerTable.clear();
     }
 
     public long getSequenceNumberOfLastRecord(){
