@@ -15,7 +15,9 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -317,7 +319,7 @@ public class ExportStatus {
 
             // update overall stats
             // CREATE TABLE exported_events_stats (run_id TEXT, timestamp_minute INTEGER, num_total INTEGER, num_inserts INTEGER, num_updates INTEGER, num_deletes INTEGER, PRIMARY KEY(run_id, timestamp_minute) );
-            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
             now = now.minusSeconds(now.getSecond());
             Long curTimeFloorMinuteInEpoch = now.toEpochSecond(ZoneOffset.UTC); // HH:mm:00 (floor of the minute) in epoch seconds
             Statement updateStatement = metadataDBConn.createStatement();
