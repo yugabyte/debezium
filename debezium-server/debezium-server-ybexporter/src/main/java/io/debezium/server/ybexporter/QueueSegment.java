@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import org.graalvm.collections.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,18 +18,16 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileDescriptor;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.io.SyncFailedException;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.Objects;
+import java.util.Map;
 
 /**
  * A QueueSegment represents a segment of the cdc queue.
@@ -45,6 +44,9 @@ public class QueueSegment {
     private long byteCount;
     private ObjectWriter ow;
     private ExportStatus es;
+    private Map<Pair<String, String>, Long> insertEventCountDeltaPerTable;
+    private Map<Pair<String, String>, Long> updateEventCountDeltaPerTable;
+    private Map<Pair<String, String>, Long> deleteEventCountDeltaPerTable;
 
     public QueueSegment(String datadirStr, long segmentNo, String filePath){
         this.segmentNo = segmentNo;
@@ -81,9 +83,28 @@ public class QueueSegment {
             String cdcJson = ow.writeValueAsString(generateCdcMessageForRecord(r)) + "\n";
             writer.write(cdcJson);
             byteCount += cdcJson.length();
+            updateStats(r);
         }
         catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+    private void updateStats(Record r){
+        Pair<String, String> fullyQualifiedTableName =  Pair.create(r.t.schemaName, r.t.tableName);
+        Long currentCount;
+        switch (r.op) {
+            case "c":
+                currentCount = insertEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
+                insertEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
+                break;
+            case "u":
+                currentCount = updateEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
+                updateEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
+                break;
+            case "d":
+                currentCount = deleteEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
+                deleteEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
+                break;
         }
     }
 
