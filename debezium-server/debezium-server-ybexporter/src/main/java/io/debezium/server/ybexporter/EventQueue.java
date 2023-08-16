@@ -11,6 +11,7 @@ import java.io.SyncFailedException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.ArrayList;
 
 import org.slf4j.Logger;
@@ -82,7 +83,7 @@ public class EventQueue implements RecordWriter {
                 else {
                     nextSequenceNumber = lastRecordSequenceNumber + 1;
                 }
-            } catch (IOException e) {
+            } catch (IOException | SQLException e) {
                 throw new RuntimeException(e);
             }
             LOGGER.info("advancing sequence number to {}", nextSequenceNumber);
@@ -155,7 +156,7 @@ public class EventQueue implements RecordWriter {
         // close old file.
         try {
             currentQueueSegment.close();
-        } catch (IOException e) {
+        } catch (IOException | SQLException e) {
             throw new RuntimeException(e);
         }
         currentQueueSegmentIndex++;
@@ -189,7 +190,7 @@ public class EventQueue implements RecordWriter {
         try {
             currentQueueSegment.close();
         }
-        catch (IOException e) {
+        catch (IOException | SQLException e) {
             throw new RuntimeException(e);
         }
     }
@@ -199,7 +200,7 @@ public class EventQueue implements RecordWriter {
         try {
             currentQueueSegment.sync();
         }
-        catch (IOException e) {
+        catch (IOException | SQLException e) {
             throw new RuntimeException(e);
         }
     }

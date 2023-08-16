@@ -26,6 +26,7 @@ import java.io.RandomAccessFile;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -44,10 +45,8 @@ public class QueueSegment {
     private long byteCount;
     private ObjectWriter ow;
     private ExportStatus es;
+    // (schemaName, tableName) -> (operation -> count)
     private Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable;
-    private Map<Pair<String, String>, Long> insertEventCountDeltaPerTable;
-    private Map<Pair<String, String>, Long> updateEventCountDeltaPerTable;
-    private Map<Pair<String, String>, Long> deleteEventCountDeltaPerTable;
 
     public QueueSegment(String datadirStr, long segmentNo, String filePath){
         this.segmentNo = segmentNo;
@@ -65,6 +64,7 @@ public class QueueSegment {
         if (committedSize < byteCount){
             truncateFileAfterOffset(committedSize);
         }
+        eventCountDeltaPerTable = new HashMap<>();
     }
 
     private void openFile() throws IOException {
@@ -142,7 +142,7 @@ public class QueueSegment {
         writer.flush();
     }
 
-    public void close() throws IOException {
+    public void close() throws IOException, SQLException {
         LOGGER.info("Closing queue file {}", filePath);
         writer.write(EOF_MARKER);
         writer.write("\n");
@@ -152,7 +152,7 @@ public class QueueSegment {
         writer.close();
     }
 
-    public void sync() throws IOException{
+    public void sync() throws IOException, SQLException {
         fd.sync();
         es.updateQueueSegmentCommitted(segmentNo, Files.size(Path.of(filePath)), eventCountDeltaPerTable);
         // TODO: optimize to reset counters to 0 instead of clearing the map.

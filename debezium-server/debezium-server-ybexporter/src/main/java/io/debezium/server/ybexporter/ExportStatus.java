@@ -255,19 +255,69 @@ public class ExportStatus {
         this.sourceType = sourceType;
     }
 
-    public void updateQueueSegmentCommitted(long segmentNo, long committedSize, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable){
-        Statement updateStmt;
+    public void updateQueueSegmentCommitted(long segmentNo, long committedSize, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
+        final boolean oldAutoCommit = metadataDBConn.getAutoCommit();
+        metadataDBConn.setAutoCommit(false);
+        int updatedRows;
         try {
-            updateStmt = metadataDBConn.createStatement();
-            int updatedRows = updateStmt.executeUpdate(String.format("UPDATE %s SET size_committed = %d WHERE segment_no=%d", QUEUE_SEGMENT_META_TABLE_NAME, committedSize, segmentNo));
+            Statement queueMetaUpdateStmt = metadataDBConn.createStatement();
+            updatedRows = queueMetaUpdateStmt.executeUpdate(String.format("UPDATE %s SET size_committed = %d WHERE segment_no=%d", QUEUE_SEGMENT_META_TABLE_NAME, committedSize, segmentNo));
             if (updatedRows != 1){
-                throw new RuntimeException(String.format("Update of queue segment metadata failed with query-%s, rowsAffected -%d", updateStmt, updatedRows));
+                throw new RuntimeException(String.format("Update of queue segment metadata failed with query-%s, rowsAffected -%d", queueMetaUpdateStmt, updatedRows));
             }
-            updateStmt.close();
+            queueMetaUpdateStmt.close();
+
+            long numTotalDelta = 0;
+            long numInsertsDelta = 0;
+            long numUpdatesDelta = 0;
+            long numDeletesDelta = 0;
+
+            for (var entry : eventCountDeltaPerTable.entrySet()) {
+                Statement tableWiseStatsUpdateStmt = metadataDBConn.createStatement();
+                Pair<String, String> tableQualifiedName = entry.getKey();
+                Map<String, Long> eventCountDeltaTable = entry.getValue();
+                Long numTotalDeltaTable = eventCountDeltaTable.getOrDefault("c", 0L) + eventCountDeltaTable.getOrDefault("u", 0L) + eventCountDeltaTable.getOrDefault("d", 0L);
+                String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
+                        " num_inserts = num_inserts + %d," +
+                        " num_updates = num_updates + %d," +
+                        " num_deletes = num_deletes + %d" +
+                        " WHERE schema_name = %s and table_name = %s", EVENT_STATS_PER_TABLE_TABLE_NAME,
+                        numTotalDeltaTable,
+                        eventCountDeltaTable.getOrDefault("c", 0L),
+                        eventCountDeltaTable.getOrDefault("u", 0L),
+                        eventCountDeltaTable.getOrDefault("d", 0L),
+                        tableQualifiedName.getLeft(),
+                        tableQualifiedName.getRight());
+                updatedRows = tableWiseStatsUpdateStmt.executeUpdate(updateQuery);
+                if (updatedRows == 0){
+                    // need to insert for the first time
+                    Statement insertStatment = metadataDBConn.createStatement();
+                    String insertQuery = String.format("INSERT INTO %s (schema_name, table_name, num_total, num_inserts, num_udpates, num_deletes) " +
+                            "VALUES(%s, %s, %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, tableQualifiedName.getLeft(), tableQualifiedName.getRight(),
+                            numTotalDeltaTable,
+                            eventCountDeltaTable.getOrDefault("c", 0L),
+                            eventCountDeltaTable.getOrDefault("u", 0L),
+                            eventCountDeltaTable.getOrDefault("d", 0L));
+                    insertStatment.executeUpdate(insertQuery);
+                }
+                else if (updatedRows != 1){
+                    throw new RuntimeException(String.format("Update of table wise stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
+                }
+                numTotalDelta += numTotalDeltaTable;
+                numInsertsDelta += eventCountDeltaTable.getOrDefault("c", 0L);
+                numUpdatesDelta += eventCountDeltaTable.getOrDefault("u", 0L);
+                numDeletesDelta += eventCountDeltaTable.getOrDefault("d", 0L);
+            }
+
         } catch (SQLException e) {
-            throw new RuntimeException(String.format("Failed to run update queue segment size " +
-                    "- segmentNo: %d, committedSize:%d", segmentNo, committedSize), e);
+            metadataDBConn.rollback();
+            throw new RuntimeException(String.format("Failed to  update queue segment meta and stats " +
+                    "- segmentNo: %d, committedSize:%d, eventCount:%s", segmentNo, committedSize, eventCountDeltaPerTable), e);
+        } finally {
+            metadataDBConn.commit();
+            metadataDBConn.setAutoCommit(oldAutoCommit);
         }
+
     }
 
     public void queueSegmentCreated(long segmentNo, String segmentPath){
