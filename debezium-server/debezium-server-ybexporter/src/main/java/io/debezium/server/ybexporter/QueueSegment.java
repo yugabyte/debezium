@@ -95,22 +95,6 @@ public class QueueSegment {
 
         Map<String, Long> tableMap = eventCountDeltaPerTable.computeIfAbsent(fullyQualifiedTableName, k -> new HashMap<>());
         tableMap.put(r.op, tableMap.getOrDefault(r.op, 0L) + 1);
-
-//        Long currentCount;
-//        switch (r.op) {
-//            case "c":
-//                currentCount = insertEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
-//                insertEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
-//                break;
-//            case "u":
-//                currentCount = updateEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
-//                updateEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
-//                break;
-//            case "d":
-//                currentCount = deleteEventCountDeltaPerTable.getOrDefault(fullyQualifiedTableName, 0L);
-//                deleteEventCountDeltaPerTable.put(fullyQualifiedTableName, currentCount + 1);
-//                break;
-//        }
     }
 
     private HashMap<String, Object> generateCdcMessageForRecord(Record r) {
@@ -157,9 +141,6 @@ public class QueueSegment {
         es.updateQueueSegmentMetaInfo(segmentNo, Files.size(Path.of(filePath)), eventCountDeltaPerTable);
         // TODO: optimize to reset counters to 0 instead of clearing the map.
         eventCountDeltaPerTable.clear();
-//        insertEventCountDeltaPerTable.clear();
-//        updateEventCountDeltaPerTable.clear();
-//        deleteEventCountDeltaPerTable.clear();
     }
 
     public long getSequenceNumberOfLastRecord(){
