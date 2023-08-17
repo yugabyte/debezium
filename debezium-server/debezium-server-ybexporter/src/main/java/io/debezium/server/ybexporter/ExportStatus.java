@@ -339,14 +339,14 @@ public class ExportStatus {
                         " num_inserts = num_inserts + %d," +
                         " num_updates = num_updates + %d," +
                         " num_deletes = num_deletes + %d" +
-                        " WHERE run_id = '%s' and timestamp_minute = %d", EVENT_STATS_TABLE_NAME,
+                        " WHERE run_id = '%s' and timestamp = %d", EVENT_STATS_TABLE_NAME,
                 numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta,
                 runId, nowFlooredToNearest30sEpoch);
         updatedRows = updateStatement.executeUpdate(updateQuery);
         if (updatedRows == 0){
             // first insert for the minute.
             Statement insertStatment = conn.createStatement();
-            String insertQuery = String.format("INSERT INTO %s (run_id, timestamp_minute, num_total, num_inserts, num_updates, num_deletes) " +
+            String insertQuery = String.format("INSERT INTO %s (run_id, timestamp, num_total, num_inserts, num_updates, num_deletes) " +
                             "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, nowFlooredToNearest30sEpoch,
                     numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta);
             insertStatment.executeUpdate(insertQuery);
