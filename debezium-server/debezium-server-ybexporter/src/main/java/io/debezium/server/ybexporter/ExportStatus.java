@@ -15,9 +15,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -262,7 +260,7 @@ public class ExportStatus {
         this.sourceType = sourceType;
     }
 
-    public void updateQueueSegmentCommitted(long segmentNo, long committedSize, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
+    public void updateQueueSegmentMetaInfo(long segmentNo, long committedSize, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
         final boolean oldAutoCommit = metadataDBConn.getAutoCommit();
         metadataDBConn.setAutoCommit(false);
         int updatedRows;
@@ -273,75 +271,75 @@ public class ExportStatus {
                 throw new RuntimeException(String.format("Update of queue segment metadata failed with query-%s, rowsAffected -%d", queueMetaUpdateStmt, updatedRows));
             }
             queueMetaUpdateStmt.close();
-
-            long numTotalDelta = 0;
-            long numInsertsDelta = 0;
-            long numUpdatesDelta = 0;
-            long numDeletesDelta = 0;
-
-            for (var entry : eventCountDeltaPerTable.entrySet()) {
-                // CREATE TABLE exported_events_stats_per_table (schema_name TEXT, table_name TEXT, num_total INTEGER, num_inserts INTEGER, num_updates INTEGER, num_deletes INTEGER, PRIMARY KEY(schema_name, table_name) );
-                Statement tableWiseStatsUpdateStmt = metadataDBConn.createStatement();
-                Pair<String, String> tableQualifiedName = entry.getKey();
-                Map<String, Long> eventCountDeltaTable = entry.getValue();
-                Long numTotalDeltaTable = eventCountDeltaTable.getOrDefault("c", 0L) + eventCountDeltaTable.getOrDefault("u", 0L) + eventCountDeltaTable.getOrDefault("d", 0L);
-                String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
-                        " num_inserts = num_inserts + %d," +
-                        " num_updates = num_updates + %d," +
-                        " num_deletes = num_deletes + %d" +
-                        " WHERE schema_name = '%s' and table_name = '%s'", EVENT_STATS_PER_TABLE_TABLE_NAME,
-                        numTotalDeltaTable,
-                        eventCountDeltaTable.getOrDefault("c", 0L),
-                        eventCountDeltaTable.getOrDefault("u", 0L),
-                        eventCountDeltaTable.getOrDefault("d", 0L),
-                        tableQualifiedName.getLeft(),
-                        tableQualifiedName.getRight());
-                updatedRows = tableWiseStatsUpdateStmt.executeUpdate(updateQuery);
-                if (updatedRows == 0){
-                    // need to insert for the first time
-                    Statement insertStatment = metadataDBConn.createStatement();
-                    String insertQuery = String.format("INSERT INTO %s (schema_name, table_name, num_total, num_inserts, num_updates, num_deletes) " +
-                            "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, tableQualifiedName.getLeft(), tableQualifiedName.getRight(),
-                            numTotalDeltaTable,
-                            eventCountDeltaTable.getOrDefault("c", 0L),
-                            eventCountDeltaTable.getOrDefault("u", 0L),
-                            eventCountDeltaTable.getOrDefault("d", 0L));
-                    insertStatment.executeUpdate(insertQuery);
-                }
-                else if (updatedRows != 1){
-                    throw new RuntimeException(String.format("Update of table wise stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
-                }
-                numTotalDelta += numTotalDeltaTable;
-                numInsertsDelta += eventCountDeltaTable.getOrDefault("c", 0L);
-                numUpdatesDelta += eventCountDeltaTable.getOrDefault("u", 0L);
-                numDeletesDelta += eventCountDeltaTable.getOrDefault("d", 0L);
-            }
-
-            // update overall stats
-            // CREATE TABLE exported_events_stats (run_id TEXT, timestamp_minute INTEGER, num_total INTEGER, num_inserts INTEGER, num_updates INTEGER, num_deletes INTEGER, PRIMARY KEY(run_id, timestamp_minute) );
-            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-            now = now.minusSeconds(now.getSecond()%30);
-            Long curTimeFloorMinuteInEpoch = now.toEpochSecond(ZoneOffset.UTC); // HH:mm:00 (floor of the minute) in epoch seconds
-            Statement updateStatement = metadataDBConn.createStatement();
-            String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
-                            " num_inserts = num_inserts + %d," +
-                            " num_updates = num_updates + %d," +
-                            " num_deletes = num_deletes + %d" +
-                            " WHERE run_id = '%s' and timestamp_minute = %d", EVENT_STATS_TABLE_NAME,
-                    numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta,
-                    runId, curTimeFloorMinuteInEpoch);
-            updatedRows = updateStatement.executeUpdate(updateQuery);
-            if (updatedRows == 0){
-                // first insert for the minute.
-                Statement insertStatment = metadataDBConn.createStatement();
-                String insertQuery = String.format("INSERT INTO %s (run_id, timestamp_minute, num_total, num_inserts, num_updates, num_deletes) " +
-                                "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, curTimeFloorMinuteInEpoch,
-                        numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta);
-                insertStatment.executeUpdate(insertQuery);
-            }
-            else if (updatedRows != 1){
-                throw new RuntimeException(String.format("Update of stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
-            }
+            updateQueueSegmentStats(metadataDBConn, eventCountDeltaPerTable);
+//            long numTotalDelta = 0;
+//            long numInsertsDelta = 0;
+//            long numUpdatesDelta = 0;
+//            long numDeletesDelta = 0;
+//
+//            for (var entry : eventCountDeltaPerTable.entrySet()) {
+//                // CREATE TABLE exported_events_stats_per_table (schema_name TEXT, table_name TEXT, num_total INTEGER, num_inserts INTEGER, num_updates INTEGER, num_deletes INTEGER, PRIMARY KEY(schema_name, table_name) );
+//                Statement tableWiseStatsUpdateStmt = metadataDBConn.createStatement();
+//                Pair<String, String> tableQualifiedName = entry.getKey();
+//                Map<String, Long> eventCountDeltaTable = entry.getValue();
+//                Long numTotalDeltaTable = eventCountDeltaTable.getOrDefault("c", 0L) + eventCountDeltaTable.getOrDefault("u", 0L) + eventCountDeltaTable.getOrDefault("d", 0L);
+//                String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
+//                        " num_inserts = num_inserts + %d," +
+//                        " num_updates = num_updates + %d," +
+//                        " num_deletes = num_deletes + %d" +
+//                        " WHERE schema_name = '%s' and table_name = '%s'", EVENT_STATS_PER_TABLE_TABLE_NAME,
+//                        numTotalDeltaTable,
+//                        eventCountDeltaTable.getOrDefault("c", 0L),
+//                        eventCountDeltaTable.getOrDefault("u", 0L),
+//                        eventCountDeltaTable.getOrDefault("d", 0L),
+//                        tableQualifiedName.getLeft(),
+//                        tableQualifiedName.getRight());
+//                updatedRows = tableWiseStatsUpdateStmt.executeUpdate(updateQuery);
+//                if (updatedRows == 0){
+//                    // need to insert for the first time
+//                    Statement insertStatment = metadataDBConn.createStatement();
+//                    String insertQuery = String.format("INSERT INTO %s (schema_name, table_name, num_total, num_inserts, num_updates, num_deletes) " +
+//                            "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, tableQualifiedName.getLeft(), tableQualifiedName.getRight(),
+//                            numTotalDeltaTable,
+//                            eventCountDeltaTable.getOrDefault("c", 0L),
+//                            eventCountDeltaTable.getOrDefault("u", 0L),
+//                            eventCountDeltaTable.getOrDefault("d", 0L));
+//                    insertStatment.executeUpdate(insertQuery);
+//                }
+//                else if (updatedRows != 1){
+//                    throw new RuntimeException(String.format("Update of table wise stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
+//                }
+//                numTotalDelta += numTotalDeltaTable;
+//                numInsertsDelta += eventCountDeltaTable.getOrDefault("c", 0L);
+//                numUpdatesDelta += eventCountDeltaTable.getOrDefault("u", 0L);
+//                numDeletesDelta += eventCountDeltaTable.getOrDefault("d", 0L);
+//            }
+//
+//            // update overall stats
+//            // CREATE TABLE exported_events_stats (run_id TEXT, timestamp_minute INTEGER, num_total INTEGER, num_inserts INTEGER, num_updates INTEGER, num_deletes INTEGER, PRIMARY KEY(run_id, timestamp_minute) );
+//            LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+//            now = now.minusSeconds(now.getSecond()%30);
+//            Long curTimeFloorMinuteInEpoch = now.toEpochSecond(ZoneOffset.UTC); // HH:mm:00 (floor of the minute) in epoch seconds
+//            Statement updateStatement = metadataDBConn.createStatement();
+//            String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
+//                            " num_inserts = num_inserts + %d," +
+//                            " num_updates = num_updates + %d," +
+//                            " num_deletes = num_deletes + %d" +
+//                            " WHERE run_id = '%s' and timestamp_minute = %d", EVENT_STATS_TABLE_NAME,
+//                    numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta,
+//                    runId, curTimeFloorMinuteInEpoch);
+//            updatedRows = updateStatement.executeUpdate(updateQuery);
+//            if (updatedRows == 0){
+//                // first insert for the minute.
+//                Statement insertStatment = metadataDBConn.createStatement();
+//                String insertQuery = String.format("INSERT INTO %s (run_id, timestamp_minute, num_total, num_inserts, num_updates, num_deletes) " +
+//                                "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, curTimeFloorMinuteInEpoch,
+//                        numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta);
+//                insertStatment.executeUpdate(insertQuery);
+//            }
+//            else if (updatedRows != 1){
+//                throw new RuntimeException(String.format("Update of stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
+//            }
 
 
         } catch (SQLException e) {
@@ -353,6 +351,78 @@ public class ExportStatus {
             metadataDBConn.setAutoCommit(oldAutoCommit);
         }
 
+    }
+
+    private void updateQueueSegmentStats(Connection conn, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
+        int updatedRows;
+
+        long numTotalDelta = 0;
+        long numInsertsDelta = 0;
+        long numUpdatesDelta = 0;
+        long numDeletesDelta = 0;
+
+        // update stats per table
+        for (var entry : eventCountDeltaPerTable.entrySet()) {
+            Statement tableWiseStatsUpdateStmt = conn.createStatement();
+            Pair<String, String> tableQualifiedName = entry.getKey();
+            Map<String, Long> eventCountDeltaTable = entry.getValue();
+            Long numTotalDeltaTable = eventCountDeltaTable.getOrDefault("c", 0L) + eventCountDeltaTable.getOrDefault("u", 0L) + eventCountDeltaTable.getOrDefault("d", 0L);
+            String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
+                            " num_inserts = num_inserts + %d," +
+                            " num_updates = num_updates + %d," +
+                            " num_deletes = num_deletes + %d" +
+                            " WHERE schema_name = '%s' and table_name = '%s'", EVENT_STATS_PER_TABLE_TABLE_NAME,
+                    numTotalDeltaTable,
+                    eventCountDeltaTable.getOrDefault("c", 0L),
+                    eventCountDeltaTable.getOrDefault("u", 0L),
+                    eventCountDeltaTable.getOrDefault("d", 0L),
+                    tableQualifiedName.getLeft(),
+                    tableQualifiedName.getRight());
+            updatedRows = tableWiseStatsUpdateStmt.executeUpdate(updateQuery);
+            if (updatedRows == 0){
+                // need to insert for the first time
+                Statement insertStatment = conn.createStatement();
+                String insertQuery = String.format("INSERT INTO %s (schema_name, table_name, num_total, num_inserts, num_updates, num_deletes) " +
+                                "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, tableQualifiedName.getLeft(), tableQualifiedName.getRight(),
+                        numTotalDeltaTable,
+                        eventCountDeltaTable.getOrDefault("c", 0L),
+                        eventCountDeltaTable.getOrDefault("u", 0L),
+                        eventCountDeltaTable.getOrDefault("d", 0L));
+                insertStatment.executeUpdate(insertQuery);
+            }
+            else if (updatedRows != 1){
+                throw new RuntimeException(String.format("Update of table wise stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
+            }
+            numTotalDelta += numTotalDeltaTable;
+            numInsertsDelta += eventCountDeltaTable.getOrDefault("c", 0L);
+            numUpdatesDelta += eventCountDeltaTable.getOrDefault("u", 0L);
+            numDeletesDelta += eventCountDeltaTable.getOrDefault("d", 0L);
+        }
+
+        // update overall stats
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        now = now.minusSeconds(now.getSecond()%30);
+        Long curTimeFloorMinuteInEpoch = now.toEpochSecond(ZoneOffset.UTC); // HH:mm:00 (floor of the minute) in epoch seconds
+        Statement updateStatement = conn.createStatement();
+        String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
+                        " num_inserts = num_inserts + %d," +
+                        " num_updates = num_updates + %d," +
+                        " num_deletes = num_deletes + %d" +
+                        " WHERE run_id = '%s' and timestamp_minute = %d", EVENT_STATS_TABLE_NAME,
+                numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta,
+                runId, curTimeFloorMinuteInEpoch);
+        updatedRows = updateStatement.executeUpdate(updateQuery);
+        if (updatedRows == 0){
+            // first insert for the minute.
+            Statement insertStatment = conn.createStatement();
+            String insertQuery = String.format("INSERT INTO %s (run_id, timestamp_minute, num_total, num_inserts, num_updates, num_deletes) " +
+                            "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, curTimeFloorMinuteInEpoch,
+                    numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta);
+            insertStatment.executeUpdate(insertQuery);
+        }
+        else if (updatedRows != 1){
+            throw new RuntimeException(String.format("Update of stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
+        }
     }
 
     public void queueSegmentCreated(long segmentNo, String segmentPath){

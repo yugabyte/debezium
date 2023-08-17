@@ -154,7 +154,7 @@ public class QueueSegment {
 
     public void sync() throws IOException, SQLException {
         fd.sync();
-        es.updateQueueSegmentCommitted(segmentNo, Files.size(Path.of(filePath)), eventCountDeltaPerTable);
+        es.updateQueueSegmentMetaInfo(segmentNo, Files.size(Path.of(filePath)), eventCountDeltaPerTable);
         // TODO: optimize to reset counters to 0 instead of clearing the map.
         eventCountDeltaPerTable.clear();
 //        insertEventCountDeltaPerTable.clear();
