@@ -320,7 +320,7 @@ public class ExportStatus {
             // update overall stats
             // CREATE TABLE exported_events_stats (run_id TEXT, timestamp_minute INTEGER, num_total INTEGER, num_inserts INTEGER, num_updates INTEGER, num_deletes INTEGER, PRIMARY KEY(run_id, timestamp_minute) );
             LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-            now = now.minusSeconds(now.getSecond());
+            now = now.minusSeconds(now.getSecond()%30);
             Long curTimeFloorMinuteInEpoch = now.toEpochSecond(ZoneOffset.UTC); // HH:mm:00 (floor of the minute) in epoch seconds
             Statement updateStatement = metadataDBConn.createStatement();
             String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
