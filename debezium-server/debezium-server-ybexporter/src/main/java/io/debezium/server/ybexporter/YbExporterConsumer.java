@@ -5,7 +5,10 @@
  */
 package io.debezium.server.ybexporter;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +39,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
-
+    String triggersDir;
     String sourceType;
     private Map<String, Table> tableMap = new HashMap<>();
     private RecordParser parser;
@@ -55,7 +58,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
         retrieveSourceType(config);
-
+        triggersDir = config.getValue(PROP_PREFIX + "triggers.dir", String.class);
 
         exportStatus = ExportStatus.getInstance(dataDir);
         exportStatus.setSourceType(sourceType);
@@ -112,6 +115,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             if (exportStatus != null) {
                 exportStatus.flushToDisk();
             }
+            checkForCutoverAndHandle();
             try {
                 Thread.sleep(2000);
             }
@@ -119,6 +123,30 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
                 // Noop.
             }
         }
+    }
+
+    private void checkForCutoverAndHandle(){
+        LOGGER.info("cutover trigger path = {}", triggersDir);
+        File cutoverTriggerFile = new File(Path.of(triggersDir, "cutover").toString());
+        if (!cutoverTriggerFile.exists()){
+            return;
+        }
+        LOGGER.info("Observed cutover trigger file. Cutting over...");
+        Record cutoverRecord = new Record();
+        cutoverRecord.op = "cutover";
+        cutoverRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
+        eventQueue.writeRecord(cutoverRecord);
+        eventQueue.close();
+
+        exportStatus.flushToDisk();
+        File cutoverProcessedFile = new File(Path.of(triggersDir, "cutover.source").toString());
+        try {
+            cutoverProcessedFile.createNewFile();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        LOGGER.info("Cutover processing complete. Exiting...");
+        System.exit(0);
     }
 
     @Override
