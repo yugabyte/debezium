@@ -272,7 +272,7 @@ public class ExportStatus {
         Statement insertStmt;
         try {
             insertStmt = metadataDBConn.createStatement();
-            insertStmt.executeUpdate(String.format("INSERT OR IGNORE into %s VALUES(%d, '%s', 0)", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath));
+            insertStmt.executeUpdate(String.format("INSERT OR IGNORE into %s VALUES(%d, '%s', 0, 0, 0, 0)", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath));
             insertStmt.close();
         } catch (SQLException e) {
             throw new RuntimeException(String.format("Failed to run update queue segment size " +
