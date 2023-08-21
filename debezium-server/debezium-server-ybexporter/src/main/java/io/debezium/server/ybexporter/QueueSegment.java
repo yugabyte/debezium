@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import org.graalvm.collections.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,18 +18,17 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileDescriptor;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.io.SyncFailedException;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.HashMap;
-import java.util.Objects;
+import java.util.Map;
 
 /**
  * A QueueSegment represents a segment of the cdc queue.
@@ -45,6 +45,8 @@ public class QueueSegment {
     private long byteCount;
     private ObjectWriter ow;
     private ExportStatus es;
+    // (schemaName, tableName) -> (operation -> count)
+    private Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable;
 
     public QueueSegment(String datadirStr, long segmentNo, String filePath){
         this.segmentNo = segmentNo;
@@ -62,6 +64,7 @@ public class QueueSegment {
         if (committedSize < byteCount){
             truncateFileAfterOffset(committedSize);
         }
+        eventCountDeltaPerTable = new HashMap<>();
     }
 
     private void openFile() throws IOException {
@@ -81,10 +84,17 @@ public class QueueSegment {
             String cdcJson = ow.writeValueAsString(generateCdcMessageForRecord(r)) + "\n";
             writer.write(cdcJson);
             byteCount += cdcJson.length();
+            updateStats(r);
         }
         catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+    private void updateStats(Record r){
+        Pair<String, String> fullyQualifiedTableName =  Pair.create(r.t.schemaName, r.t.tableName);
+
+        Map<String, Long> tableMap = eventCountDeltaPerTable.computeIfAbsent(fullyQualifiedTableName, k -> new HashMap<>());
+        tableMap.put(r.op, tableMap.getOrDefault(r.op, 0L) + 1);
     }
 
     private HashMap<String, Object> generateCdcMessageForRecord(Record r) {
@@ -116,7 +126,7 @@ public class QueueSegment {
         writer.flush();
     }
 
-    public void close() throws IOException {
+    public void close() throws IOException, SQLException {
         LOGGER.info("Closing queue file {}", filePath);
         writer.write(EOF_MARKER);
         writer.write("\n");
@@ -126,10 +136,11 @@ public class QueueSegment {
         writer.close();
     }
 
-    public void sync() throws IOException{
+    public void sync() throws IOException, SQLException {
         fd.sync();
-        // TODO: is Files.size going to be slow? Maybe just use byteCount?
-        es.updateQueueSegmentCommittedSize(segmentNo, Files.size(Path.of(filePath)));
+        es.updateQueueSegmentMetaInfo(segmentNo, Files.size(Path.of(filePath)), eventCountDeltaPerTable);
+        // TODO: optimize to reset counters to 0 instead of clearing the map.
+        eventCountDeltaPerTable.clear();
     }
 
     public long getSequenceNumberOfLastRecord(){
