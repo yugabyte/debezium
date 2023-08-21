@@ -15,6 +15,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,10 +26,10 @@ import java.util.concurrent.ConcurrentMap;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.kafka.connect.data.Field;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
+import org.graalvm.collections.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,8 +56,11 @@ public class ExportStatus {
     private File f;
     private File tempf;
     private String metadataDBPath;
+    private String runId;
     private Connection metadataDBConn;
     private static String QUEUE_SEGMENT_META_TABLE_NAME = "queue_segment_meta";
+    private static String EVENT_STATS_TABLE_NAME = "exported_events_stats";
+    private static String EVENT_STATS_PER_TABLE_TABLE_NAME = "exported_events_stats_per_table";
 
 
     /**
@@ -83,6 +88,8 @@ public class ExportStatus {
         // open connection to metadataDB
         // TODO: interpret config vars once and make them globally available to all classes
         final Config config = ConfigProvider.getConfig();
+        runId = config.getValue("debezium.sink.ybexporter.run.id", String.class);
+
         metadataDBPath = config.getValue("debezium.sink.ybexporter.metadata.db.path", String.class);
         if (metadataDBPath == null){
             throw new RuntimeException("please provide value for debezium.sink.ybexporter.metadata.db.path.");
@@ -253,18 +260,99 @@ public class ExportStatus {
         this.sourceType = sourceType;
     }
 
-    public void updateQueueSegmentCommittedSize(long segmentNo, long committedSize){
-        Statement updateStmt;
+    public void updateQueueSegmentMetaInfo(long segmentNo, long committedSize, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
+        final boolean oldAutoCommit = metadataDBConn.getAutoCommit();
+        metadataDBConn.setAutoCommit(false);
+        int updatedRows;
         try {
-            updateStmt = metadataDBConn.createStatement();
-            int updatedRows = updateStmt.executeUpdate(String.format("UPDATE %s SET size_committed = %d WHERE segment_no=%d", QUEUE_SEGMENT_META_TABLE_NAME, committedSize, segmentNo));
+            Statement queueMetaUpdateStmt = metadataDBConn.createStatement();
+            updatedRows = queueMetaUpdateStmt.executeUpdate(String.format("UPDATE %s SET size_committed = %d WHERE segment_no=%d", QUEUE_SEGMENT_META_TABLE_NAME, committedSize, segmentNo));
             if (updatedRows != 1){
-                throw new RuntimeException(String.format("Update of queue segment metadata failed with query-%s, rowsAffected -%d", updateStmt, updatedRows));
+                throw new RuntimeException(String.format("Update of queue segment metadata failed with query-%s, rowsAffected -%d", queueMetaUpdateStmt, updatedRows));
             }
-            updateStmt.close();
+            queueMetaUpdateStmt.close();
+            updateEventsStats(metadataDBConn, eventCountDeltaPerTable);
+
         } catch (SQLException e) {
-            throw new RuntimeException(String.format("Failed to run update queue segment size " +
-                    "- segmentNo: %d, committedSize:%d", segmentNo, committedSize), e);
+            metadataDBConn.rollback();
+            throw new RuntimeException(String.format("Failed to  update queue segment meta and stats " +
+                    "- segmentNo: %d, committedSize:%d, eventCount:%s", segmentNo, committedSize, eventCountDeltaPerTable), e);
+        } finally {
+            metadataDBConn.commit();
+            metadataDBConn.setAutoCommit(oldAutoCommit);
+        }
+
+    }
+
+    private void updateEventsStats(Connection conn, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
+        int updatedRows;
+
+        long numTotalDelta = 0;
+        long numInsertsDelta = 0;
+        long numUpdatesDelta = 0;
+        long numDeletesDelta = 0;
+
+        // update stats per table
+        for (var entry : eventCountDeltaPerTable.entrySet()) {
+            Statement tableWiseStatsUpdateStmt = conn.createStatement();
+            Pair<String, String> tableQualifiedName = entry.getKey();
+            Map<String, Long> eventCountDeltaTable = entry.getValue();
+            Long numTotalDeltaTable = eventCountDeltaTable.getOrDefault("c", 0L) + eventCountDeltaTable.getOrDefault("u", 0L) + eventCountDeltaTable.getOrDefault("d", 0L);
+            String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
+                            " num_inserts = num_inserts + %d," +
+                            " num_updates = num_updates + %d," +
+                            " num_deletes = num_deletes + %d" +
+                            " WHERE schema_name = '%s' and table_name = '%s'", EVENT_STATS_PER_TABLE_TABLE_NAME,
+                    numTotalDeltaTable,
+                    eventCountDeltaTable.getOrDefault("c", 0L),
+                    eventCountDeltaTable.getOrDefault("u", 0L),
+                    eventCountDeltaTable.getOrDefault("d", 0L),
+                    tableQualifiedName.getLeft(),
+                    tableQualifiedName.getRight());
+            updatedRows = tableWiseStatsUpdateStmt.executeUpdate(updateQuery);
+            if (updatedRows == 0){
+                // need to insert for the first time
+                Statement insertStatment = conn.createStatement();
+                String insertQuery = String.format("INSERT INTO %s (schema_name, table_name, num_total, num_inserts, num_updates, num_deletes) " +
+                                "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, tableQualifiedName.getLeft(), tableQualifiedName.getRight(),
+                        numTotalDeltaTable,
+                        eventCountDeltaTable.getOrDefault("c", 0L),
+                        eventCountDeltaTable.getOrDefault("u", 0L),
+                        eventCountDeltaTable.getOrDefault("d", 0L));
+                insertStatment.executeUpdate(insertQuery);
+            }
+            else if (updatedRows != 1){
+                throw new RuntimeException(String.format("Update of table wise stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
+            }
+            numTotalDelta += numTotalDeltaTable;
+            numInsertsDelta += eventCountDeltaTable.getOrDefault("c", 0L);
+            numUpdatesDelta += eventCountDeltaTable.getOrDefault("u", 0L);
+            numDeletesDelta += eventCountDeltaTable.getOrDefault("d", 0L);
+        }
+
+        // update overall stats
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime nowFlooredToNearest30s = now.minusSeconds(now.getSecond()%30);
+        Long nowFlooredToNearest30sEpoch = nowFlooredToNearest30s.toEpochSecond(ZoneOffset.UTC);
+        Statement updateStatement = conn.createStatement();
+        String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
+                        " num_inserts = num_inserts + %d," +
+                        " num_updates = num_updates + %d," +
+                        " num_deletes = num_deletes + %d" +
+                        " WHERE run_id = '%s' and timestamp = %d", EVENT_STATS_TABLE_NAME,
+                numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta,
+                runId, nowFlooredToNearest30sEpoch);
+        updatedRows = updateStatement.executeUpdate(updateQuery);
+        if (updatedRows == 0){
+            // first insert for the minute.
+            Statement insertStatment = conn.createStatement();
+            String insertQuery = String.format("INSERT INTO %s (run_id, timestamp, num_total, num_inserts, num_updates, num_deletes) " +
+                            "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, nowFlooredToNearest30sEpoch,
+                    numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta);
+            insertStatment.executeUpdate(insertQuery);
+        }
+        else if (updatedRows != 1){
+            throw new RuntimeException(String.format("Update of stats failed with query-%s, rowsAffected -%d", updateQuery, updatedRows));
         }
     }
 
@@ -272,7 +360,7 @@ public class ExportStatus {
         Statement insertStmt;
         try {
             insertStmt = metadataDBConn.createStatement();
-            insertStmt.executeUpdate(String.format("INSERT OR IGNORE into %s VALUES(%d, '%s', 0)", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath));
+            insertStmt.executeUpdate(String.format("INSERT OR IGNORE into %s (segment_no, file_path, size_committed) VALUES(%d, '%s', 0)", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath));
             insertStmt.close();
         } catch (SQLException e) {
             throw new RuntimeException(String.format("Failed to run update queue segment size " +
