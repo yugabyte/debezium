@@ -137,15 +137,9 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         cutoverRecord.op = "cutover";
         cutoverRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
         synchronized (eventQueue){ // need to synchronize with handleBatch
-            LOGGER.info("in synchronized block for cutover, sleeping..");
-            try {
-                Thread.sleep(20000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            LOGGER.info("in synchronized block for cutover, writing record..");
             eventQueue.writeRecord(cutoverRecord);
             eventQueue.close();
+            LOGGER.info("Wrote cutover record to event queue");
 
             exportStatus.flushToDisk();
             LOGGER.info("Cutover processing complete. Exiting...");
