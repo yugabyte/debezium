@@ -6,14 +6,12 @@
 package io.debezium.server.ybexporter;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.Lock;
 
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.Dependent;
@@ -116,7 +114,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             if (exportStatus != null) {
                 exportStatus.flushToDisk();
             }
-            checkForCutoverAndHandle();
+            checkForSwitchOperationAndHandle("cutover");
             try {
                 Thread.sleep(2000);
             }
@@ -126,24 +124,23 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         }
     }
 
-    private void checkForCutoverAndHandle(){
-        LOGGER.info("cutover trigger path = {}", triggersDir);
-        File cutoverTriggerFile = new File(Path.of(triggersDir, "cutover").toString());
-        if (!cutoverTriggerFile.exists()){
+    private void checkForSwitchOperationAndHandle(String operation){
+        File switchTriggerFile = new File(Path.of(triggersDir, operation).toString());
+        if (!switchTriggerFile.exists()){
             return;
         }
-        LOGGER.info("Observed cutover trigger file. Cutting over...");
-        Record cutoverRecord = new Record();
-        cutoverRecord.op = "cutover";
-        cutoverRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
+        LOGGER.info("Observed {} trigger file. Cutting over...", operation);
+        Record switchOperationRecord = new Record();
+        switchOperationRecord.op = operation;
+        switchOperationRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
         synchronized (eventQueue){ // need to synchronize with handleBatch
-            eventQueue.writeRecord(cutoverRecord);
+            eventQueue.writeRecord(switchOperationRecord);
             eventQueue.close();
-            LOGGER.info("Wrote cutover record to event queue");
+            LOGGER.info("Wrote {} record to event queue", operation);
 
             exportStatus.flushToDisk();
-            LOGGER.info("Cutover processing complete. Exiting...");
-            shutDown = true; // to ensure that no event gets written after cutover.
+            LOGGER.info("{} processing complete. Exiting...", operation);
+            shutDown = true; // to ensure that no event gets written after switch operation.
         }
         System.exit(0);
     }
