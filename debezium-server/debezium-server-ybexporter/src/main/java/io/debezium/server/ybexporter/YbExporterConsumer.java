@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
 
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.Dependent;
@@ -49,11 +50,11 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private SequenceObjectUpdater sequenceObjectUpdater;
     private RecordTransformer recordTransformer;
     Thread flusherThread;
+    boolean shutDown = false;
 
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
-
         final Config config = ConfigProvider.getConfig();
 
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
@@ -135,17 +136,21 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         Record cutoverRecord = new Record();
         cutoverRecord.op = "cutover";
         cutoverRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
-        eventQueue.writeRecord(cutoverRecord);
-        eventQueue.close();
+        synchronized (eventQueue){ // need to synchronize with handleBatch
+            LOGGER.info("in synchronized block for cutover, sleeping..");
+            try {
+                Thread.sleep(20000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            LOGGER.info("in synchronized block for cutover, writing record..");
+            eventQueue.writeRecord(cutoverRecord);
+            eventQueue.close();
 
-        exportStatus.flushToDisk();
-        File cutoverProcessedFile = new File(Path.of(triggersDir, "cutover.source").toString());
-        try {
-            cutoverProcessedFile.createNewFile();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            exportStatus.flushToDisk();
+            LOGGER.info("Cutover processing complete. Exiting...");
+            shutDown = true; // to ensure that no event gets written after cutover.
         }
-        LOGGER.info("Cutover processing complete. Exiting...");
         System.exit(0);
     }
 
@@ -171,7 +176,18 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
             // WRITE
             RecordWriter writer = getWriterForRecord(r);
-            writer.writeRecord(r);
+            if (exportStatus.getMode().equals(ExportMode.STREAMING)){
+                // need to synchronize access with cutover/fall-forward thread
+                synchronized (writer){
+                    if (shutDown){
+                        return;
+                    }
+                    writer.writeRecord(r);
+                }
+            }
+            else{
+                writer.writeRecord(r);
+            }
             // Handle snapshot->cdc transition
             checkIfSnapshotComplete(r);
 
