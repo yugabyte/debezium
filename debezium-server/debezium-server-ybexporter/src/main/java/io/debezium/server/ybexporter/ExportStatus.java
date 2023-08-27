@@ -77,22 +77,6 @@ public class ExportStatus {
         ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
         f = new File(getFilePath(datadirStr));
 
-        // mkdir schemas
-        File schemasRootDir = new File(String.format("%s/%s", dataDir, "schemas"));
-        if (!schemasRootDir.exists()){
-            boolean dirCreated = new File(String.format("%s/%s", dataDir, "schemas")).mkdir();
-            if (!dirCreated){
-                throw new RuntimeException("failed to create dir for schemas");
-            }
-        }
-        File schemasDir = new File(String.format("%s/%s/%s", dataDir, "schemas", exportSourceType));
-        if (!schemasDir.exists()){
-            boolean dirCreated = schemasDir.mkdir();
-            if (!dirCreated){
-                throw new RuntimeException("failed to create dir for schemas");
-            }
-        }
-
         // open connection to metadataDB
         // TODO: interpret config vars once and make them globally available to all classes
         final Config config = ConfigProvider.getConfig();
@@ -110,6 +94,22 @@ public class ExportStatus {
             LOGGER.info("Connected to metadata db at {}", metadataDBPath);
         } catch (SQLException e) {
             throw new RuntimeException(String.format("Couldn't connect to metadata DB at %s", metadataDBPath), e);
+        }
+
+        // mkdir schemas
+        File schemasRootDir = new File(String.format("%s/%s", dataDir, "schemas"));
+        if (!schemasRootDir.exists()){
+            boolean dirCreated = new File(String.format("%s/%s", dataDir, "schemas")).mkdir();
+            if (!dirCreated){
+                throw new RuntimeException("failed to create dir for schemas");
+            }
+        }
+        File schemasDir = new File(String.format("%s/%s/%s", dataDir, "schemas", exportSourceType));
+        if (!schemasDir.exists()){
+            boolean dirCreated = schemasDir.mkdir();
+            if (!dirCreated){
+                throw new RuntimeException("failed to create dir for schemas");
+            }
         }
 
         instance = this;
