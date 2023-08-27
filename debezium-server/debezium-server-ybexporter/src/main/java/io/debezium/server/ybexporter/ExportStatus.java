@@ -78,9 +78,16 @@ public class ExportStatus {
         f = new File(getFilePath(datadirStr));
 
         // mkdir schemas
-        File schemasDir = new File(String.format("%s/%s", dataDir, "schemas"));
-        if (!schemasDir.exists()){
+        File schemasRootDir = new File(String.format("%s/%s", dataDir, "schemas"));
+        if (!schemasRootDir.exists()){
             boolean dirCreated = new File(String.format("%s/%s", dataDir, "schemas")).mkdir();
+            if (!dirCreated){
+                throw new RuntimeException("failed to create dir for schemas");
+            }
+        }
+        File schemasDir = new File(String.format("%s/%s/%s", dataDir, "schemas", exportSourceType));
+        if (!schemasDir.exists()){
+            boolean dirCreated = schemasDir.mkdir();
             if (!dirCreated){
                 throw new RuntimeException("failed to create dir for schemas");
             }
