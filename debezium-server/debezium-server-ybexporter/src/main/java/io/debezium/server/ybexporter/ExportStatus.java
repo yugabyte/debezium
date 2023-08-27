@@ -57,6 +57,7 @@ public class ExportStatus {
     private File tempf;
     private String metadataDBPath;
     private String runId;
+    private String exportSourceType;
     private Connection metadataDBConn;
     private static String QUEUE_SEGMENT_META_TABLE_NAME = "queue_segment_meta";
     private static String EVENT_STATS_TABLE_NAME = "exported_events_stats";
@@ -89,6 +90,7 @@ public class ExportStatus {
         // TODO: interpret config vars once and make them globally available to all classes
         final Config config = ConfigProvider.getConfig();
         runId = config.getValue("debezium.sink.ybexporter.run.id", String.class);
+        exportSourceType = config.getValue("debezium.sink.ybexporter.source.type", String.class);
 
         metadataDBPath = config.getValue("debezium.sink.ybexporter.metadata.db.path", String.class);
         if (metadataDBPath == null){
@@ -142,7 +144,7 @@ public class ExportStatus {
             if ((sourceType.equals("postgresql")) && (!t.schemaName.equals("public"))){
                 fileName = t.schemaName + "." + fileName;
             }
-            String schemaFilePath = String.format("%s/schemas/%s_schema.json", dataDir, fileName);
+            String schemaFilePath = String.format("%s/schemas/%s/%s_schema.json", dataDir, exportSourceType, fileName);
             File schemaFile = new File(schemaFilePath);
             schemaWriter.writeValue(schemaFile, tableSchema);
         } catch (IOException e) {
