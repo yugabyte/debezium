@@ -39,7 +39,7 @@ public class Main {
             if (table == null) {
                 throw new RuntimeException("No table found with the specified name");
             }
-            String streamID = client.createCDCStream(table, parameters.dbName, "PROTO", "IMPLICIT", "ALL").getStreamId();
+            String streamID = client.createCDCStream(table, parameters.dbName, "PROTO", "EXPLICIT", "ALL").getStreamId();
             System.out.println("CDC Stream ID: " + streamID);
         } else if (parameters.listMasters) {
             String tserverNode = parameters.masterAddresses.split(",")[0].split(":")[0] + ":9100";
