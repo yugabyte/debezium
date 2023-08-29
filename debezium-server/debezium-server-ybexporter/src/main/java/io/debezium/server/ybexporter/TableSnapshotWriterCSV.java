@@ -15,6 +15,7 @@ import java.util.ArrayList;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.QuoteMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +28,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     private CSVPrinter csvPrinter;
     private FileOutputStream fos;
     private FileDescriptor fd;
+    private String ybVoyagerNullString = "__$#__YBVOYAGER_NULL__$#__";
 
     public TableSnapshotWriterCSV(String datadirStr, Table tbl, String sourceType) {
         dataDir = datadirStr;
@@ -39,7 +41,10 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             fd = fos.getFD();
             var f = new FileWriter(fd);
             var bufferedWriter = new BufferedWriter(f);
-            CSVFormat fmt = CSVFormat.POSTGRESQL_CSV;
+            CSVFormat fmt = CSVFormat.POSTGRESQL_CSV
+                    .builder()
+                    .setNullString(ybVoyagerNullString)
+                    .build();
             csvPrinter = new CSVPrinter(bufferedWriter, fmt);
             ArrayList<String> cols = t.getColumns();
             String header = String.join(fmt.getDelimiterString(), cols) + fmt.getRecordSeparator();
