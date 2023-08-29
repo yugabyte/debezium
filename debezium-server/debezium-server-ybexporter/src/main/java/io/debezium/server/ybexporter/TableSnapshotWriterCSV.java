@@ -28,7 +28,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     private CSVPrinter csvPrinter;
     private FileOutputStream fos;
     private FileDescriptor fd;
-    private String ybVoyagerNullString = "__$#__YBVOYAGER_NULL__$#__";
+    private String ybVoyagerNullString = "__YBV_NULL__";
 
     public TableSnapshotWriterCSV(String datadirStr, Table tbl, String sourceType) {
         dataDir = datadirStr;
