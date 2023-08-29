@@ -57,6 +57,7 @@ public class ExportStatus {
     private File tempf;
     private String metadataDBPath;
     private String runId;
+    private String exporterRole;
     private Connection metadataDBConn;
     private static String QUEUE_SEGMENT_META_TABLE_NAME = "queue_segment_meta";
     private static String EVENT_STATS_TABLE_NAME = "exported_events_stats";
@@ -76,19 +77,11 @@ public class ExportStatus {
         ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
         f = new File(getFilePath(datadirStr));
 
-        // mkdir schemas
-        File schemasDir = new File(String.format("%s/%s", dataDir, "schemas"));
-        if (!schemasDir.exists()){
-            boolean dirCreated = new File(String.format("%s/%s", dataDir, "schemas")).mkdir();
-            if (!dirCreated){
-                throw new RuntimeException("failed to create dir for schemas");
-            }
-        }
-
         // open connection to metadataDB
         // TODO: interpret config vars once and make them globally available to all classes
         final Config config = ConfigProvider.getConfig();
         runId = config.getValue("debezium.sink.ybexporter.run.id", String.class);
+        exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
 
         metadataDBPath = config.getValue("debezium.sink.ybexporter.metadata.db.path", String.class);
         if (metadataDBPath == null){
@@ -101,6 +94,22 @@ public class ExportStatus {
             LOGGER.info("Connected to metadata db at {}", metadataDBPath);
         } catch (SQLException e) {
             throw new RuntimeException(String.format("Couldn't connect to metadata DB at %s", metadataDBPath), e);
+        }
+
+        // mkdir schemas
+        File schemasRootDir = new File(String.format("%s/%s", dataDir, "schemas"));
+        if (!schemasRootDir.exists()){
+            boolean dirCreated = new File(String.format("%s/%s", dataDir, "schemas")).mkdir();
+            if (!dirCreated){
+                throw new RuntimeException("failed to create dir for schemas");
+            }
+        }
+        File schemasDir = new File(String.format("%s/%s/%s", dataDir, "schemas", exporterRole));
+        if (!schemasDir.exists()){
+            boolean dirCreated = schemasDir.mkdir();
+            if (!dirCreated){
+                throw new RuntimeException("failed to create dir for schemas");
+            }
         }
 
         instance = this;
@@ -142,7 +151,7 @@ public class ExportStatus {
             if ((sourceType.equals("postgresql")) && (!t.schemaName.equals("public"))){
                 fileName = t.schemaName + "." + fileName;
             }
-            String schemaFilePath = String.format("%s/schemas/%s_schema.json", dataDir, fileName);
+            String schemaFilePath = String.format("%s/schemas/%s/%s_schema.json", dataDir, exporterRole, fileName);
             File schemaFile = new File(schemaFilePath);
             schemaWriter.writeValue(schemaFile, tableSchema);
         } catch (IOException e) {

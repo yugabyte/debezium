@@ -10,6 +10,8 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.graalvm.collections.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +47,7 @@ public class QueueSegment {
     private long byteCount;
     private ObjectWriter ow;
     private ExportStatus es;
+    private String exporterRole;
     // (schemaName, tableName) -> (operation -> count)
     private Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable;
 
@@ -65,6 +68,8 @@ public class QueueSegment {
             truncateFileAfterOffset(committedSize);
         }
         eventCountDeltaPerTable = new HashMap<>();
+        final Config config = ConfigProvider.getConfig();
+        exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
     }
 
     private void openFile() throws IOException {
@@ -119,6 +124,7 @@ public class QueueSegment {
         cdcInfo.put("table_name", r.t.tableName);
         cdcInfo.put("key", key);
         cdcInfo.put("fields", fields);
+        cdcInfo.put("exporter_role", exporterRole);
         return cdcInfo;
     }
 
