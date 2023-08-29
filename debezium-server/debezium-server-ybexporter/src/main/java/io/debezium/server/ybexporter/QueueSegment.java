@@ -47,7 +47,7 @@ public class QueueSegment {
     private long byteCount;
     private ObjectWriter ow;
     private ExportStatus es;
-    private String exportSourceType;
+    private String exporterRole;
     // (schemaName, tableName) -> (operation -> count)
     private Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable;
 
@@ -69,7 +69,7 @@ public class QueueSegment {
         }
         eventCountDeltaPerTable = new HashMap<>();
         final Config config = ConfigProvider.getConfig();
-        exportSourceType = config.getValue("debezium.sink.ybexporter.source.type", String.class);
+        exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
     }
 
     private void openFile() throws IOException {
@@ -124,7 +124,7 @@ public class QueueSegment {
         cdcInfo.put("table_name", r.t.tableName);
         cdcInfo.put("key", key);
         cdcInfo.put("fields", fields);
-        cdcInfo.put("export_source_type", exportSourceType);
+        cdcInfo.put("exporter_role", exporterRole);
         return cdcInfo;
     }
 
