@@ -57,7 +57,7 @@ public class ExportStatus {
     private File tempf;
     private String metadataDBPath;
     private String runId;
-    private String exportSourceType;
+    private String exporterRole;
     private Connection metadataDBConn;
     private static String QUEUE_SEGMENT_META_TABLE_NAME = "queue_segment_meta";
     private static String EVENT_STATS_TABLE_NAME = "exported_events_stats";
@@ -81,7 +81,7 @@ public class ExportStatus {
         // TODO: interpret config vars once and make them globally available to all classes
         final Config config = ConfigProvider.getConfig();
         runId = config.getValue("debezium.sink.ybexporter.run.id", String.class);
-        exportSourceType = config.getValue("debezium.sink.ybexporter.source.type", String.class);
+        exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
 
         metadataDBPath = config.getValue("debezium.sink.ybexporter.metadata.db.path", String.class);
         if (metadataDBPath == null){
@@ -104,7 +104,7 @@ public class ExportStatus {
                 throw new RuntimeException("failed to create dir for schemas");
             }
         }
-        File schemasDir = new File(String.format("%s/%s/%s", dataDir, "schemas", exportSourceType));
+        File schemasDir = new File(String.format("%s/%s/%s", dataDir, "schemas", exporterRole));
         if (!schemasDir.exists()){
             boolean dirCreated = schemasDir.mkdir();
             if (!dirCreated){
@@ -151,7 +151,7 @@ public class ExportStatus {
             if ((sourceType.equals("postgresql")) && (!t.schemaName.equals("public"))){
                 fileName = t.schemaName + "." + fileName;
             }
-            String schemaFilePath = String.format("%s/schemas/%s/%s_schema.json", dataDir, exportSourceType, fileName);
+            String schemaFilePath = String.format("%s/schemas/%s/%s_schema.json", dataDir, exporterRole, fileName);
             File schemaFile = new File(schemaFilePath);
             schemaWriter.writeValue(schemaFile, tableSchema);
         } catch (IOException e) {
