@@ -341,8 +341,8 @@ public class ExportStatus {
 
         // update overall stats
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        LocalDateTime nowFlooredToNearest30s = now.minusSeconds(now.getSecond()%30);
-        Long nowFlooredToNearest30sEpoch = nowFlooredToNearest30s.toEpochSecond(ZoneOffset.UTC);
+        LocalDateTime nowFlooredToNearest10s = now.minusSeconds(now.getSecond()%10);
+        Long nowFlooredToNearest10sEpoch = nowFlooredToNearest10s.toEpochSecond(ZoneOffset.UTC);
         Statement updateStatement = conn.createStatement();
         String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
                         " num_inserts = num_inserts + %d," +
@@ -350,13 +350,13 @@ public class ExportStatus {
                         " num_deletes = num_deletes + %d" +
                         " WHERE run_id = '%s' and timestamp = %d", EVENT_STATS_TABLE_NAME,
                 numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta,
-                runId, nowFlooredToNearest30sEpoch);
+                runId, nowFlooredToNearest10sEpoch);
         updatedRows = updateStatement.executeUpdate(updateQuery);
         if (updatedRows == 0){
             // first insert for the minute.
             Statement insertStatment = conn.createStatement();
             String insertQuery = String.format("INSERT INTO %s (run_id, timestamp, num_total, num_inserts, num_updates, num_deletes) " +
-                            "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, nowFlooredToNearest30sEpoch,
+                            "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, nowFlooredToNearest10sEpoch,
                     numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta);
             insertStatment.executeUpdate(insertQuery);
         }
