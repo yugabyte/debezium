@@ -156,6 +156,7 @@ class KafkaConnectRecordParser implements RecordParser {
         for (Field f : after.schema().fields()) {
             Object fieldValue;
             if (sourceType.equals("yb")){
+                // TODO: write a proper transformer for this logic
                 // values in the debezium connector are as follows:
                 // "val1" : {
                 //  "value" : "value for val1 column",
