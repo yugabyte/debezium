@@ -99,7 +99,8 @@ class KafkaConnectRecordParser implements RecordParser {
             }
             for (Field f : structWithAllFields.schema().fields()) {
                 if (sourceType.equals("yb")){
-                    t.fieldSchemas.put(f.name(), f.schema().field("value"));
+//                    t.fieldSchemas.put(f.name(), f.schema().field("value"));
+                    t.fieldSchemas.put(f.name(), new Field(f.name(), 0, f.schema().field("value").schema()));
                 }
                 else {
                     t.fieldSchemas.put(f.name(), f);
