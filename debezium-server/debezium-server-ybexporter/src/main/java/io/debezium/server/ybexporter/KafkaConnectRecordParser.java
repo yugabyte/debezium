@@ -114,7 +114,17 @@ class KafkaConnectRecordParser implements RecordParser {
 
     protected void parseKeyFields(Struct key, Record r) {
         for (Field f : key.schema().fields()) {
-            Object fieldValue = key.get(f);
+            Object fieldValue;
+            if (sourceType.equals("yb")){
+                Struct valueAndSet = key.getStruct(f.name());
+                if (!valueAndSet.getBoolean("set")){
+                    continue;
+                }
+                fieldValue = valueAndSet.get("value");
+            }
+            else{
+                fieldValue = key.get(f);
+            }
             r.addKeyField(f.name(), fieldValue);
 
         }
