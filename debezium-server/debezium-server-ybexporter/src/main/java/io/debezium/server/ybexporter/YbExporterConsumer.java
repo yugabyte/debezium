@@ -5,7 +5,9 @@
  */
 package io.debezium.server.ybexporter;
 
+import java.io.File;
 import java.net.URISyntaxException;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +38,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
-
+    String triggersDir;
     String sourceType;
     private Map<String, Table> tableMap = new HashMap<>();
     private RecordParser parser;
@@ -46,16 +48,16 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private SequenceObjectUpdater sequenceObjectUpdater;
     private RecordTransformer recordTransformer;
     Thread flusherThread;
+    boolean shutDown = false;
 
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
-
         final Config config = ConfigProvider.getConfig();
 
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
         retrieveSourceType(config);
-
+        triggersDir = config.getValue(PROP_PREFIX + "triggers.dir", String.class);
 
         exportStatus = ExportStatus.getInstance(dataDir);
         exportStatus.setSourceType(sourceType);
@@ -112,6 +114,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             if (exportStatus != null) {
                 exportStatus.flushToDisk();
             }
+            checkForSwitchOperationAndHandle("cutover");
             try {
                 Thread.sleep(2000);
             }
@@ -119,6 +122,27 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
                 // Noop.
             }
         }
+    }
+
+    private void checkForSwitchOperationAndHandle(String operation){
+        File switchTriggerFile = new File(Path.of(triggersDir, operation).toString());
+        if (!switchTriggerFile.exists()){
+            return;
+        }
+        LOGGER.info("Observed {} trigger file. Cutting over...", operation);
+        Record switchOperationRecord = new Record();
+        switchOperationRecord.op = operation;
+        switchOperationRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
+        synchronized (eventQueue){ // need to synchronize with handleBatch
+            eventQueue.writeRecord(switchOperationRecord);
+            eventQueue.close();
+            LOGGER.info("Wrote {} record to event queue", operation);
+
+            exportStatus.flushToDisk();
+            LOGGER.info("{} processing complete. Exiting...", operation);
+            shutDown = true; // to ensure that no event gets written after switch operation.
+        }
+        System.exit(0);
     }
 
     @Override
@@ -143,7 +167,18 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
             // WRITE
             RecordWriter writer = getWriterForRecord(r);
-            writer.writeRecord(r);
+            if (exportStatus.getMode().equals(ExportMode.STREAMING)){
+                // need to synchronize access with cutover/fall-forward thread
+                synchronized (writer){
+                    if (shutDown){
+                        return;
+                    }
+                    writer.writeRecord(r);
+                }
+            }
+            else{
+                writer.writeRecord(r);
+            }
             // Handle snapshot->cdc transition
             checkIfSnapshotComplete(r);
 
