@@ -65,19 +65,24 @@ jobs:
       - name: Build Debezium Server
         run: |
           sh buildDebeziumServer.sh
+          cd yb-client-cdc-stream-wrapper/
+          mvn clean package
       - name: Package Debezium Server
         run: |
           cd debezium-server/debezium-server-dist/target/debezium-server
-          
           # get latest 1.9.5 version of debezium. Change this during release to point to exact 1.9.5 release.
           wget -nv https://github.com/yugabyte/debezium/releases/download/voyager-debezium/debezium-server-latest-1.9.5.tar.gz
           tar -xvzf  debezium-server-latest-1.9.5.tar.gz
           rm debezium-server-latest-1.9.5.tar.gz
           mv debezium-server debezium-server-1.9.5
           
+          # package yb-client-cdc-stream-wrapper.jar into debezium-server
+          cd ${GITHUB_WORKSPACE}
+          mv yb-client-cdc-stream-wrapper/target/yb-client-cdc-stream-wrapper.jar  debezium-server/debezium-server-dist/target/debezium-server/debezium-server-1.9.5/
+          
           # package
           cd ${GITHUB_WORKSPACE}/debezium-server/debezium-server-dist/target
-          tar -zcvf ${DIST_NAME}.tar.gz debezium-server
+          tar -zcvf ${DIST_NAME}.tar.gz debezium-server          
 
       - name: Publish to voyager-debezium release
         run: |
