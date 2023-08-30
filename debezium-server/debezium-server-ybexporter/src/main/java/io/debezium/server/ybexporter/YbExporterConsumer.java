@@ -67,7 +67,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         if (exportStatus.getMode().equals(ExportMode.STREAMING)) {
             handleSnapshotComplete();
         }
-        parser = new KafkaConnectRecordParser(dataDir, tableMap);
+        parser = new KafkaConnectRecordParser(dataDir, sourceType, tableMap);
         String propertyVal = PROP_PREFIX + SequenceObjectUpdater.propertyName;
         String columnSequenceMapString = config.getOptionalValue(propertyVal, String.class).orElse(null);
         sequenceObjectUpdater = new SequenceObjectUpdater(dataDir, sourceType, columnSequenceMapString, exportStatus.getSequenceMaxMap());

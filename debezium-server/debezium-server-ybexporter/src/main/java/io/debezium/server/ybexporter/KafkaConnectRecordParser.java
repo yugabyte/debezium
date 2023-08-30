@@ -21,12 +21,14 @@ class KafkaConnectRecordParser implements RecordParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConnectRecordParser.class);
     private final ExportStatus es;
     String dataDirStr;
+    String sourceType;
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
     Record r = new Record();
 
-    public KafkaConnectRecordParser(String dataDirStr, Map<String, Table> tblMap) {
+    public KafkaConnectRecordParser(String dataDirStr, String sourceType, Map<String, Table> tblMap) {
         this.dataDirStr = dataDirStr;
+        this.sourceType = sourceType;
         es = ExportStatus.getInstance(dataDirStr);
         tableMap = tblMap;
         jsonConverter = new JsonConverter();
@@ -96,7 +98,12 @@ class KafkaConnectRecordParser implements RecordParser {
                 structWithAllFields = value.getStruct("before");
             }
             for (Field f : structWithAllFields.schema().fields()) {
-                t.fieldSchemas.put(f.name(), f);
+                if (sourceType.equals("yb")){
+                    t.fieldSchemas.put(f.name(), f.schema().field("value"));
+                }
+                else {
+                    t.fieldSchemas.put(f.name(), f);
+                }
             }
 
             tableMap.put(tableIdentifier, t);
@@ -120,19 +127,30 @@ class KafkaConnectRecordParser implements RecordParser {
      */
     protected void parseValueFields(Struct value, Record r) {
         Struct after = value.getStruct("after");
+        // TODO: error handle before is NULL
+        Struct before = value.getStruct("before");
         if (after == null) {
             return;
         }
         for (Field f : after.schema().fields()) {
-            if (r.op.equals("u")) {
-                // TODO: error handle before is NULL
-                Struct before = value.getStruct("before");
-                if (Objects.equals(after.get(f), before.get(f))) {
-                    // no need to record this as field is unchanged
+            Object fieldValue;
+            if (sourceType.equals("yb")){
+                Struct valueAndSet = after.getStruct(f.name());
+                if (!valueAndSet.getBoolean("set")){
                     continue;
                 }
+                fieldValue = valueAndSet.get("value");
             }
-            Object fieldValue = after.get(f);
+            else{
+                if (r.op.equals("u")) {
+                    if (Objects.equals(after.get(f), before.get(f))) {
+                        // no need to record this as field is unchanged
+                        continue;
+                    }
+                }
+                fieldValue = after.get(f);
+            }
+
             r.addValueField(f.name(), fieldValue);
         }
     }
