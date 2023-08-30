@@ -146,6 +146,9 @@ class KafkaConnectRecordParser implements RecordParser {
             Object fieldValue;
             if (sourceType.equals("yb")){
                 Struct valueAndSet = after.getStruct(f.name());
+                if (valueAndSet == null){
+                    continue;
+                }
                 if (!valueAndSet.getBoolean("set")){
                     continue;
                 }
