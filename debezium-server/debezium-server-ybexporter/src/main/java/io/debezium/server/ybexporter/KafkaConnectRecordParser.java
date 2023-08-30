@@ -99,7 +99,12 @@ class KafkaConnectRecordParser implements RecordParser {
             }
             for (Field f : structWithAllFields.schema().fields()) {
                 if (sourceType.equals("yb")){
-//                    t.fieldSchemas.put(f.name(), f.schema().field("value"));
+                    // values in the debezium connector are as follows:
+                    // "val1" : {
+                    //  "value" : "value for val1 column",
+                    //  "set" : true
+                    //}
+                    // Therefore, we need to get the schema of the inner value field, but name of the outer field
                     t.fieldSchemas.put(f.name(), new Field(f.name(), 0, f.schema().field("value").schema()));
                 }
                 else {
@@ -117,6 +122,11 @@ class KafkaConnectRecordParser implements RecordParser {
         for (Field f : key.schema().fields()) {
             Object fieldValue;
             if (sourceType.equals("yb")){
+                // values in the debezium connector are as follows:
+                // "val1" : {
+                //  "value" : "value for val1 column",
+                //  "set" : true
+                //}
                 Struct valueAndSet = key.getStruct(f.name());
                 if (!valueAndSet.getBoolean("set")){
                     continue;
@@ -146,10 +156,20 @@ class KafkaConnectRecordParser implements RecordParser {
         for (Field f : after.schema().fields()) {
             Object fieldValue;
             if (sourceType.equals("yb")){
+                // values in the debezium connector are as follows:
+                // "val1" : {
+                //  "value" : "value for val1 column",
+                //  "set" : true
+                //}
                 Struct valueAndSet = after.getStruct(f.name());
-                if (valueAndSet == null){
-                    continue;
+                if (r.op.equals("u")) {
+                    // in the default configuration of the stream, for an update, the fields in the after struct
+                    // are only the delta fields, therefore, it is possible for a field to not be there.
+                    if (valueAndSet == null){
+                        continue;
+                    }
                 }
+
                 if (!valueAndSet.getBoolean("set")){
                     continue;
                 }
