@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import org.sqlite.SQLiteConfig;
 
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
@@ -90,7 +91,10 @@ public class ExportStatus {
         metadataDBConn = null;
         try {
             String url = "jdbc:sqlite:" + metadataDBPath;
-            metadataDBConn = DriverManager.getConnection(url);
+            SQLiteConfig sqLiteConfig = new SQLiteConfig();
+            sqLiteConfig.setTransactionMode(SQLiteConfig.TransactionMode.EXCLUSIVE);
+            sqLiteConfig.setBusyTimeout(30000);
+            metadataDBConn = DriverManager.getConnection(url, sqLiteConfig.toProperties());
             LOGGER.info("Connected to metadata db at {}", metadataDBPath);
         } catch (SQLException e) {
             throw new RuntimeException(String.format("Couldn't connect to metadata DB at %s", metadataDBPath), e);
