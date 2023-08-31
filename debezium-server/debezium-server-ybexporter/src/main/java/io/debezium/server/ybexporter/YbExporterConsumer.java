@@ -130,7 +130,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
                 exportStatus.flushToDisk();
             }
 
-            checkForSwitchOperationAndHandle("cutover");
+            checkForSwitchOperationAndHandle(switchOperation);
             try {
                 Thread.sleep(2000);
             }
