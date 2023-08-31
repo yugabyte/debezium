@@ -92,7 +92,7 @@ public class ExportStatus {
         try {
             String url = "jdbc:sqlite:" + metadataDBPath;
             SQLiteConfig sqLiteConfig = new SQLiteConfig();
-            sqLiteConfig.setTransactionMode(SQLiteConfig.TransactionMode.IMMEDIATE);
+            sqLiteConfig.setTransactionMode(SQLiteConfig.TransactionMode.EXCLUSIVE);
             sqLiteConfig.setBusyTimeout(30000);
             metadataDBConn = DriverManager.getConnection(url, sqLiteConfig.toProperties());
             LOGGER.info("Connected to metadata db at {}", metadataDBPath);
