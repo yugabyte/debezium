@@ -21,12 +21,14 @@ class KafkaConnectRecordParser implements RecordParser {
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConnectRecordParser.class);
     private final ExportStatus es;
     String dataDirStr;
+    String sourceType;
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
     Record r = new Record();
 
-    public KafkaConnectRecordParser(String dataDirStr, Map<String, Table> tblMap) {
+    public KafkaConnectRecordParser(String dataDirStr, String sourceType, Map<String, Table> tblMap) {
         this.dataDirStr = dataDirStr;
+        this.sourceType = sourceType;
         es = ExportStatus.getInstance(dataDirStr);
         tableMap = tblMap;
         jsonConverter = new JsonConverter();
@@ -96,7 +98,18 @@ class KafkaConnectRecordParser implements RecordParser {
                 structWithAllFields = value.getStruct("before");
             }
             for (Field f : structWithAllFields.schema().fields()) {
-                t.fieldSchemas.put(f.name(), f);
+                if (sourceType.equals("yb")){
+                    // values in the debezium connector are as follows:
+                    // "val1" : {
+                    //  "value" : "value for val1 column",
+                    //  "set" : true
+                    //}
+                    // Therefore, we need to get the schema of the inner value field, but name of the outer field
+                    t.fieldSchemas.put(f.name(), new Field(f.name(), 0, f.schema().field("value").schema()));
+                }
+                else {
+                    t.fieldSchemas.put(f.name(), f);
+                }
             }
 
             tableMap.put(tableIdentifier, t);
@@ -107,7 +120,22 @@ class KafkaConnectRecordParser implements RecordParser {
 
     protected void parseKeyFields(Struct key, Record r) {
         for (Field f : key.schema().fields()) {
-            Object fieldValue = key.get(f);
+            Object fieldValue;
+            if (sourceType.equals("yb")){
+                // values in the debezium connector are as follows:
+                // "val1" : {
+                //  "value" : "value for val1 column",
+                //  "set" : true
+                //}
+                Struct valueAndSet = key.getStruct(f.name());
+                if (!valueAndSet.getBoolean("set")){
+                    continue;
+                }
+                fieldValue = valueAndSet.get("value");
+            }
+            else{
+                fieldValue = key.get(f);
+            }
             r.addKeyField(f.name(), fieldValue);
 
         }
@@ -120,19 +148,44 @@ class KafkaConnectRecordParser implements RecordParser {
      */
     protected void parseValueFields(Struct value, Record r) {
         Struct after = value.getStruct("after");
+        // TODO: error handle before is NULL
+        Struct before = value.getStruct("before");
         if (after == null) {
             return;
         }
         for (Field f : after.schema().fields()) {
-            if (r.op.equals("u")) {
-                // TODO: error handle before is NULL
-                Struct before = value.getStruct("before");
-                if (Objects.equals(after.get(f), before.get(f))) {
-                    // no need to record this as field is unchanged
+            Object fieldValue;
+            if (sourceType.equals("yb")){
+                // TODO: write a proper transformer for this logic
+                // values in the debezium connector are as follows:
+                // "val1" : {
+                //  "value" : "value for val1 column",
+                //  "set" : true
+                //}
+                Struct valueAndSet = after.getStruct(f.name());
+                if (r.op.equals("u")) {
+                    // in the default configuration of the stream, for an update, the fields in the after struct
+                    // are only the delta fields, therefore, it is possible for a field to not be there.
+                    if (valueAndSet == null){
+                        continue;
+                    }
+                }
+
+                if (!valueAndSet.getBoolean("set")){
                     continue;
                 }
+                fieldValue = valueAndSet.get("value");
             }
-            Object fieldValue = after.get(f);
+            else{
+                if (r.op.equals("u")) {
+                    if (Objects.equals(after.get(f), before.get(f))) {
+                        // no need to record this as field is unchanged
+                        continue;
+                    }
+                }
+                fieldValue = after.get(f);
+            }
+
             r.addValueField(f.name(), fieldValue);
         }
     }
