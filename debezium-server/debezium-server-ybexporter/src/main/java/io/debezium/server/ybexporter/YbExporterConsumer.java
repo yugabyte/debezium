@@ -35,11 +35,14 @@ import io.debezium.server.BaseChangeConsumer;
 public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(YbExporterConsumer.class);
     private static final String PROP_PREFIX = "debezium.sink.ybexporter.";
+    private static final String SOURCE_DB_EXPORTER_ROLE = "source-db-exporter";
+    private static final String TARGET_DB_EXPORTER_ROLE = "target-db-exporter";
     String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
     String triggersDir;
     String sourceType;
+    String exporterRole;
     private Map<String, Table> tableMap = new HashMap<>();
     private RecordParser parser;
     private Map<Table, RecordWriter> snapshotWriters = new ConcurrentHashMap<>();
@@ -58,6 +61,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
         retrieveSourceType(config);
         triggersDir = config.getValue(PROP_PREFIX + "triggers.dir", String.class);
+        exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
 
         exportStatus = ExportStatus.getInstance(dataDir);
         exportStatus.setSourceType(sourceType);
@@ -105,6 +109,17 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
     void flush() {
         LOGGER.info("XXX Started flush thread.");
+        String switchOperation;
+        if (exporterRole.equals(SOURCE_DB_EXPORTER_ROLE)){
+            switchOperation = "cutover";
+        }
+        else if (exporterRole.equals(TARGET_DB_EXPORTER_ROLE)){
+            switchOperation = "fallforward";
+        }
+        else {
+            throw new RuntimeException(String.format("invalid exportRole %s", exporterRole));
+        }
+
         while (true) {
             for (RecordWriter writer : snapshotWriters.values()) {
                 writer.flush();
@@ -114,6 +129,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             if (exportStatus != null) {
                 exportStatus.flushToDisk();
             }
+
             checkForSwitchOperationAndHandle("cutover");
             try {
                 Thread.sleep(2000);
@@ -135,7 +151,8 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         switchOperationRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
         synchronized (eventQueue){ // need to synchronize with handleBatch
             eventQueue.writeRecord(switchOperationRecord);
-            eventQueue.close();
+            eventQueue.flush();
+            eventQueue.sync();
             LOGGER.info("Wrote {} record to event queue", operation);
 
             exportStatus.flushToDisk();
