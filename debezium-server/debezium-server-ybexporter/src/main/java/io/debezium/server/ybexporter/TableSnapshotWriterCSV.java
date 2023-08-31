@@ -27,6 +27,7 @@ public class TableSnapshotWriterCSV implements RecordWriter {
     private CSVPrinter csvPrinter;
     private FileOutputStream fos;
     private FileDescriptor fd;
+    private String ybVoyagerNullString = "__YBV_NULL__";
 
     public TableSnapshotWriterCSV(String datadirStr, Table tbl, String sourceType) {
         dataDir = datadirStr;
@@ -39,7 +40,10 @@ public class TableSnapshotWriterCSV implements RecordWriter {
             fd = fos.getFD();
             var f = new FileWriter(fd);
             var bufferedWriter = new BufferedWriter(f);
-            CSVFormat fmt = CSVFormat.POSTGRESQL_TEXT;
+            CSVFormat fmt = CSVFormat.POSTGRESQL_CSV
+                    .builder()
+                    .setNullString(ybVoyagerNullString)
+                    .build();
             csvPrinter = new CSVPrinter(bufferedWriter, fmt);
             ArrayList<String> cols = t.getColumns();
             String header = String.join(fmt.getDelimiterString(), cols) + fmt.getRecordSeparator();
