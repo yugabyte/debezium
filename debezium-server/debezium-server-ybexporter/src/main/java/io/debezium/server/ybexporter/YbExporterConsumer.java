@@ -35,8 +35,8 @@ import io.debezium.server.BaseChangeConsumer;
 public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(YbExporterConsumer.class);
     private static final String PROP_PREFIX = "debezium.sink.ybexporter.";
-    private static final String SOURCE_DB_EXPORTER_ROLE = "source-db-exporter";
-    private static final String TARGET_DB_EXPORTER_ROLE = "target-db-exporter";
+    private static final String SOURCE_DB_EXPORTER_ROLE = "source_db_exporter";
+    private static final String TARGET_DB_EXPORTER_ROLE = "target_db_exporter";
     String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
