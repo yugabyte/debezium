@@ -309,6 +309,10 @@ public class ExportStatus {
         for (var entry : eventCountDeltaPerTable.entrySet()) {
             Statement tableWiseStatsUpdateStmt = conn.createStatement();
             Pair<String, String> tableQualifiedName = entry.getKey();
+            String schemaName = "";
+            if ((sourceType.equals("postgresql")) && (!t.schemaName.equals("public"))){
+                schemaName = tableQualifiedName.getLeft();
+            }
             Map<String, Long> eventCountDeltaTable = entry.getValue();
             Long numTotalDeltaTable = eventCountDeltaTable.getOrDefault("c", 0L) + eventCountDeltaTable.getOrDefault("u", 0L) + eventCountDeltaTable.getOrDefault("d", 0L);
             String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
@@ -320,14 +324,14 @@ public class ExportStatus {
                     eventCountDeltaTable.getOrDefault("c", 0L),
                     eventCountDeltaTable.getOrDefault("u", 0L),
                     eventCountDeltaTable.getOrDefault("d", 0L),
-                    tableQualifiedName.getLeft(),
+                    schemaName,
                     tableQualifiedName.getRight());
             updatedRows = tableWiseStatsUpdateStmt.executeUpdate(updateQuery);
             if (updatedRows == 0){
                 // need to insert for the first time
                 Statement insertStatment = conn.createStatement();
                 String insertQuery = String.format("INSERT INTO %s (schema_name, table_name, num_total, num_inserts, num_updates, num_deletes) " +
-                                "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, tableQualifiedName.getLeft(), tableQualifiedName.getRight(),
+                                "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, schemaName, tableQualifiedName.getRight(),
                         numTotalDeltaTable,
                         eventCountDeltaTable.getOrDefault("c", 0L),
                         eventCountDeltaTable.getOrDefault("u", 0L),
