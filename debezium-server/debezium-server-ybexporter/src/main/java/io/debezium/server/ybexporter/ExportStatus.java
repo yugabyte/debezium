@@ -310,7 +310,7 @@ public class ExportStatus {
             Statement tableWiseStatsUpdateStmt = conn.createStatement();
             Pair<String, String> tableQualifiedName = entry.getKey();
             String schemaName = "";
-            if ((sourceType.equals("postgresql")) && (!t.schemaName.equals("public"))){
+            if ((sourceType.equals("postgresql")) && (!tableQualifiedName.getLeft().equals("public"))){
                 schemaName = tableQualifiedName.getLeft();
             }
             Map<String, Long> eventCountDeltaTable = entry.getValue();
