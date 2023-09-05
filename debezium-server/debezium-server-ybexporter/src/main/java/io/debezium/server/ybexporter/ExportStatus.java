@@ -50,6 +50,7 @@ public class ExportStatus {
     private static ObjectMapper mapper = new ObjectMapper(new JsonFactory());
     private String dataDir;
     private String sourceType;
+    private Integer schemaCount;
     private ConcurrentMap<String, Long> sequenceMax;
     private ConcurrentMap<Table, TableExportStatus> tableExportStatusMap = new ConcurrentHashMap<>();
     private ExportMode mode;
@@ -83,6 +84,8 @@ public class ExportStatus {
         final Config config = ConfigProvider.getConfig();
         runId = config.getValue("debezium.sink.ybexporter.run.id", String.class);
         exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
+        String schemas = config.getOptionalValue("debezium.source.schema.include.list", String.class).orElse("");
+        schemaCount = schemas.split(",").length;
 
         metadataDBPath = config.getValue("debezium.sink.ybexporter.metadata.db.path", String.class);
         if (metadataDBPath == null){
@@ -309,6 +312,10 @@ public class ExportStatus {
         for (var entry : eventCountDeltaPerTable.entrySet()) {
             Statement tableWiseStatsUpdateStmt = conn.createStatement();
             Pair<String, String> tableQualifiedName = entry.getKey();
+            String schemaName = tableQualifiedName.getLeft();
+            if (schemaCount <= 1){
+                schemaName = ""; // in case there is only one schema in question, we need not fully qualify the table name.
+            }
             Map<String, Long> eventCountDeltaTable = entry.getValue();
             Long numTotalDeltaTable = eventCountDeltaTable.getOrDefault("c", 0L) + eventCountDeltaTable.getOrDefault("u", 0L) + eventCountDeltaTable.getOrDefault("d", 0L);
             String updateQuery = String.format("UPDATE %s set num_total = num_total + %d," +
@@ -320,14 +327,14 @@ public class ExportStatus {
                     eventCountDeltaTable.getOrDefault("c", 0L),
                     eventCountDeltaTable.getOrDefault("u", 0L),
                     eventCountDeltaTable.getOrDefault("d", 0L),
-                    tableQualifiedName.getLeft(),
+                    schemaName,
                     tableQualifiedName.getRight());
             updatedRows = tableWiseStatsUpdateStmt.executeUpdate(updateQuery);
             if (updatedRows == 0){
                 // need to insert for the first time
                 Statement insertStatment = conn.createStatement();
                 String insertQuery = String.format("INSERT INTO %s (schema_name, table_name, num_total, num_inserts, num_updates, num_deletes) " +
-                                "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, tableQualifiedName.getLeft(), tableQualifiedName.getRight(),
+                                "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_PER_TABLE_TABLE_NAME, schemaName, tableQualifiedName.getRight(),
                         numTotalDeltaTable,
                         eventCountDeltaTable.getOrDefault("c", 0L),
                         eventCountDeltaTable.getOrDefault("u", 0L),
