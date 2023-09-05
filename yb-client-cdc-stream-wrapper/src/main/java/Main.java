@@ -42,7 +42,7 @@ public class Main {
             String streamID = client.createCDCStream(table, parameters.dbName, "PROTO", "EXPLICIT", null).getStreamId();
             System.out.println("CDC Stream ID: " + streamID);
         } else if (parameters.listMasters) {
-            String tserverNode = parameters.masterAddresses.split(",")[0].split(":")[0] + ":9100";
+            String tserverNode = parameters.masterAddresses.split(",")[0].split(":")[0] + ":" + parameters.tserverPort;
             String masterAddressesList = client.getMasterAddresses(HostAndPort.fromString(tserverNode)); // {<ip1>:7100},{<ip2>:7100},{<ip3>:7100}
             masterAddressesList = masterAddressesList.replace("{", ""); //removing {}
             masterAddressesList = masterAddressesList.replace("}", "");

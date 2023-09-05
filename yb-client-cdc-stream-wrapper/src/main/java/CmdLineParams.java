@@ -11,6 +11,7 @@ public class CmdLineParams {
     Boolean toCreate = false;
     String deleteStreamId = null;
     Boolean listMasters = false;
+    String tserverPort = "9100";
 
     public static CmdLineParams createFromArgs(String[] args) {
         Options options = new Options();
@@ -22,6 +23,7 @@ public class CmdLineParams {
         options.addOption("db_name", true, "Database for which stream needs to be created");
         options.addOption("ssl_cert_file", true, "path to certificate file in case of SSL enabled");
         options.addOption("list_masters", false, "List all the masters nodes in the cluster");
+        options.addOption("tserver_port", true, "Port of the tserver process (default: 9100)");    
 
         CommandLineParser parser = new DefaultParser();
         CommandLine commandLine = null;
@@ -64,6 +66,10 @@ public class CmdLineParams {
 
         if (commandLine.hasOption("list_masters")) {
             listMasters = true;
+        }
+
+        if (commandLine.hasOption("tserver_port")) {
+            tserverPort = commandLine.getOptionValue("tserver_port");
         }
     }
 
