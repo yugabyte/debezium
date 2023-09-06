@@ -49,4 +49,18 @@ public class Record {
         keyColumns.add(key);
         keyValues.add(value);
     }
+
+    @Override
+    public String toString() {
+        return "Record{" +
+                "t=" + t +
+                ", snapshot='" + snapshot + '\'' +
+                ", op='" + op + '\'' +
+                ", vsn=" + vsn +
+                ", keyColumns=" + keyColumns +
+                ", keyValues=" + keyValues +
+                ", valueColumns=" + valueColumns +
+                ", valueValues=" + valueValues +
+                '}';
+    }
 }
