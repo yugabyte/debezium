@@ -71,7 +71,7 @@ jobs:
         run: |
           cd debezium-server/debezium-server-dist/target/debezium-server
           # get latest 1.9.5 version of debezium. Change this during release to point to exact 1.9.5 release.
-          wget -nv https://github.com/yugabyte/debezium/releases/download/voyager-debezium/debezium-server-latest-1.9.5.tar.gz
+          wget -n https://github.com/yugabyte/debezium/releases/download/1.9.5-1.5.0-rc1/debezium-server-1.9.5-1.5.0-rc1.tar.gz
           tar -xvzf  debezium-server-latest-1.9.5.tar.gz
           rm debezium-server-latest-1.9.5.tar.gz
           mv debezium-server debezium-server-1.9.5
