@@ -70,7 +70,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             exportStatus.updateMode(getExportModeToStartWith(snapshotMode));
         }
         if (exportStatus.getMode().equals(ExportMode.STREAMING)) {
-            handleSnapshotComplete();
+            openCDCWriter();
         }
         parser = new KafkaConnectRecordParser(dataDir, sourceType, tableMap);
         String propertyVal = PROP_PREFIX + SequenceObjectUpdater.propertyName;
