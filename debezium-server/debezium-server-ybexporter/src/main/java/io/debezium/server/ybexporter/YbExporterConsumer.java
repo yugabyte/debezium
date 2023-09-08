@@ -279,7 +279,6 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
                 Table t = new Table("", schemaName, tableName);
                 TableSnapshotWriterCSV writer = new TableSnapshotWriterCSV(dataDir, t, sourceType);
                 writer.close();
-                exportStatus.updateTableSchema(t);
             }
         }
     }
