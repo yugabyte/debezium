@@ -52,11 +52,12 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private RecordTransformer recordTransformer;
     Thread flusherThread;
     boolean shutDown = false;
+    private Config config;
 
     @PostConstruct
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
-        final Config config = ConfigProvider.getConfig();
+        config = ConfigProvider.getConfig();
 
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
         retrieveSourceType(config);
@@ -249,10 +250,38 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void handleSnapshotComplete() {
+        handleSnapshotsForEmptyTables();
         closeSnapshotWriters();
         exportStatus.updateMode(ExportMode.STREAMING);
         exportStatus.flushToDisk();
         openCDCWriter();
+    }
+
+    private void handleSnapshotsForEmptyTables(){
+        String tableListStr = config.getValue("debezium.source.table.include.list", String.class);
+        for (String qualifiedTableStr : tableListStr.split(",")) {
+            String[] parts = qualifiedTableStr.split("\\.");
+            if (parts.length != 2){
+                throw new RuntimeException(String.format("expected qualified table name in config table.include.list. Received %s", qualifiedTableStr));
+            }
+            String schemaName = parts[0];
+            String tableName = parts[1];
+            boolean tableSnapshotted = false;
+            for (Table t : tableMap.values()) {
+                if (t.tableName.equals(tableName) && t.schemaName.equals(schemaName)){
+                    tableSnapshotted = true;
+                    break;
+                }
+            }
+            if (!tableSnapshotted){
+                // table must have been empty.
+                // creating dummy entry.
+                Table t = new Table("", schemaName, tableName);
+                TableSnapshotWriterCSV writer = new TableSnapshotWriterCSV(dataDir, t, sourceType);
+                writer.close();
+                exportStatus.updateTableSchema(t);
+            }
+        }
     }
 
     private void handleSnapshotOnlyComplete() {
