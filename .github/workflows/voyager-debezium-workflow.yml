@@ -71,9 +71,9 @@ jobs:
         run: |
           cd debezium-server/debezium-server-dist/target/debezium-server
           # get latest 1.9.5 version of debezium. Change this during release to point to exact 1.9.5 release.
-          wget -nv https://github.com/yugabyte/debezium/releases/download/1.9.5-1.5.0-rc2/debezium-server-1.9.5-1.5.0-rc2.tar.gz
-          tar -xvzf  debezium-server-1.9.5-1.5.0-rc2.tar.gz
-          rm debezium-server-1.9.5-1.5.0-rc2.tar.gz
+          wget -nv https://github.com/yugabyte/debezium/releases/download/1.9.5-1.5.0/debezium-server-1.9.5-1.5.0.tar.gz
+          tar -xvzf  debezium-server-1.9.5-1.5.0.tar.gz
+          rm debezium-server-1.9.5-1.5.0.tar.gz
           mv debezium-server debezium-server-1.9.5
           
           # package yb-client-cdc-stream-wrapper.jar into debezium-server
