@@ -151,8 +151,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         switchOperationRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
         synchronized (eventQueue){ // need to synchronize with handleBatch
             eventQueue.writeRecord(switchOperationRecord);
-            eventQueue.flush();
-            eventQueue.sync();
+            eventQueue.close();
             LOGGER.info("Wrote {} record to event queue", operation);
 
             exportStatus.flushToDisk();
@@ -292,7 +291,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private void openCDCWriter() {
         final Config config = ConfigProvider.getConfig();
         Long queueSegmentMaxBytes = config.getOptionalValue(PROP_PREFIX+"queueSegmentMaxBytes", Long.class).orElse(null);
-        eventQueue = new EventQueue(dataDir, queueSegmentMaxBytes);
+        eventQueue = new EventQueue(dataDir, exporterRole, queueSegmentMaxBytes, 1);
     }
 
     private void checkIfHelperThreadAlive(){

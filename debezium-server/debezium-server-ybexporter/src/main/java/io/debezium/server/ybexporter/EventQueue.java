@@ -35,26 +35,28 @@ public class EventQueue implements RecordWriter {
 
     private long queueSegmentMaxBytes = 1024 * 1024 * 1024; // default 1 GB
     private String dataDir;
+    private String exporterRole;
     private QueueSegment currentQueueSegment;
     private long currentQueueSegmentIndex = 0;
     private SequenceNumberGenerator sng;
 
 
-    public EventQueue(String datadirStr, Long queueSegmentMaxBytes) {
+    public EventQueue(String datadirStr, String exporterRole,  Long queueSegmentMaxBytes, long startVsn) {
         dataDir = datadirStr;
+        this.exporterRole = exporterRole;
         if (queueSegmentMaxBytes != null){
             this.queueSegmentMaxBytes = queueSegmentMaxBytes;
         }
 
         // mkdir cdc
-        File queueDir = new File(String.format("%s/%s", dataDir, QUEUE_FILE_DIR));
+        File queueDir = new File(String.format("%s/%s/%s", dataDir, QUEUE_FILE_DIR, exporterRole));
         if (!queueDir.exists()){
             boolean dirCreated = queueDir.mkdir();
             if (!dirCreated){
                 throw new RuntimeException("failed to create dir for cdc");
             }
         }
-        sng = new SequenceNumberGenerator(1);
+        sng = new SequenceNumberGenerator(startVsn);
         recoverStateFromDisk();
         if (currentQueueSegment == null){
             currentQueueSegment = new QueueSegment(datadirStr, currentQueueSegmentIndex, getFilePathWithIndex(currentQueueSegmentIndex));
