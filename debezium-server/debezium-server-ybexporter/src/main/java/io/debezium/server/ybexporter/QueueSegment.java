@@ -180,8 +180,6 @@ public class QueueSegment {
             while ((line = input.readLine()) != null) {
                 last = line;
                 LOGGER.info("last line = {}", last);
-            }
-            if (last != null){
                 if (last.equals(EOF_MARKER)){
                     return true;
                 }
