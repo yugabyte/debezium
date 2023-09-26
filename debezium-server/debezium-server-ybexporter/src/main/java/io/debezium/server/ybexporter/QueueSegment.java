@@ -179,6 +179,7 @@ public class QueueSegment {
             input = new BufferedReader(new FileReader(filePath));
             while ((line = input.readLine()) != null) {
                 last = line;
+                LOGGER.info("last line = {}", last);
             }
             if (last != null){
                 if (last.equals(EOF_MARKER)){
