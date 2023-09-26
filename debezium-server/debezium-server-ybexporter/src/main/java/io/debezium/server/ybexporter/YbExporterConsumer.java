@@ -5,9 +5,7 @@
  */
 package io.debezium.server.ybexporter;
 
-import java.io.File;
 import java.net.URISyntaxException;
-import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
@@ -143,12 +141,12 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void checkForSwitchOperationAndHandle(String operation){
         try {
-            Boolean exists = exportStatus.checkIfTriggerExists(operation);
+            Boolean exists = exportStatus.checkIfSwitchRequested(operation);
             if (!exists) {
                 return;
             }
         } catch (SQLException e) {
-            LOGGER.error("Error while checking for trigger file", e);
+            LOGGER.error(String.format("Error while checking for switch requested(%s): %s",operation, e));
             return;
         }
 

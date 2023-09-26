@@ -305,29 +305,24 @@ public class ExportStatus {
 
     }
 
-    public boolean checkIfTriggerExists(String triggerName) throws SQLException {
+    public boolean checkIfSwitchRequested(String triggerName) throws SQLException {
         Statement selectStmt = metadataDBConn.createStatement();
         String query = String.format("SELECT json_text from %s where key = '%s'",
             JSON_OBJECTS_TABLE_NAME, MIGRATION_STATUS_KEY);
         try {
             ResultSet rs = selectStmt.executeQuery(query);
-            System.out.println("query of trigger exists: " + query);
             while (rs.next()) {
                 JSONObject record = new JSONObject(rs.getString("json_text"));
-                System.out.println("TriggerName is: " + triggerName);
-                System.out.println("JSON record: " + record.toString());
-                System.out.println("JSON Record[ExportType]: "+ record.get("ExportType"));
-                System.out.println("JSON Record[CutoverRequested]: "+ record.get("CutoverRequested"));
-                if (triggerName.equals("cutover") && record.get("CutoverRequested").toString().equals("true")) {
+                if (record.get("CutoverRequested").toString().equals("true")
+                        && triggerName.equals("cutover")) {
                     return true;
-                } else if (triggerName.equals("fallforward") && record.get("FallForwardSetupStarted").toString().equals("true")) {
+                } else if (record.get("FallForwardSetupStarted").toString().equals("true")
+                        && triggerName.equals("fallforward")) {
                     return true;
-                } else {
-                    System.out.println("Cutover Trigger not found in the table");
                 }
             }
         } catch (SQLException e) {
-            throw new RuntimeException(String.format("could not fetch value for key = %s: %s", MIGRATION_STATUS_KEY, e));
+            throw e;
         } finally {
             selectStmt.close();
         }
