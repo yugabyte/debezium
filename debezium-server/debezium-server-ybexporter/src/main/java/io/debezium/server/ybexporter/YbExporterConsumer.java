@@ -8,6 +8,7 @@ package io.debezium.server.ybexporter;
 import java.io.File;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,11 +142,17 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void checkForSwitchOperationAndHandle(String operation){
-        File switchTriggerFile = new File(Path.of(triggersDir, operation).toString());
-        if (!switchTriggerFile.exists()){
+        try {
+            Boolean exists = exportStatus.checkIfTriggerExists(operation);
+            if (!exists) {
+                return;
+            }
+        } catch (SQLException e) {
+            LOGGER.error("Error while checking for trigger file", e);
             return;
         }
-        LOGGER.info("Observed {} trigger file. Cutting over...", operation);
+
+        LOGGER.info("Observed {} trigger present in metadb. Cutting over...", operation);
         Record switchOperationRecord = new Record();
         switchOperationRecord.op = operation;
         switchOperationRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
