@@ -305,7 +305,7 @@ public class ExportStatus {
 
     }
 
-    public boolean checkIfSwitchRequested(String triggerName) throws SQLException {
+    public boolean checkIfSwitchOperationRequested(String operation) throws SQLException {
         Statement selectStmt = metadataDBConn.createStatement();
         String query = String.format("SELECT json_text from %s where key = '%s'",
             JSON_OBJECTS_TABLE_NAME, MIGRATION_STATUS_KEY);
@@ -314,10 +314,10 @@ public class ExportStatus {
             while (rs.next()) {
                 JSONObject record = new JSONObject(rs.getString("json_text"));
                 if (record.get("CutoverRequested").toString().equals("true")
-                        && triggerName.equals("cutover")) {
+                        && operation.equals("cutover")) {
                     return true;
                 } else if (record.get("FallForwardSetupStarted").toString().equals("true")
-                        && triggerName.equals("fallforward")) {
+                        && operation.equals("fallforward")) {
                     return true;
                 }
             }

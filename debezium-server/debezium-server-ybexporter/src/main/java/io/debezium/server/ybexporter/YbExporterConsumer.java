@@ -141,7 +141,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void checkForSwitchOperationAndHandle(String operation){
         try {
-            Boolean exists = exportStatus.checkIfSwitchRequested(operation);
+            Boolean exists = exportStatus.checkIfSwitchOperationRequested(operation);
             if (!exists) {
                 return;
             }
