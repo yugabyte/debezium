@@ -172,6 +172,25 @@ public class QueueSegment {
         return vsn;
     }
 
+    public boolean isClosed() {
+        String last = null, line;
+        BufferedReader input;
+        try {
+            input = new BufferedReader(new FileReader(filePath));
+            while ((line = input.readLine()) != null) {
+                last = line;
+            }
+            if (last != null){
+                if (last.equals(EOF_MARKER)){
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return false;
+    }
+
     private void truncateFileAfterOffset(long offset){
         try {
             writer.close();

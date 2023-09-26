@@ -88,6 +88,10 @@ public class EventQueue implements RecordWriter {
             }
             LOGGER.info("advancing sequence number to {}", nextSequenceNumber);
             sng.advanceTo(nextSequenceNumber);
+
+            if (currentQueueSegment.isClosed()){
+                rotateQueueSegment();
+            }
         }
     }
 

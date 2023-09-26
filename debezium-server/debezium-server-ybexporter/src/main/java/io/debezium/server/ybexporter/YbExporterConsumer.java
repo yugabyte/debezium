@@ -151,8 +151,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         switchOperationRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
         synchronized (eventQueue){ // need to synchronize with handleBatch
             eventQueue.writeRecord(switchOperationRecord);
-            eventQueue.flush();
-            eventQueue.sync();
+            eventQueue.close();
             LOGGER.info("Wrote {} record to event queue", operation);
 
             exportStatus.flushToDisk();
