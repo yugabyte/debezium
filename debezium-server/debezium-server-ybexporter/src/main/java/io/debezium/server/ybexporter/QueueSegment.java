@@ -61,15 +61,14 @@ public class QueueSegment {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-
-        es.queueSegmentCreated(segmentNo, filePath);
-        long committedSize = es.getQueueSegmentCommittedSize(segmentNo);
-        if (committedSize < byteCount){
-            truncateFileAfterOffset(committedSize);
-        }
         eventCountDeltaPerTable = new HashMap<>();
         final Config config = ConfigProvider.getConfig();
         exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
+        es.queueSegmentCreated(exporterRole, segmentNo, filePath);
+        long committedSize = es.getQueueSegmentCommittedSize(exporterRole, segmentNo);
+        if (committedSize < byteCount){
+            truncateFileAfterOffset(committedSize);
+        }
     }
 
     private void openFile() throws IOException {
@@ -144,7 +143,7 @@ public class QueueSegment {
 
     public void sync() throws IOException, SQLException {
         fd.sync();
-        es.updateQueueSegmentMetaInfo(segmentNo, Files.size(Path.of(filePath)), eventCountDeltaPerTable);
+        es.updateQueueSegmentMetaInfo(exporterRole, segmentNo, Files.size(Path.of(filePath)), eventCountDeltaPerTable);
         // TODO: optimize to reset counters to 0 instead of clearing the map.
         eventCountDeltaPerTable.clear();
     }

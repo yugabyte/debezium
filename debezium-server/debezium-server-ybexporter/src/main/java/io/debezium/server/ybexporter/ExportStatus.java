@@ -276,13 +276,14 @@ public class ExportStatus {
         this.sourceType = sourceType;
     }
 
-    public void updateQueueSegmentMetaInfo(long segmentNo, long committedSize, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
+    public void updateQueueSegmentMetaInfo(String exporterRole, long segmentNo, long committedSize, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
         final boolean oldAutoCommit = metadataDBConn.getAutoCommit();
         metadataDBConn.setAutoCommit(false);
         int updatedRows;
         try {
             Statement queueMetaUpdateStmt = metadataDBConn.createStatement();
-            updatedRows = queueMetaUpdateStmt.executeUpdate(String.format("UPDATE %s SET size_committed = %d WHERE segment_no=%d", QUEUE_SEGMENT_META_TABLE_NAME, committedSize, segmentNo));
+            updatedRows = queueMetaUpdateStmt.executeUpdate(String.format("UPDATE %s SET size_committed = %d WHERE exporter_role='%s' AND segment_no=%d",
+                    QUEUE_SEGMENT_META_TABLE_NAME, committedSize, exporterRole, segmentNo));
             if (updatedRows != 1){
                 throw new RuntimeException(String.format("Update of queue segment metadata failed with query-%s, rowsAffected -%d", queueMetaUpdateStmt, updatedRows));
             }
@@ -376,11 +377,12 @@ public class ExportStatus {
         }
     }
 
-    public void queueSegmentCreated(long segmentNo, String segmentPath){
+    public void queueSegmentCreated(String exporterRole, long segmentNo, String segmentPath){
         Statement insertStmt;
         try {
             insertStmt = metadataDBConn.createStatement();
-            insertStmt.executeUpdate(String.format("INSERT OR IGNORE into %s (segment_no, file_path, size_committed) VALUES(%d, '%s', 0)", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath));
+            insertStmt.executeUpdate(String.format("INSERT OR IGNORE into %s (exporter_role, segment_no, file_path, size_committed) VALUES('%s', %d, '%s', 0)",
+                    exporterRole, QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath));
             insertStmt.close();
         } catch (SQLException e) {
             throw new RuntimeException(String.format("Failed to run update queue segment size " +
@@ -388,12 +390,13 @@ public class ExportStatus {
         }
     }
 
-    public long getQueueSegmentCommittedSize(long segmentNo){
+    public long getQueueSegmentCommittedSize(String exporterRole, long segmentNo){
         Statement selectStmt;
         long sizeCommitted;
         try {
             selectStmt = metadataDBConn.createStatement();
-            ResultSet rs = selectStmt.executeQuery(String.format("SELECT size_committed from %s where segment_no=%s", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo));
+            ResultSet rs = selectStmt.executeQuery(String.format("SELECT size_committed from %s where exporter_role='%s' AND segment_no=%s",
+                    QUEUE_SEGMENT_META_TABLE_NAME, exporterRole, segmentNo));
             if (!rs.next()){
                 throw new RuntimeException(String.format("Could not fetch committedSize for queue segment - %d", segmentNo));
             }
