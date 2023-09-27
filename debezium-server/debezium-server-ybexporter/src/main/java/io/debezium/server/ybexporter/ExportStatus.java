@@ -367,7 +367,7 @@ public class ExportStatus {
             // first insert for the minute.
             Statement insertStatment = conn.createStatement();
             String insertQuery = String.format("INSERT INTO %s (run_id, exporter_role, timestamp, num_total, num_inserts, num_updates, num_deletes) " +
-                            "VALUES('%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, exporterRole, nowFlooredToNearest10sEpoch,
+                            "VALUES('%s', '%s', '%s', %d, %d, %d, %d)", EVENT_STATS_TABLE_NAME, runId, exporterRole, nowFlooredToNearest10sEpoch,
                     numTotalDelta, numInsertsDelta, numUpdatesDelta, numDeletesDelta);
             insertStatment.executeUpdate(insertQuery);
         }
