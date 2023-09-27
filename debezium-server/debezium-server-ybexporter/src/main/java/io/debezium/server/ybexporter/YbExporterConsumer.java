@@ -36,7 +36,8 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     private static final Logger LOGGER = LoggerFactory.getLogger(YbExporterConsumer.class);
     private static final String PROP_PREFIX = "debezium.sink.ybexporter.";
     private static final String SOURCE_DB_EXPORTER_ROLE = "source_db_exporter";
-    private static final String TARGET_DB_EXPORTER_ROLE = "target_db_exporter";
+    private static final String TARGET_DB_EXPORTER_FF_ROLE = "target_db_exporter_ff";
+    private static final String TARGET_DB_EXPORTER_FB_ROLE = "target_db_exporter_fb";
     String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
@@ -113,8 +114,11 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         if (exporterRole.equals(SOURCE_DB_EXPORTER_ROLE)){
             switchOperation = "cutover";
         }
-        else if (exporterRole.equals(TARGET_DB_EXPORTER_ROLE)){
+        else if (exporterRole.equals(TARGET_DB_EXPORTER_FF_ROLE)){
             switchOperation = "fallforward";
+        }
+        else if (exporterRole.equals(TARGET_DB_EXPORTER_FB_ROLE)){
+            switchOperation = "fallback";
         }
         else {
             throw new RuntimeException(String.format("invalid exportRole %s", exporterRole));
