@@ -316,7 +316,7 @@ public class ExportStatus {
                 if (record.get("CutoverRequested").toString().equals("true")
                         && operation.equals("cutover")) {
                     return true;
-                } else if (record.get("FallForwardSetupStarted").toString().equals("true")
+                } else if (record.get("FallForwardSwitchRequested").toString().equals("true")
                         && operation.equals("fallforward")) {
                     return true;
                 }
