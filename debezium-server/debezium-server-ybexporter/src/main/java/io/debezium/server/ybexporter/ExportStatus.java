@@ -311,13 +311,12 @@ public class ExportStatus {
         try {
             ResultSet rs = selectStmt.executeQuery(query);
             while (rs.next()) {
-                JSONObject record = new JSONObject(rs.getString("json_text"));
-                // switch cases for cutover and fallforward
+                MigrationStatusRecord msr = MigrationStatusRecord.fromJsonString(rs.getString("json_text"));
                 switch(operation.toString()) {
                     case "cutover":
-                        return record.getBoolean("CutoverRequested");
+                        return msr.CutoverRequested;
                     case "fallforward":
-                        return record.getBoolean("FallForwardSwitchRequested");
+                        return msr.FallForwardSwitchRequested;
                 }
             }
         } catch (SQLException e) {
