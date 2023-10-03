@@ -26,7 +26,6 @@ import java.util.concurrent.ConcurrentMap;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.core.JsonParser;
 import org.apache.kafka.connect.data.Field;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
@@ -313,12 +312,12 @@ public class ExportStatus {
             ResultSet rs = selectStmt.executeQuery(query);
             while (rs.next()) {
                 JSONObject record = new JSONObject(rs.getString("json_text"));
-                if (record.get("CutoverRequested").toString().equals("true")
-                        && operation.equals("cutover")) {
-                    return true;
-                } else if (record.get("FallForwardSwitchRequested").toString().equals("true")
-                        && operation.equals("fallforward")) {
-                    return true;
+                // switch cases for cutover and fallforward
+                switch(operation.toString()) {
+                    case "cutover":
+                        return record.getBoolean("CutoverRequested");
+                    case "fallforward":
+                        return record.getBoolean("FallForwardSwitchRequested");
                 }
             }
         } catch (SQLException e) {

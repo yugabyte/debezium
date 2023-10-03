@@ -139,13 +139,11 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
     private void checkForSwitchOperationAndHandle(String operation){
         try {
-            Boolean exists = exportStatus.checkIfSwitchOperationRequested(operation);
-            if (!exists) {
+            if (!exportStatus.checkIfSwitchOperationRequested(operation)) {
                 return;
             }
         } catch (SQLException e) {
-            LOGGER.error(String.format("Error while checking for switch requested(%s): %s",operation, e));
-            return;
+            throw new RuntimeException(e);
         }
 
         LOGGER.info("Observed {} trigger present in metadb. Cutting over...", operation);
