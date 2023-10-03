@@ -39,7 +39,6 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
-    String triggersDir;
     String sourceType;
     String exporterRole;
     private Map<String, Table> tableMap = new HashMap<>();
@@ -59,7 +58,6 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
         retrieveSourceType(config);
-        triggersDir = config.getValue(PROP_PREFIX + "triggers.dir", String.class);
         exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
 
         exportStatus = ExportStatus.getInstance(dataDir);
