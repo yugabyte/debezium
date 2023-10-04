@@ -90,11 +90,11 @@
                 <artifactId>debezium-server-http</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            <dependency>
+            <!-- <dependency>
                 <groupId>io.debezium</groupId>
                 <artifactId>debezium-server-ybexporter</artifactId>
                 <version>${project.version}</version>
-            </dependency>
+            </dependency> -->
             <dependency>
                 <groupId>io.debezium</groupId>
                 <artifactId>debezium-server-pubsub</artifactId>

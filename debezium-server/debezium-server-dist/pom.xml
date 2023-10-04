@@ -80,10 +80,10 @@
 <!--                    <groupId>io.debezium</groupId>-->
 <!--                    <artifactId>debezium-server-http</artifactId>-->
 <!--                </dependency>-->
-                <dependency>
+                <!-- <dependency>
                     <groupId>io.debezium</groupId>
                     <artifactId>debezium-server-ybexporter</artifactId>
-                </dependency>
+                </dependency> -->
 <!--                <dependency>-->
 <!--                    <groupId>io.debezium</groupId>-->
 <!--                    <artifactId>debezium-server-pubsub</artifactId>-->
