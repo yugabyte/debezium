@@ -24,7 +24,6 @@ public class MigrationStatusRecord {
     public static MigrationStatusRecord fromJsonString(String jsonString) {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-
         try {
             return objectMapper.readValue(jsonString, MigrationStatusRecord.class);
         }
