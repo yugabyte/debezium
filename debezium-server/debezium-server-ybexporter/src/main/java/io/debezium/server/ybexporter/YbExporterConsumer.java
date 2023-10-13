@@ -5,9 +5,8 @@
  */
 package io.debezium.server.ybexporter;
 
-import java.io.File;
 import java.net.URISyntaxException;
-import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +40,6 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     String snapshotMode;
     @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
-    String triggersDir;
     String sourceType;
     String exporterRole;
     private Map<String, Table> tableMap = new HashMap<>();
@@ -61,7 +59,6 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
         snapshotMode = config.getOptionalValue("debezium.source.snapshot.mode", String.class).orElse("");
         retrieveSourceType(config);
-        triggersDir = config.getValue(PROP_PREFIX + "triggers.dir", String.class);
         exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
 
         exportStatus = ExportStatus.getInstance(dataDir);
@@ -145,11 +142,15 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     }
 
     private void checkForSwitchOperationAndHandle(String operation){
-        File switchTriggerFile = new File(Path.of(triggersDir, operation).toString());
-        if (!switchTriggerFile.exists()){
-            return;
+        try {
+            if (!exportStatus.checkIfSwitchOperationRequested(operation)) {
+                return;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
-        LOGGER.info("Observed {} trigger file. Cutting over...", operation);
+
+        LOGGER.info("Observed {} trigger present in metadb. Cutting over...", operation);
         Record switchOperationRecord = new Record();
         switchOperationRecord.op = operation;
         switchOperationRecord.t = new Table(null, null,null); // just to satisfy being a proper Record object.
