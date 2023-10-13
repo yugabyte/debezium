@@ -30,6 +30,7 @@ import org.apache.kafka.connect.data.Field;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.graalvm.collections.Pair;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,9 +44,11 @@ import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 /**
  * Singleton class that is used to update the status of the export process.
  */
+
 public class ExportStatus {
     private static final Logger LOGGER = LoggerFactory.getLogger(ExportStatus.class);
     private static final String EXPORT_STATUS_FILE_NAME = "export_status.json";
+    private String MIGRATION_STATUS_KEY = "migration_status";
     private static ExportStatus instance;
     private static ObjectMapper mapper = new ObjectMapper(new JsonFactory());
     private String dataDir;
@@ -64,6 +67,7 @@ public class ExportStatus {
     private static String QUEUE_SEGMENT_META_TABLE_NAME = "queue_segment_meta";
     private static String EVENT_STATS_TABLE_NAME = "exported_events_stats";
     private static String EVENT_STATS_PER_TABLE_TABLE_NAME = "exported_events_stats_per_table";
+    private static String JSON_OBJECTS_TABLE_NAME = "json_objects";
 
 
     /**
@@ -298,6 +302,31 @@ public class ExportStatus {
             metadataDBConn.setAutoCommit(oldAutoCommit);
         }
 
+    }
+
+    public boolean checkIfSwitchOperationRequested(String operation) throws SQLException {
+        Statement selectStmt = metadataDBConn.createStatement();
+        String query = String.format("SELECT json_text from %s where key = '%s'",
+            JSON_OBJECTS_TABLE_NAME, MIGRATION_STATUS_KEY);
+        try {
+            ResultSet rs = selectStmt.executeQuery(query);
+            while (rs.next()) {
+                MigrationStatusRecord msr = MigrationStatusRecord.fromJsonString(rs.getString("json_text"));
+                switch(operation.toString()) {
+                    case "cutover":
+                        return msr.CutoverRequested;
+                    case "fallforward":
+                        return msr.FallForwardSwitchRequested;
+                    case "fallback":
+                        return msr.FallBackSwitchRequested;
+                }
+            }
+        } catch (SQLException e) {
+            throw e;
+        } finally {
+            selectStmt.close();
+        }
+        return false;
     }
 
     private void updateEventsStats(Connection conn, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
