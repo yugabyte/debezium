@@ -317,6 +317,8 @@ public class ExportStatus {
                         return msr.CutoverRequested;
                     case "fallforward":
                         return msr.FallForwardSwitchRequested;
+                    case "fallback":
+                        return msr.FallBackSwitchRequested;
                 }
             }
         } catch (SQLException e) {
