@@ -38,25 +38,30 @@ class KafkaConnectRecordParser implements RecordParser {
         jsonConverter = new JsonConverter();
         Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "false");
         jsonConverter.configure(jsonConfig, false);
+        renameTables = new HashMap<>();
+        retrieveRenameTablesFromConfig();
+    }
+
+    private void retrieveRenameTablesFromConfig(){
         final Config config = ConfigProvider.getConfig();
         String renameTablesConfig = config.getOptionalValue("debezium.sink.ybexporter.tables.rename", String.class).orElse("");
-        renameTables = new HashMap<>();
-        for (String renameTableConfig: renameTablesConfig.split(",")){
-            String[] beforeAndAfter = renameTableConfig.split(":");
-            if (beforeAndAfter.length != 2){
-                throw  new RuntimeException(String.format("Incorrect format for specifying table rename config %s. Provide it as <oldname>:<newname>", renameTableConfig));
+        if (!renameTablesConfig.isEmpty()){
+            for (String renameTableConfig: renameTablesConfig.split(",")){
+                String[] beforeAndAfter = renameTableConfig.split(":");
+                if (beforeAndAfter.length != 2){
+                    throw  new RuntimeException(String.format("Incorrect format for specifying table rename config %s. Provide it as <oldname>:<newname>", renameTableConfig));
+                }
+                String before = beforeAndAfter[0];
+                String after = beforeAndAfter[1];
+                if ((before.split("\\.").length != 2) && (!sourceType.equals("mysql"))){
+                    throw  new RuntimeException(String.format("Incorrect format for specifying table rename config %s. Provide it as <schema>.<tableName>", before));
+                }
+                if ((after.split("\\.").length != 2) && (!sourceType.equals("mysql"))){
+                    throw  new RuntimeException(String.format("Incorrect format for specifying table rename config %s. Provide it as <schema>.<tableName>", after));
+                }
+                renameTables.put(before, after);
             }
-            String before = beforeAndAfter[0];
-            String after = beforeAndAfter[1];
-            if ((before.split("\\.").length != 2) && (!sourceType.equals("mysql"))){
-                throw  new RuntimeException(String.format("Incorrect format for specifying table rename config %s. Provide it as <schema>.<tableName>", before));
-            }
-            if ((after.split("\\.").length != 2) && (!sourceType.equals("mysql"))){
-                throw  new RuntimeException(String.format("Incorrect format for specifying table rename config %s. Provide it as <schema>.<tableName>", after));
-            }
-            renameTables.put(before, after);
         }
-
     }
 
     /**
