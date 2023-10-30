@@ -119,7 +119,9 @@ class KafkaConnectRecordParser implements RecordParser {
         }
         if (renameTables.containsKey(qualifiedTableName)){
             String[] renamedTableName = renameTables.get(qualifiedTableName).split("\\.");
-            tableName = renamedTableName[renamedTableName.length - 1];
+            // TODO: support MySQL
+            schemaName = renamedTableName[0];
+            tableName = renamedTableName[1];
         }
         var tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
 
