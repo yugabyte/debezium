@@ -6,6 +6,7 @@
 package io.debezium.server.ybexporter;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -14,6 +15,8 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +27,7 @@ class KafkaConnectRecordParser implements RecordParser {
     String sourceType;
     private Map<String, Table> tableMap;
     private JsonConverter jsonConverter;
+    private Map<String, String> renameTables;
     Record r = new Record();
 
     public KafkaConnectRecordParser(String dataDirStr, String sourceType, Map<String, Table> tblMap) {
@@ -34,6 +38,30 @@ class KafkaConnectRecordParser implements RecordParser {
         jsonConverter = new JsonConverter();
         Map<String, String> jsonConfig = Collections.singletonMap(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "false");
         jsonConverter.configure(jsonConfig, false);
+        renameTables = new HashMap<>();
+        retrieveRenameTablesFromConfig();
+    }
+
+    private void retrieveRenameTablesFromConfig(){
+        final Config config = ConfigProvider.getConfig();
+        String renameTablesConfig = config.getOptionalValue("debezium.sink.ybexporter.tables.rename", String.class).orElse("");
+        if (!renameTablesConfig.isEmpty()){
+            for (String renameTableConfig: renameTablesConfig.split(",")){
+                String[] beforeAndAfter = renameTableConfig.split(":");
+                if (beforeAndAfter.length != 2){
+                    throw  new RuntimeException(String.format("Incorrect format for specifying table rename config %s. Provide it as <oldname>:<newname>", renameTableConfig));
+                }
+                String before = beforeAndAfter[0];
+                String after = beforeAndAfter[1];
+                if ((before.split("\\.").length != 2) && (!sourceType.equals("mysql"))){
+                    throw  new RuntimeException(String.format("Incorrect format for specifying table rename config %s. Provide it as <schema>.<tableName>", before));
+                }
+                if ((after.split("\\.").length != 2) && (!sourceType.equals("mysql"))){
+                    throw  new RuntimeException(String.format("Incorrect format for specifying table rename config %s. Provide it as <schema>.<tableName>", after));
+                }
+                renameTables.put(before, after);
+            }
+        }
     }
 
     /**
@@ -84,6 +112,15 @@ class KafkaConnectRecordParser implements RecordParser {
             schemaName = sourceNode.getString("schema");
         }
         String tableName = sourceNode.getString("table");
+        // rename table name
+        String qualifiedTableName = tableName;
+        if (!schemaName.equals("")){
+            qualifiedTableName = schemaName + "." + tableName;
+        }
+        if (renameTables.containsKey(qualifiedTableName)){
+            String[] renamedTableName = renameTables.get(qualifiedTableName).split("\\.");
+            tableName = renamedTableName[renamedTableName.length - 1];
+        }
         var tableIdentifier = dbName + "-" + schemaName + "-" + tableName;
 
         Table t = tableMap.get(tableIdentifier);
