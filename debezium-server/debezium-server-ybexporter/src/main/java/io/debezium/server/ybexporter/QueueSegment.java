@@ -64,6 +64,7 @@ public class QueueSegment {
 
         es.queueSegmentCreated(segmentNo, filePath);
         long committedSize = es.getQueueSegmentCommittedSize(segmentNo);
+        LOGGER.info("Opened queue segment {}; byteCount={}, committedSize={}", filePath, byteCount, committedSize);
         if (committedSize < byteCount){
             truncateFileAfterOffset(committedSize);
         }
@@ -179,7 +180,6 @@ public class QueueSegment {
             input = new BufferedReader(new FileReader(filePath));
             while ((line = input.readLine()) != null) {
                 last = line;
-                LOGGER.info("last line = {}", last);
                 if (last.equals(EOF_MARKER)){
                     return true;
                 }

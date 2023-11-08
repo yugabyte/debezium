@@ -206,7 +206,9 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             committer.markProcessed(event);
         }
         handleBatchComplete();
+        LOGGER.info("Fsynced batch with {} records", changeEvents.size());
         committer.markBatchFinished();
+        LOGGER.info("Marked batch complete with {} records", changeEvents.size());
         handleSnapshotOnlyComplete();
     }
 
