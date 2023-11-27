@@ -76,6 +76,11 @@ jobs:
           rm debezium-server-latest-1.9.5.tar.gz
           mv debezium-server debezium-server-1.9.5
           
+          # cp built yb-exporter to 1.9.5
+          cd ${GITHUB_WORKSPACE}
+          cd debezium-server/debezium-server-dist/target/debezium-server
+          cp lib/debezium-server-ybexporter-2.2.0-SNAPSHOT.jar debezium-server-1.9.5/lib/
+          
           # package yb-client-cdc-stream-wrapper.jar into debezium-server
           cd ${GITHUB_WORKSPACE}
           mv yb-client-cdc-stream-wrapper/target/yb-client-cdc-stream-wrapper.jar  debezium-server/debezium-server-dist/target/debezium-server/debezium-server-1.9.5/
