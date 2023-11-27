@@ -329,6 +329,24 @@ public class ExportStatus {
         return false;
     }
 
+    public boolean checkifEndMigrationRequested() throws SQLException {
+        Statement selectStmt = metadataDBConn.createStatement();
+        String query = String.format("SELECT json_text from %s where key = '%s'",
+                JSON_OBJECTS_TABLE_NAME, MIGRATION_STATUS_KEY);
+        try {
+            ResultSet rs = selectStmt.executeQuery(query);
+            while (rs.next()) {
+                MigrationStatusRecord msr = MigrationStatusRecord.fromJsonString(rs.getString("json_text"));
+                return msr.EndMigrationRequested;
+            }
+        } catch (SQLException e) {
+            throw e;
+        } finally {
+            selectStmt.close();
+        }
+        return false;
+    }
+
     private void updateEventsStats(Connection conn, Map<Pair<String, String>, Map<String, Long>> eventCountDeltaPerTable) throws SQLException {
         int updatedRows;
 
