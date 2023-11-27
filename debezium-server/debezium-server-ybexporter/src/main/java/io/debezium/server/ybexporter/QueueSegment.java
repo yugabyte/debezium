@@ -62,7 +62,7 @@ public class QueueSegment {
             throw new RuntimeException(e);
         }
 
-        es.queueSegmentCreated(segmentNo, filePath);
+
         long committedSize = es.getQueueSegmentCommittedSize(segmentNo);
         LOGGER.info("Opened queue segment {}; byteCount={}, committedSize={}", filePath, byteCount, committedSize);
         if (committedSize < byteCount){
@@ -71,6 +71,7 @@ public class QueueSegment {
         eventCountDeltaPerTable = new HashMap<>();
         final Config config = ConfigProvider.getConfig();
         exporterRole = config.getValue("debezium.sink.ybexporter.exporter.role", String.class);
+        es.queueSegmentCreated(segmentNo, filePath, exporterRole);
     }
 
     private void openFile() throws IOException {

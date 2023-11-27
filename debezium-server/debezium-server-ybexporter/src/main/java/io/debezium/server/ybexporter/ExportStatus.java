@@ -406,11 +406,12 @@ public class ExportStatus {
         }
     }
 
-    public void queueSegmentCreated(long segmentNo, String segmentPath){
+    public void queueSegmentCreated(long segmentNo, String segmentPath, String exporterRole){
         Statement insertStmt;
         try {
             insertStmt = metadataDBConn.createStatement();
-            insertStmt.executeUpdate(String.format("INSERT OR IGNORE into %s (segment_no, file_path, size_committed) VALUES(%d, '%s', 0)", QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath));
+            insertStmt.executeUpdate(String.format("INSERT OR IGNORE into %s (segment_no, file_path, size_committed, exporter_role) VALUES(%d, '%s', 0, '%s')",
+                    QUEUE_SEGMENT_META_TABLE_NAME, segmentNo, segmentPath, exporterRole));
             insertStmt.close();
         } catch (SQLException e) {
             throw new RuntimeException(String.format("Failed to run update queue segment size " +
