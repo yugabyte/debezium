@@ -12,13 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javax.annotation.PostConstruct;
-import javax.enterprise.context.Dependent;
-import javax.inject.Named;
-
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,16 +24,14 @@ import io.debezium.server.BaseChangeConsumer;
 /**
  * Implementation of the consumer that exports the messages to file in a Yugabyte-compatible form.
  */
-@Named("ybexporter")
-@Dependent
-public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<Object, Object>> {
+
+public class YbExporterConsumer extends BaseChangeConsumer {
     private static final Logger LOGGER = LoggerFactory.getLogger(YbExporterConsumer.class);
     private static final String PROP_PREFIX = "debezium.sink.ybexporter.";
     private static final String SOURCE_DB_EXPORTER_ROLE = "source_db_exporter";
     private static final String TARGET_DB_EXPORTER_FF_ROLE = "target_db_exporter_ff";
     private static final String TARGET_DB_EXPORTER_FB_ROLE = "target_db_exporter_fb";
     String snapshotMode;
-    @ConfigProperty(name = PROP_PREFIX + "dataDir")
     String dataDir;
     String sourceType;
     String exporterRole;
@@ -52,7 +45,10 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
     Thread flusherThread;
     boolean shutDown = false;
 
-    @PostConstruct
+    public YbExporterConsumer(String dataDir){
+        this.dataDir = dataDir;
+    }
+
     void connect() throws URISyntaxException {
         LOGGER.info("connect() called: dataDir = {}", dataDir);
         final Config config = ConfigProvider.getConfig();
@@ -166,7 +162,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         System.exit(0);
     }
 
-    @Override
+
     public void handleBatch(List<ChangeEvent<Object, Object>> changeEvents, DebeziumEngine.RecordCommitter<ChangeEvent<Object, Object>> committer)
             throws InterruptedException {
         LOGGER.info("Processing batch with {} records", changeEvents.size());
