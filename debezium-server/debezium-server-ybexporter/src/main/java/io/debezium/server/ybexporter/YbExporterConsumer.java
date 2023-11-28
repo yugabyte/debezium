@@ -132,6 +132,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             }
 
             checkForSwitchOperationAndHandle(switchOperation);
+            checkForEndMigrationAndHandle();
             try {
                 Thread.sleep(2000);
             }
@@ -161,6 +162,26 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
 
             exportStatus.flushToDisk();
             LOGGER.info("{} processing complete. Exiting...", operation);
+            shutDown = true; // to ensure that no event gets written after switch operation.
+        }
+        System.exit(0);
+    }
+
+    private void checkForEndMigrationAndHandle(){
+        try {
+            if (!exportStatus.checkifEndMigrationRequested()) {
+                return;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
+        LOGGER.info("Observed request for end migration in metadb. Shutting down gracefully.");
+        synchronized (eventQueue){ // need to synchronize with handleBatch
+            eventQueue.close();
+
+            exportStatus.flushToDisk();
+            LOGGER.info("End migration processing complete. Exiting...");
             shutDown = true; // to ensure that no event gets written after switch operation.
         }
         System.exit(0);
