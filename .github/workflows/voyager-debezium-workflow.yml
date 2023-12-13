@@ -13,12 +13,12 @@ name: Build Debezium Server
 on:
   push:
     branches:
-      - voyager-main
+      - 2.2.0-1.6.1-dev
     tags:
       - '*.*.*-*.*.*'
   pull_request:
     branches:
-      - voyager-main
+      - 2.2.0-1.6.1-dev
 
 jobs:
   build_debezium_server:
