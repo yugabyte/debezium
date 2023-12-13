@@ -228,9 +228,9 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
         LOGGER.info("Fsynced batch with {} records", changeEvents.size());
 
         // committer.markProcessed(event) updates offsets in memory, committer.MarkBatchFinished flushes those
-        // offset to disk. Offsets are also flushed to disk when debezium-server is gracefully shutdown. (which can
+        // offsets to disk. Offsets are also flushed to disk when debezium-server is gracefully shutdown. (which can
         // happen multiple times during a migration).
-        // This avoids the scenario where events were marked as processed (and flushed to disk by graceful shutdown),
+        // To the scenario where events were marked as processed (and flushed to disk by graceful shutdown),
         // but not fsynced and updated in metadb, it is important to mark the events as processed only AFTER we fsync/
         // update metaDB.
         // TODO: optimize by only marking the last event as processed.
