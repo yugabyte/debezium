@@ -225,7 +225,8 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             checkIfSnapshotComplete(r);
         }
         handleBatchComplete();
-        LOGGER.info("Fsynced batch with {} records", changeEvents.size());
+
+        LOGGER.debug("Fsynced batch with {} records", changeEvents.size());
 
         // committer.markProcessed(event) updates offsets in memory, committer.MarkBatchFinished flushes those
         // offsets to disk. Offsets are also flushed to disk when debezium-server is gracefully shutdown. (which can
@@ -238,7 +239,7 @@ public class YbExporterConsumer extends BaseChangeConsumer implements DebeziumEn
             committer.markProcessed(event);
         }
         committer.markBatchFinished();
-        LOGGER.info("Committed batch complete with {} records", changeEvents.size());
+        LOGGER.debug("Committed batch complete with {} records", changeEvents.size());
         handleSnapshotOnlyComplete();
     }
 
