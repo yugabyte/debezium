@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
+import io.debezium.connector.postgresql.*;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.postgresql.core.BaseConnection;
 import org.postgresql.jdbc.PgConnection;
@@ -34,11 +35,6 @@ import org.slf4j.LoggerFactory;
 import io.debezium.DebeziumException;
 import io.debezium.annotation.VisibleForTesting;
 import io.debezium.config.Configuration;
-import io.debezium.connector.postgresql.PgOid;
-import io.debezium.connector.postgresql.PostgresConnectorConfig;
-import io.debezium.connector.postgresql.PostgresType;
-import io.debezium.connector.postgresql.PostgresValueConverter;
-import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.data.SpecialValueDecimal;
 import io.debezium.jdbc.JdbcConfiguration;
@@ -510,7 +506,12 @@ public class PostgresConnection extends JdbcConnection {
      * @throws SQLException if anything fails.
      */
     public Long currentTransactionId() throws SQLException {
-        /* 
+        // YB Note: Returning a dummy value since the txid information is not being used to make
+        // any difference.
+        if (YugabyteDBServer.isEnabled()) {
+            return 2L;
+        }
+
         AtomicLong txId = new AtomicLong(0);
         query("select (case pg_is_in_recovery() when 't' then 0 else txid_current() end) AS pg_current_txid", rs -> {
             if (rs.next()) {
@@ -519,9 +520,6 @@ public class PostgresConnection extends JdbcConnection {
         });
         long value = txId.get();
         return value > 0 ? value : null;
-        */
-        LOGGER.info("AS: txid_current");
-        return 2L;
     }
 
     /**
