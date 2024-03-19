@@ -1691,7 +1691,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(flushLsn.size()).isGreaterThanOrEqualTo((recordCount * 3) / 4);
     }
 
-    @Ignore("YB: custom snapshotter unsupported")
     @Test
     @FixFor("DBZ-1082")
     public void shouldAllowForCustomSnapshot() throws InterruptedException {
@@ -2212,7 +2211,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         stopConnector(value -> assertThat(logInterceptor.containsMessage("For table 's2.a' the select statement was not provided, skipping table")).isTrue());
     }
 
-    @Ignore("YB: Custom snapshotter not supported")
     @Test
     @FixFor("DBZ-2608")
     public void testCustomSnapshotterSnapshotCompleteLifecycleHook() throws Exception {
