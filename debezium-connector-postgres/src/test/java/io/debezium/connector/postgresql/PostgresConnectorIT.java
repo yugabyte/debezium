@@ -497,6 +497,16 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Testing.Print.enable();
         final String slotName = "default_change" + new Random().nextInt(100);
         TestHelper.create().dropReplicationSlot(slotName);
+
+        // YB Note: Creating a table before deploying the connector since dynamic table addition is
+        // not supported yet.
+        TestHelper.execute(
+          "CREATE SCHEMA IF NOT EXISTS default_change;",
+          "DROP TABLE IF EXISTS default_change.test_table;",
+          "CREATE TABLE default_change.test_table (pk SERIAL, i INT DEFAULT 1, text TEXT DEFAULT 'foo', PRIMARY KEY(pk));");
+
+        TestHelper.execute("INSERT INTO default_change.test_table(i, text) VALUES (DEFAULT, DEFAULT);");
+
         try {
             final PostgresConnectorConfig config = new PostgresConnectorConfig(TestHelper.defaultConfig()
                     .with(PostgresConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, Boolean.FALSE)
@@ -506,12 +516,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                     .build());
 
             final String topicName = topicName("default_change.test_table");
-
-            TestHelper.execute(
-                    "CREATE SCHEMA IF NOT EXISTS default_change;",
-                    "DROP TABLE IF EXISTS default_change.test_table;",
-                    "CREATE TABLE default_change.test_table (pk SERIAL, i INT DEFAULT 1, text TEXT DEFAULT 'foo', PRIMARY KEY(pk));",
-                    "INSERT INTO default_change.test_table(i, text) VALUES (DEFAULT, DEFAULT);");
 
             start(PostgresConnector.class, config.getConfig());
 
@@ -804,6 +808,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(actualRecords.recordsForTopic(topicName("s2.a"))).hasSize(1);
     }
 
+    @Ignore("YB Note: This behaviour is not yet implemented, see https://github.com/yugabyte/yugabyte-db/issues/21573")
     @Test
     @FixFor("DBZ-1021")
     @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "Pgoutput will generate insert statements even for dropped tables, column optionality will default to true however")
@@ -1089,11 +1094,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // kill all opened connections to the database
         TestHelper.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type='walsender'");
         TestHelper.execute(INSERT_STMT);
+        // TODO Vaibhav: Revisit this later to see if this wait can be removed or reduced.
         TestHelper.waitFor(Duration.ofSeconds(10));
         assertRecordsAfterInsert(2, 3, 3);
     }
 
-    @Ignore("YB: updating replica identity unsupported")
+    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldUpdateReplicaIdentity() throws Exception {
 
@@ -1126,7 +1132,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
-    @Ignore("YB: updating replica identity unsupported")
+    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldUpdateReplicaIdentityWithRegExp() throws Exception {
 
@@ -1158,7 +1164,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
-    @Ignore("YB: updating replica identity unsupported")
+    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldNotUpdateReplicaIdentityWithRegExpDuplicated() throws Exception {
 
@@ -1187,7 +1193,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(logInterceptor.containsStacktraceElement("More than one Regular expressions matched table s2.b")).isTrue();
     }
 
-    @Ignore("YB: updating replica identity unsupported")
+    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldUpdateReplicaIdentityWithOneTable() throws Exception {
 
@@ -1217,7 +1223,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
-    @Ignore("YB: updating replica identity unsupported")
+    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldUpdateReplicaIdentityUsingIndex() throws Exception {
 
@@ -1255,7 +1261,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
-    @Ignore("YB: Updating replica identity unsupported")
+    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldLogOwnershipErrorForReplicaIdentityUpdate() throws Exception {
 
@@ -1284,7 +1290,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(logInterceptor.containsMessage(String.format("Replica identity could not be updated because of lack of privileges"))).isTrue();
     }
 
-    @Ignore("YB: Updating replica identity unsupported")
+    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldCheckTablesToUpdateReplicaIdentityAreCaptured() throws Exception {
 
@@ -1371,14 +1377,20 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     public void shouldTakeBlacklistFiltersIntoAccount() throws Exception {
+        // YB Note: Separating the ALTER commands as they were causing transaction abortion in YB
+        // if run collectively, the error being:
+        // java.lang.RuntimeException: org.postgresql.util.PSQLException: ERROR: Unknown transaction, could be recently aborted: 3273ed66-13c6-4d73-8c6e-014389e5081e
         String setupStmt = SETUP_TABLES_STMT +
-                "CREATE TABLE s1.b (pk SERIAL, aa integer, bb integer, PRIMARY KEY(pk));" +
-                "ALTER TABLE s1.a ADD COLUMN bb integer;" +
-                "INSERT INTO s1.a (aa, bb) VALUES (2, 2);" +
+                "CREATE TABLE s1.b (pk SERIAL, aa integer, bb integer, PRIMARY KEY(pk));";
+
+        TestHelper.execute("ALTER TABLE s1.a ADD COLUMN bb integer;");
+
+        String initInsertStmt = "INSERT INTO s1.a (aa, bb) VALUES (2, 2);" +
                 "INSERT INTO s1.a (aa, bb) VALUES (3, 3);" +
                 "INSERT INTO s1.b (aa, bb) VALUES (4, 4);" +
                 "INSERT INTO s2.a (aa) VALUES (5);";
         TestHelper.execute(setupStmt);
+        TestHelper.execute(initInsertStmt);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
@@ -1588,7 +1600,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(record == null || !record.sourceOffset().isEmpty());
     }
 
-    @Ignore
     @Test
     @FixFor("DBZ-965")
     public void shouldRegularlyFlushLsn() throws InterruptedException, SQLException {
@@ -1601,10 +1612,10 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .build();
         start(PostgresConnector.class, config);
         assertConnectorIsRunning();
-//        waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
+        waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
 
-        // Wait here for 1 minute.
-        Thread.sleep(60_000);
+        // YB Note: Waiting for 15 seconds for streaming to initialise properly.
+        TestHelper.waitFor(Duration.ofSeconds(15));
 
         // there shouldn't be any snapshot records
         assertNoRecordsToConsume();
@@ -1633,7 +1644,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(flushLsn.size()).isGreaterThanOrEqualTo((recordCount * 3) / 4);
     }
 
-    @Ignore("YB: Transaction metadata not implemented")
     @Test
     @FixFor("DBZ-2660")
     public void shouldRegularlyFlushLsnWithTxMonitoring() throws InterruptedException, SQLException {
@@ -2552,6 +2562,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // update and verify update
         // YB Note: update not supported yet
+        // See https://github.com/yugabyte/yugabyte-db/issues/21591
 //        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 //
 //        actualRecords = consumeRecordsByTopic(1);
@@ -2615,6 +2626,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // update and verify update
         // YB Note: update not supported yet
+        // See https://github.com/yugabyte/yugabyte-db/issues/21591
 //        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
 //        actualRecords = consumeRecordsByTopic(1);
@@ -2689,6 +2701,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // YB Note: updates not supported yet
         // update and verify update
+        // See https://github.com/yugabyte/yugabyte-db/issues/21591
 //        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 //
 //        actualRecords = consumeRecordsByTopic(1);
@@ -2733,6 +2746,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
         // YB note: since update records are not yet supported, commenting this and reducing the
         // expected count by 1 makes sense.
+        // See https://github.com/yugabyte/yugabyte-db/issues/21591
 //        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
         start(PostgresConnector.class, configBuilder.build());
@@ -2777,6 +2791,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
         // YB note: since update records are not yet supported, commenting this and reducing the
         // expected count by 1 makes sense.
+        // See https://github.com/yugabyte/yugabyte-db/issues/21591
 //        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
         start(PostgresConnector.class, configBuilder.build());
@@ -2792,7 +2807,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Assert.assertEquals(slotAfterSnapshot.slotLastFlushedLsn(), slotAfterIncremental.slotLastFlushedLsn());
     }
 
-    @Ignore("YB: Adding transaction metadata not supported yet")
     @Test
     @FixFor("DBZ-1292")
     @SkipWhenKafkaVersion(check = EqualityCheck.EQUAL, value = KafkaVersion.KAFKA_1XX, description = "Not compatible with Kafka 1.x")
@@ -2822,8 +2836,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         Testing.Print.enable();
 
+        // YB Note: Increasing the wait time for records.
         final List<SourceRecord> streaming = new ArrayList<SourceRecord>();
-        Awaitility.await().atMost(TestHelper.waitTimeForRecords(), TimeUnit.SECONDS).until(() -> {
+        Awaitility.await().atMost(TestHelper.waitTimeForRecords() * 15, TimeUnit.SECONDS).until(() -> {
             // Should be BEGIN + END in case of empty tx or BEGIN + data in case of our TX
             final SourceRecords streamingRecords = consumeRecordsByTopic(2);
             final SourceRecord second = streamingRecords.allRecordsInOrder().get(1);
@@ -3035,6 +3050,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         consumeRecordsByTopic(1);
 
         TestHelper.execute(INSERT_STMT);
+        TestHelper.waitFor(Duration.ofSeconds(10));
         SourceRecords actualRecordsAfterUpdate = consumeRecordsByTopic(1);
         assertThat(actualRecordsAfterUpdate.topics()).hasSize(1);
 
@@ -3276,7 +3292,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         System.out.println(recordsForTopic.get(0));
     }
 
-    @Ignore("YB: updating replica identity unsupported")
+    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     @FixFor("DBZ-5295")
     public void shouldReselectToastColumnsOnPrimaryKeyChange() throws Exception {
@@ -3303,6 +3319,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(after.get("data")).isEqualTo(toastValue1);
         assertThat(after.get("data2")).isEqualTo(toastValue2);
 
+        // See https://github.com/yugabyte/yugabyte-db/issues/21591
         TestHelper.execute("UPDATE s1.dbz5295 SET pk = 2 WHERE pk = 1;");
 
         // The update of the primary key causes a DELETE and a CREATE, mingled with a TOMBSTONE
@@ -3424,7 +3441,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                         .containsMessage("Postgres server doesn't support the command pg_replication_slot_advance(). Not seeking to last known offset."));
     }
 
-    @Ignore("YB: No provision for any custom snapshotter yet")
     @Test
     @FixFor("DBZ-5852")
     public void shouldInvokeSnapshotterAbortedMethod() throws Exception {
@@ -3476,7 +3492,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
-    @Ignore("YB: No provision for any custom snapshotter yet")
     @Test
     @FixFor("DBZ-6249")
     public void shouldThrowRightExceptionWhenNoCustomSnapshotClassProvided() {
