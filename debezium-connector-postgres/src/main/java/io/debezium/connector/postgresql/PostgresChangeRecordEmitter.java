@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.postgresql.core.BaseConnection;
@@ -57,10 +58,11 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
     private final PostgresConnection connection;
     private final TableId tableId;
     private final Map<String, Object> cachedOldToastedValues = new HashMap<>();
+    private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = ReplicaIdentityInfo.ReplicaIdentity.CHANGE;
 
     public PostgresChangeRecordEmitter(PostgresPartition partition, OffsetContext offset, Clock clock, PostgresConnectorConfig connectorConfig, PostgresSchema schema,
                                        PostgresConnection connection, TableId tableId,
-                                       ReplicationMessage message) {
+                                       ReplicationMessage message, ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) {
         super(partition, offset, clock, connectorConfig);
 
         this.schema = schema;
@@ -70,6 +72,14 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
 
         this.tableId = tableId;
         Objects.requireNonNull(this.tableId);
+
+//        this.replicaIdentity = replicaIdentity;
+    }
+
+    public PostgresChangeRecordEmitter(PostgresPartition partition, OffsetContext offset, Clock clock, PostgresConnectorConfig connectorConfig, PostgresSchema schema,
+                                       PostgresConnection connection, TableId tableId,
+                                       ReplicationMessage message) {
+        this(partition, offset, clock, connectorConfig, schema, connection, tableId, message, ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
     }
 
     @Override
@@ -151,7 +161,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
         return schema.schemaFor(tableId);
     }
 
-    private Object[] columnValues(List<ReplicationMessage.Column> columns, TableId tableId, boolean refreshSchemaIfChanged,
+    protected Object[] columnValues(List<ReplicationMessage.Column> columns, TableId tableId, boolean refreshSchemaIfChanged,
                                   boolean sourceOfToasted, boolean oldValues)
             throws SQLException {
         if (columns == null || columns.isEmpty()) {
@@ -188,7 +198,13 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
                         }
                     }
                 }
-                values[position] = value;
+                if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+                    LOGGER.info("Replica identity is CHANGE");
+                    values[position] = new Object[]{value, Boolean.TRUE};
+                } else {
+                    LOGGER.info("Replica identity is NOT CHANGE");
+                    values[position] = value;
+                }
             }
         }
         return values;

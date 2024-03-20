@@ -2792,14 +2792,19 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // YB note: since update records are not yet supported, commenting this and reducing the
         // expected count by 1 makes sense.
         // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
         start(PostgresConnector.class, configBuilder.build());
 
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
-        actualRecords = consumeRecordsByTopic(1);
+        actualRecords = consumeRecordsByTopic(2);
+
+        for (SourceRecord r : actualRecords.allRecordsInOrder()) {
+            LOGGER.info("VKVK record: {}", r);
+        }
+
         assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(1);
         stopConnector();
 

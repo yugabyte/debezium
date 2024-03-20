@@ -217,7 +217,7 @@ public final class TestHelper {
         TestHelper.execute(dropStmts);
 
         try {
-            TestHelper.executeDDL("init_database.ddl");
+//            TestHelper.executeDDL("init_database.ddl");
         }
         catch (Exception e) {
             throw new IllegalStateException("Failed to initialize database", e);
