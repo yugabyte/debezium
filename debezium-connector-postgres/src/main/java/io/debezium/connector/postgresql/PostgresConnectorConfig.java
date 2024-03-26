@@ -644,6 +644,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                             "FULL - Records the old values of all columns in the row." +
                             "NOTHING - Records no information about the old row. This is the default for system tables.");
 
+    public static final Field REPLICA_IDENTITY = Field.create("replica.identity")
+           .withDisplayName("Internal: Replica Identity")
+           .withType(Type.STRING)
+           .withImportance(Importance.LOW);
+
     public static final Field STREAM_PARAMS = Field.create("slot.stream.params")
             .withDisplayName("Optional parameters to pass to the logical decoder when the stream is started.")
             .withType(Type.STRING)

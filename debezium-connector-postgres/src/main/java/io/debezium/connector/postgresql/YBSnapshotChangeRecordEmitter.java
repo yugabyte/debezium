@@ -15,12 +15,14 @@ import io.debezium.util.Clock;
  */
 public class YBSnapshotChangeRecordEmitter<P extends PostgresPartition> extends RelationalChangeRecordEmitter<P> {
   private final Object[] row;
-  private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = ReplicaIdentityInfo.ReplicaIdentity.CHANGE;
+  private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity;
 
-  public YBSnapshotChangeRecordEmitter(P partition, OffsetContext offset, Object[] row, Clock clock, RelationalDatabaseConnectorConfig connectorConfig) {
+  public YBSnapshotChangeRecordEmitter(P partition, OffsetContext offset, Object[] row, Clock clock, RelationalDatabaseConnectorConfig connectorConfig,
+                                       ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) {
     super(partition, offset, clock, connectorConfig);
 
     this.row = row;
+    this.replicaIdentity = replicaIdentity;
   }
 
   @Override

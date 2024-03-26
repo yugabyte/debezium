@@ -65,7 +65,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
   private final CustomConverterRegistry customConverterRegistry;
   private final boolean multiPartitionMode;
 
-  private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = ReplicaIdentityInfo.ReplicaIdentity.CHANGE;
+  private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity;
 
   /**
    * Create a new instance of the builder.
@@ -81,7 +81,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
                               FieldNamer<Column> fieldNamer,
                               boolean multiPartitionMode) {
     this(valueConverterProvider, null, schemaNameAdjuster,
-      customConverterRegistry, sourceInfoSchema, fieldNamer, multiPartitionMode);
+      customConverterRegistry, sourceInfoSchema, fieldNamer, multiPartitionMode, ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
   }
 
   /**
@@ -94,12 +94,13 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
    * @param schemaNameAdjuster the adjuster for schema names; may not be null
    */
   public PGTableSchemaBuilder(ValueConverterProvider valueConverterProvider,
-                            DefaultValueConverter defaultValueConverter,
-                            SchemaNameAdjuster schemaNameAdjuster,
-                            CustomConverterRegistry customConverterRegistry,
-                            Schema sourceInfoSchema,
-                            FieldNamer<Column> fieldNamer,
-                            boolean multiPartitionMode) {
+                              DefaultValueConverter defaultValueConverter,
+                              SchemaNameAdjuster schemaNameAdjuster,
+                              CustomConverterRegistry customConverterRegistry,
+                              Schema sourceInfoSchema,
+                              FieldNamer<Column> fieldNamer,
+                              boolean multiPartitionMode,
+                              ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) {
     super(valueConverterProvider, defaultValueConverter, schemaNameAdjuster, customConverterRegistry, sourceInfoSchema, fieldNamer, multiPartitionMode);
     this.schemaNameAdjuster = schemaNameAdjuster;
     this.valueConverterProvider = valueConverterProvider;
@@ -109,6 +110,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
     this.fieldNamer = fieldNamer;
     this.customConverterRegistry = customConverterRegistry;
     this.multiPartitionMode = multiPartitionMode;
+    this.replicaIdentity = replicaIdentity;
   }
 
   /**
@@ -211,17 +213,14 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
 
             // YB Note: Adding YB specific changes.
             if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
-//              LOGGER.info("keyGen: Replica identity is CHANGE");
               value = converter.convert(((Object[]) value)[0]);
             } else {
-              LOGGER.info("Replica identity is NOT CHANGE");
               value = converter.convert(value);
             }
             try {
               if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
                 if (value != null && !UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                   Struct cell = new Struct(fields[i].schema());
-//                  LOGGER.info("VKVK value being put in keyGen for field {}: {}", fields[i].name(), value);
                   cell.put("value", value);
                   cell.put("set", true);
                   result.put(fields[i], cell);
@@ -446,14 +445,19 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
                                         + defaultValue + " of type " + defaultValue.getClass(), e);
         }
       }
-      Schema optionalCellSchema = cellSchema(fieldNamer.fieldNameFor(column), fieldBuilder.build(), column.isOptional());
 
-      builder.field(fieldNamer.fieldNameFor(column), optionalCellSchema);
-//      if (LOGGER.isDebugEnabled()) {
-        LOGGER.info("- field '{}' ({}{}) from column {}", column.name(), builder.isOptional() ? "OPTIONAL " : "",
+      if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+        Schema optionalCellSchema = cellSchema(fieldNamer.fieldNameFor(column), fieldBuilder.build(), column.isOptional());
+        builder.field(fieldNamer.fieldNameFor(column), optionalCellSchema);
+      } else {
+        builder.field(fieldNamer.fieldNameFor(column), fieldBuilder.build());
+      }
+
+      if (LOGGER.isDebugEnabled()) {
+        LOGGER.debug("- field '{}' ({}{}) from column {}", column.name(), builder.isOptional() ? "OPTIONAL " : "",
           fieldBuilder.type(),
           column);
-//      }
+      }
     }
     else {
       LOGGER.warn("Unexpected JDBC type '{}' for column '{}' that will be ignored", column.jdbcType(), column.name());
@@ -482,9 +486,9 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
       if (isOptional) {
         schemaBuilder.optional();
       }
+
       return schemaBuilder.build();
-    }
-    else {
+    } else {
       return null;
     }
   }

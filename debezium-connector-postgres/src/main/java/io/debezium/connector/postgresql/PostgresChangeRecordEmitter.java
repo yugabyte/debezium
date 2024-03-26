@@ -59,7 +59,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
     private final PostgresConnection connection;
     private final TableId tableId;
     private final Map<String, Object> cachedOldToastedValues = new HashMap<>();
-    private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = ReplicaIdentityInfo.ReplicaIdentity.CHANGE;
+    private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity;
 
     public PostgresChangeRecordEmitter(PostgresPartition partition, OffsetContext offset, Clock clock, PostgresConnectorConfig connectorConfig, PostgresSchema schema,
                                        PostgresConnection connection, TableId tableId,
@@ -74,7 +74,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
         this.tableId = tableId;
         Objects.requireNonNull(this.tableId);
 
-//        this.replicaIdentity = replicaIdentity;
+        this.replicaIdentity = replicaIdentity;
     }
 
     public PostgresChangeRecordEmitter(PostgresPartition partition, OffsetContext offset, Clock clock, PostgresConnectorConfig connectorConfig, PostgresSchema schema,
