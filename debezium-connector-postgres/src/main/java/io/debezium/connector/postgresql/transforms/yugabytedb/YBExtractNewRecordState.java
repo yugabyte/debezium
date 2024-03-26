@@ -106,10 +106,6 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
 
 class SchemaUtil {
 
-  public static SchemaBuilder copySchemaBasics(Schema source) {
-    return copySchemaBasics(source, new SchemaBuilder(source.type()));
-  }
-
   public static SchemaBuilder copySchemaBasics(Schema source, SchemaBuilder builder) {
     builder.name(source.name());
     builder.version(source.version());
