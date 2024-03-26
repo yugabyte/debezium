@@ -210,19 +210,22 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
             // It thus makes sense to convert them to a sensible default replacement value.
 
             // YB Note: Adding YB specific changes.
-//            if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
-//              LOGGER.info("Replica identity is CHANGE");
-//              value = converter.convert(((Object[]) value)[0]);
-//            } else {
-//              LOGGER.info("Replica identity is NOT CHANGE");
+            if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+//              LOGGER.info("keyGen: Replica identity is CHANGE");
+              value = converter.convert(((Object[]) value)[0]);
+            } else {
+              LOGGER.info("Replica identity is NOT CHANGE");
               value = converter.convert(value);
-//            }
+            }
             try {
               if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
-                Struct cell = new Struct(fields[i].schema());
-                cell.put("value", value);
-                cell.put("set", true);
-                result.put(fields[i], cell);
+                if (value != null && !UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
+                  Struct cell = new Struct(fields[i].schema());
+//                  LOGGER.info("VKVK value being put in keyGen for field {}: {}", fields[i].name(), value);
+                  cell.put("value", value);
+                  cell.put("set", true);
+                  result.put(fields[i], cell);
+                }
               } else {
                 result.put(fields[i], value);
               }
@@ -298,14 +301,19 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
 
           if (converter != null) {
             try {
-              if (value != null) {
-                value = converter.convert(((Object[]) value)[0]);
-                Struct cell = new Struct(fields[i].schema());
-                cell.put("value", value);
-                cell.put("set", true);
-                result.put(fields[i], cell);
+              if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+                if (value != null && !UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
+                  value = converter.convert(((Object[]) value)[0]);
+                  Struct cell = new Struct(fields[i].schema());
+//                  LOGGER.info("VKVK value being put in valGen for field {}: {}", fields[i].name(), value);
+                  cell.put("value", value);
+                  cell.put("set", true);
+                  result.put(fields[i], cell);
+                } else {
+                  result.put(fields[i], null);
+                }
               } else {
-                result.put(fields[i], null);
+                result.put(fields[i], value);
               }
             }
             catch (DataException | IllegalArgumentException e) {
@@ -438,13 +446,14 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
                                         + defaultValue + " of type " + defaultValue.getClass(), e);
         }
       }
+      Schema optionalCellSchema = cellSchema(fieldNamer.fieldNameFor(column), fieldBuilder.build(), column.isOptional());
 
-      builder.field(fieldNamer.fieldNameFor(column), fieldBuilder.build());
-      if (LOGGER.isDebugEnabled()) {
-        LOGGER.debug("- field '{}' ({}{}) from column {}", column.name(), builder.isOptional() ? "OPTIONAL " : "",
+      builder.field(fieldNamer.fieldNameFor(column), optionalCellSchema);
+//      if (LOGGER.isDebugEnabled()) {
+        LOGGER.info("- field '{}' ({}{}) from column {}", column.name(), builder.isOptional() ? "OPTIONAL " : "",
           fieldBuilder.type(),
           column);
-      }
+//      }
     }
     else {
       LOGGER.warn("Unexpected JDBC type '{}' for column '{}' that will be ignored", column.jdbcType(), column.name());
@@ -463,5 +472,20 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
    */
   protected ValueConverter createValueConverterFor(TableId tableId, Column column, Field fieldDefn) {
     return customConverterRegistry.getValueConverter(tableId, column).orElse(valueConverterProvider.converter(column, fieldDefn));
+  }
+
+  static Schema cellSchema(String name, Schema valueSchema, boolean isOptional) {
+    if (valueSchema != null) {
+      SchemaBuilder schemaBuilder = SchemaBuilder.struct().name(name)
+                                      .field("value", valueSchema)
+                                      .field("set", Schema.BOOLEAN_SCHEMA);
+      if (isOptional) {
+        schemaBuilder.optional();
+      }
+      return schemaBuilder.build();
+    }
+    else {
+      return null;
+    }
   }
 }

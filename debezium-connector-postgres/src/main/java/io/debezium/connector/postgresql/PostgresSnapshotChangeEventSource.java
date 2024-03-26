@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import io.debezium.connector.postgresql.connection.pgoutput.PgOutputReplicationMessage;
 import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,12 +97,18 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     //        return new SnapshotChangeRecordEmitter<>(partition, offset, row, getClock(), connectorConfig);
     //    }
 
+    // public PostgresChangeRecordEmitter(PostgresPartition partition, OffsetContext offset, Clock clock, PostgresConnectorConfig connectorConfig, PostgresSchema schema,
+    //                                       PostgresConnection connection, TableId tableId,
+    //                                       ReplicationMessage message)
 
-//    @Override
-//    protected ChangeRecordEmitter<PostgresPartition> getChangeRecordEmitter(PostgresPartition partition, PostgresOffsetContext offset, TableId tableId, Object[] row, Instant timestamp) {
-//        offset.event(tableId, timestamp);
-//        return new PostgresChangeRecordEmitter(partition, offset, getClock(), connectorConfig, schema, jdbcConnection, tableId, )
-//    }
+
+    @Override
+    protected ChangeRecordEmitter<PostgresPartition> getChangeRecordEmitter(
+      PostgresPartition partition, PostgresOffsetContext offset, TableId tableId, Object[] row,
+      Instant timestamp) {
+        offset.event(tableId, timestamp);
+        return new YBSnapshotChangeRecordEmitter<>(partition, offset, row, getClock(), connectorConfig);
+    }
 
     @Override
     protected void connectionCreated(RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext)

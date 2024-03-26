@@ -310,6 +310,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     tableId,
                     message.getOperation());
 
+            LOGGER.info("Received record of type {}", message.getOperation());
             boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
                     partition,
                     tableId,

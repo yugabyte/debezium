@@ -2762,6 +2762,77 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Assert.assertEquals(1, slotAfterIncremental.slotLastFlushedLsn().compareTo(slotAfterSnapshot.slotLastFlushedLsn()));
     }
 
+    // YB Note: This test is only applicable when replica identity is CHANGE.
+    @Test
+    public void testYBCustomChangesForUpdate() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.createDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+              .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+              .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+              .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+        TestHelper.waitFor(Duration.ofSeconds(5));
+
+        TestHelper.execute(INSERT_STMT);
+        TestHelper.execute("UPDATE s2.a SET aa=2 WHERE pk=1;");
+        TestHelper.execute("UPDATE s2.a SET aa=NULL WHERE pk=1;");
+
+        SourceRecords actualRecords = consumeRecordsByTopic(3);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/aa/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/bb/value", null);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(1), "after/aa/value", 2);
+        assertValueField(actualRecords.allRecordsInOrder().get(1), "after/bb", null);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(2), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(2), "after/aa/value", null);
+        assertValueField(actualRecords.allRecordsInOrder().get(2), "after/bb", null);
+    }
+
+    // YB Note: This test is only applicable when replica identity is CHANGE.
+    @Test
+    public void customYBStructureShouldBePresentInSnapshotRecords() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.createDefaultReplicationSlot();
+
+        // Insert 5 records to be included in snapshot.
+        for (int i = 0; i < 5; ++i) {
+            TestHelper.execute(String.format("INSERT INTO s2.a (aa) VALUES (%d);", i));
+        }
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForSnapshotToBeCompleted();
+
+        SourceRecords actualRecords = consumeRecordsByTopic(5);
+        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(5);
+
+        Set<Integer> expectedPKValues = new HashSet<>(Arrays.asList(1,2,3,4,5));
+        Set<Integer> actualPKValues = new HashSet<>();
+
+        for (SourceRecord record : actualRecords.allRecordsInOrder()) {
+            Struct value = (Struct) record.value();
+
+            actualPKValues.add(value.getStruct("after").getStruct("pk").getInt32("value"));
+        }
+
+        assertEquals(expectedPKValues, actualPKValues);
+    }
+
     @Test
     @FixFor("DBZ-5811")
     public void shouldNotAckLsnOnSource() throws Exception {
@@ -2792,7 +2863,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // YB note: since update records are not yet supported, commenting this and reducing the
         // expected count by 1 makes sense.
         // See https://github.com/yugabyte/yugabyte-db/issues/21591
-        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
         start(PostgresConnector.class, configBuilder.build());
 
@@ -2800,10 +2871,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         waitForStreamingRunning();
 
         actualRecords = consumeRecordsByTopic(2);
-
-        for (SourceRecord r : actualRecords.allRecordsInOrder()) {
-            LOGGER.info("VKVK record: {}", r);
-        }
 
         assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(1);
         stopConnector();
