@@ -16,7 +16,7 @@ import io.debezium.transforms.ExtractNewRecordState;
 
 /**
  * Custom extractor for YugabyteDB to be used when replica identity is CHANGE; this will be used
- * to transform records from the format {@code fieldName:{value:"someValue", set:true}}
+ * to transform records from the format {@code fieldName:{value:"someValue",set:true}}
  * to {@code fieldName:"someValue"} and omit the records from the message which are not updated
  * in the given change event.
  * @param <R>
@@ -33,16 +33,16 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
       return ret;
     }
 
-    Pair p = getUpdatedValueAndSchema((Struct) ret.key());
-    Schema updatedSchemaForKey = (Schema) p.getFirst();
-    Struct updatedValueForKey = (Struct) p.getSecond();
+    Pair<Schema, Struct> p = getUpdatedValueAndSchema((Struct) ret.key());
+    Schema updatedSchemaForKey = p.getFirst();
+    Struct updatedValueForKey = p.getSecond();
 
     Schema updatedSchemaForValue = null;
     Struct updatedValueForValue = null;
     if (ret.value() != null) {
-      Pair val = getUpdatedValueAndSchema((Struct) ret.value());
-      updatedSchemaForValue = (Schema) val.getFirst();
-      updatedValueForValue = (Struct) val.getSecond();
+      Pair<Schema, Struct> val = getUpdatedValueAndSchema((Struct) ret.value());
+      updatedSchemaForValue = val.getFirst();
+      updatedValueForValue = val.getSecond();
     }
 
     return ret.newRecord(ret.topic(), ret.kafkaPartition(), updatedSchemaForKey, updatedValueForKey, updatedSchemaForValue, updatedValueForValue, ret.timestamp());
