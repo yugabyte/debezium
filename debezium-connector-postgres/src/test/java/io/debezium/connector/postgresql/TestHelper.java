@@ -294,7 +294,6 @@ public final class TestHelper {
         if (testNetworkTimeout != null && testNetworkTimeout.length() != 0) {
             builder.with(PostgresConnectorConfig.STATUS_UPDATE_INTERVAL_MS, Integer.parseInt(testNetworkTimeout));
         }
-        LOGGER.info("VKVK plugin name is {}", builder.build().getString("plugin.name"));
         return builder;
     }
 

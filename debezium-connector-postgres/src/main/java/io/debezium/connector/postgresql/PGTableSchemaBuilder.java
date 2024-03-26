@@ -7,12 +7,15 @@ package io.debezium.connector.postgresql;
 
 import java.sql.Types;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
+import io.debezium.connector.postgresql.connection.YBReplicaIdentity;
 import io.debezium.relational.*;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -64,25 +67,8 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
   private final FieldNamer<Column> fieldNamer;
   private final CustomConverterRegistry customConverterRegistry;
   private final boolean multiPartitionMode;
-
-  private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity;
-
-  /**
-   * Create a new instance of the builder.
-   *
-   * @param valueConverterProvider the provider for obtaining {@link ValueConverter}s and {@link SchemaBuilder}s; may not be
-   *            null
-   * @param schemaNameAdjuster the adjuster for schema names; may not be null
-   */
-  public PGTableSchemaBuilder(ValueConverterProvider valueConverterProvider,
-                              SchemaNameAdjuster schemaNameAdjuster,
-                              CustomConverterRegistry customConverterRegistry,
-                              Schema sourceInfoSchema,
-                              FieldNamer<Column> fieldNamer,
-                              boolean multiPartitionMode) {
-    this(valueConverterProvider, null, schemaNameAdjuster,
-      customConverterRegistry, sourceInfoSchema, fieldNamer, multiPartitionMode, ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
-  }
+  private final PostgresConnectorConfig connectorConfig;
+  private final Map<TableId, YBReplicaIdentity> replicaIdentityMap;
 
   /**
    * Create a new instance of the builder.
@@ -91,26 +77,26 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
    *            null
    * @param defaultValueConverter is used to convert the default value literal to a Java type
    *            recognized by value converters for a subset of types. may be null.
-   * @param schemaNameAdjuster the adjuster for schema names; may not be null
+   * @param connectorConfig the connector configuration object; never null.
+   * @param multiPartitionMode whether the connector is operating in multi-partition mode.
    */
   public PGTableSchemaBuilder(ValueConverterProvider valueConverterProvider,
                               DefaultValueConverter defaultValueConverter,
-                              SchemaNameAdjuster schemaNameAdjuster,
-                              CustomConverterRegistry customConverterRegistry,
-                              Schema sourceInfoSchema,
-                              FieldNamer<Column> fieldNamer,
-                              boolean multiPartitionMode,
-                              ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) {
-    super(valueConverterProvider, defaultValueConverter, schemaNameAdjuster, customConverterRegistry, sourceInfoSchema, fieldNamer, multiPartitionMode);
-    this.schemaNameAdjuster = schemaNameAdjuster;
+                              PostgresConnectorConfig connectorConfig,
+                              boolean multiPartitionMode) {
+    super(valueConverterProvider, defaultValueConverter, connectorConfig.schemaNameAdjuster(),
+      connectorConfig.customConverterRegistry(), connectorConfig.getSourceInfoStructMaker().schema(),
+      connectorConfig.getFieldNamer(), multiPartitionMode);
+    this.schemaNameAdjuster = connectorConfig.schemaNameAdjuster();
     this.valueConverterProvider = valueConverterProvider;
     this.defaultValueConverter = Optional.ofNullable(defaultValueConverter)
                                    .orElse(DefaultValueConverter.passthrough());
-    this.sourceInfoSchema = sourceInfoSchema;
-    this.fieldNamer = fieldNamer;
-    this.customConverterRegistry = customConverterRegistry;
+    this.sourceInfoSchema = connectorConfig.getSourceInfoStructMaker().schema();
+    this.fieldNamer = connectorConfig.getFieldNamer();
+    this.customConverterRegistry = connectorConfig.customConverterRegistry();
     this.multiPartitionMode = multiPartitionMode;
-    this.replicaIdentity = replicaIdentity;
+    this.connectorConfig = connectorConfig;
+    this.replicaIdentityMap = new ConcurrentHashMap<>();
   }
 
   /**
@@ -212,13 +198,13 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
             // It thus makes sense to convert them to a sensible default replacement value.
 
             // YB Note: Adding YB specific changes.
-            if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+            if (getReplicaIdentityFor(columnSetName) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
               value = converter.convert(((Object[]) value)[0]);
             } else {
               value = converter.convert(value);
             }
             try {
-              if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+              if (getReplicaIdentityFor(columnSetName) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
                 if (value != null && !UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                   Struct cell = new Struct(fields[i].schema());
                   cell.put("value", value);
@@ -300,11 +286,10 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
 
           if (converter != null) {
             try {
-              if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+              if (getReplicaIdentityFor(tableId) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
                 if (value != null && !UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                   value = converter.convert(((Object[]) value)[0]);
                   Struct cell = new Struct(fields[i].schema());
-//                  LOGGER.info("VKVK value being put in valGen for field {}: {}", fields[i].name(), value);
                   cell.put("value", value);
                   cell.put("set", true);
                   result.put(fields[i], cell);
@@ -446,7 +431,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
         }
       }
 
-      if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+      if (getReplicaIdentityFor(table.id()) ==  ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
         Schema optionalCellSchema = cellSchema(fieldNamer.fieldNameFor(column), fieldBuilder.build(), column.isOptional());
         builder.field(fieldNamer.fieldNameFor(column), optionalCellSchema);
       } else {
@@ -476,6 +461,17 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
    */
   protected ValueConverter createValueConverterFor(TableId tableId, Column column, Field fieldDefn) {
     return customConverterRegistry.getValueConverter(tableId, column).orElse(valueConverterProvider.converter(column, fieldDefn));
+  }
+
+  protected ReplicaIdentityInfo.ReplicaIdentity getReplicaIdentityFor(TableId tableId) {
+    YBReplicaIdentity ybReplicaIdentity = replicaIdentityMap.get(tableId);
+
+    if (ybReplicaIdentity == null) {
+      ybReplicaIdentity = new YBReplicaIdentity(connectorConfig, tableId);
+      replicaIdentityMap.put(tableId, ybReplicaIdentity);
+    }
+
+    return ybReplicaIdentity.getReplicaIdentity();
   }
 
   static Schema cellSchema(String name, Schema valueSchema, boolean isOptional) {

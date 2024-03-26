@@ -3725,16 +3725,10 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         List<SourceRecord> recordsForTopicS1 = actualRecords.recordsForTopic(topicName("s1.a"));
         assertThat(recordsForTopicS1.size()).isEqualTo(expectedCountPerSchema);
-        for (SourceRecord r : recordsForTopicS1) {
-            LOGGER.info("VKVK1: {}", r);
-        }
         IntStream.range(0, expectedCountPerSchema).forEach(i -> VerifyRecord.isValidInsert(recordsForTopicS1.remove(0), PK_FIELD, pks[i]));
 
         List<SourceRecord> recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(recordsForTopicS2.size()).isEqualTo(expectedCountPerSchema);
-        for (SourceRecord r : recordsForTopicS2) {
-            LOGGER.info("VKVK2: {}", r);
-        }
         IntStream.range(0, expectedCountPerSchema).forEach(i -> VerifyRecord.isValidInsert(recordsForTopicS2.remove(0), PK_FIELD, pks[i]));
     }
 
