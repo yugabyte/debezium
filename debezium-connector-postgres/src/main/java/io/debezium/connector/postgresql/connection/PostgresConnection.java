@@ -22,12 +22,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.core.BaseConnection;
-import org.postgresql.jdbc.PgConnection;
-import org.postgresql.jdbc.TimestampUtils;
-import org.postgresql.replication.LogSequenceNumber;
-import org.postgresql.util.PGmoney;
-import org.postgresql.util.PSQLState;
+import com.yugabyte.core.BaseConnection;
+import com.yugabyte.jdbc.PgConnection;
+import com.yugabyte.jdbc.TimestampUtils;
+import com.yugabyte.replication.LogSequenceNumber;
+import com.yugabyte.util.PGmoney;
+import com.yugabyte.util.PSQLState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,10 +70,11 @@ public class PostgresConnection extends JdbcConnection {
     private static final Pattern EXPRESSION_DEFAULT_PATTERN = Pattern.compile("\\(+(?:.+(?:[+ - * / < > = ~ ! @ # % ^ & | ` ?] ?.+)+)+\\)");
     private static Logger LOGGER = LoggerFactory.getLogger(PostgresConnection.class);
 
-    private static final String URL_PATTERN = "jdbc:postgresql://${" + JdbcConfiguration.HOSTNAME + "}:${"
+    public static final String MULTI_HOST_URL_PATTERN = "jdbc:postgresql://${" + JdbcConfiguration.HOSTNAME + "}/${" + JdbcConfiguration.DATABASE + "}";
+    public static final String URL_PATTERN = "jdbc:yugabytedb://${" + JdbcConfiguration.HOSTNAME + "}:${"
             + JdbcConfiguration.PORT + "}/${" + JdbcConfiguration.DATABASE + "}";
-    protected static final ConnectionFactory FACTORY = JdbcConnection.patternBasedFactory(URL_PATTERN,
-            org.postgresql.Driver.class.getName(),
+    protected static ConnectionFactory FACTORY = JdbcConnection.patternBasedFactory(URL_PATTERN,
+            com.yugabyte.Driver.class.getName(),
             PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
 
     /**
@@ -85,6 +86,7 @@ public class PostgresConnection extends JdbcConnection {
 
     private final TypeRegistry typeRegistry;
     private final PostgresDefaultValueConverter defaultValueConverter;
+    private final JdbcConfiguration jdbcConfig;
 
     /**
      * Creates a Postgres connection using the supplied configuration.
@@ -96,8 +98,10 @@ public class PostgresConnection extends JdbcConnection {
      * @param valueConverterBuilder supplies a configured {@link PostgresValueConverter} for a given {@link TypeRegistry}
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
      */
-    public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage) {
-        super(addDefaultSettings(config, connectionUsage), FACTORY, PostgresConnection::validateServerVersion, "\"", "\"");
+    public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage, ConnectionFactory factory) {
+        super(addDefaultSettings(config, connectionUsage), factory, PostgresConnection::validateServerVersion, "\"", "\"");
+        this.jdbcConfig = config;
+        PostgresConnection.FACTORY = factory;
 
         if (Objects.isNull(valueConverterBuilder)) {
             this.typeRegistry = null;
@@ -111,14 +115,20 @@ public class PostgresConnection extends JdbcConnection {
         }
     }
 
+    public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage) {
+        this(config, valueConverterBuilder, connectionUsage,
+             config.getHostname().contains(":") ? JdbcConnection.patternBasedFactory(MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(), PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
+                                                    : JdbcConnection.patternBasedFactory(URL_PATTERN, com.yugabyte.Driver.class.getName(), PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString())));
+    }
+
     /**
      * Create a Postgres connection using the supplied configuration and {@link TypeRegistry}
      * @param config {@link Configuration} instance, may not be null.
      * @param typeRegistry an existing/already-primed {@link TypeRegistry} instance
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
      */
-    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage) {
-        super(addDefaultSettings(config.getJdbcConfig(), connectionUsage), FACTORY, PostgresConnection::validateServerVersion, "\"", "\"");
+    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage, ConnectionFactory factory) {
+        super(addDefaultSettings(config.getJdbcConfig(), connectionUsage), factory, PostgresConnection::validateServerVersion, "\"", "\"");
         if (Objects.isNull(typeRegistry)) {
             this.typeRegistry = null;
             this.defaultValueConverter = null;
@@ -128,6 +138,13 @@ public class PostgresConnection extends JdbcConnection {
             final PostgresValueConverter valueConverter = PostgresValueConverter.of(config, this.getDatabaseCharset(), typeRegistry);
             this.defaultValueConverter = new PostgresDefaultValueConverter(valueConverter, this.getTimestampUtils(), typeRegistry);
         }
+
+        PostgresConnection.FACTORY = factory;
+        this.jdbcConfig = config.getJdbcConfig();
+    }
+
+    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage) {
+        this(config, typeRegistry, connectionUsage, config.getConnectionFactory());
     }
 
     /**
@@ -155,7 +172,12 @@ public class PostgresConnection extends JdbcConnection {
      * @return a {@code String} where the variables in {@code urlPattern} are replaced with values from the configuration
      */
     public String connectionString() {
-        return connectionString(URL_PATTERN);
+        String hostName = jdbcConfig.getHostname();
+        if (hostName.contains(":")) {
+            return connectionString(MULTI_HOST_URL_PATTERN);
+        } else {
+            return connectionString(URL_PATTERN);
+        }
     }
 
     /**
@@ -578,16 +600,16 @@ public class PostgresConnection extends JdbcConnection {
 
     public Charset getDatabaseCharset() {
         try {
-            return Charset.forName(((BaseConnection) connection()).getEncoding().name());
+            return Charset.forName(((com.yugabyte.jdbc.PgConnection) connection()).getEncoding().name());
         }
         catch (SQLException e) {
             throw new DebeziumException("Couldn't obtain encoding for database " + database(), e);
         }
     }
 
-    public TimestampUtils getTimestampUtils() {
+    public com.yugabyte.jdbc.TimestampUtils getTimestampUtils() {
         try {
-            return ((PgConnection) this.connection()).getTimestampUtils();
+            return ((com.yugabyte.jdbc.PgConnection) this.connection()).getTimestampUtils();
         }
         catch (SQLException e) {
             throw new DebeziumException("Couldn't get timestamp utils from underlying connection", e);

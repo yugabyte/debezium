@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import io.debezium.jdbc.JdbcConnection;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
@@ -737,7 +738,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withWidth(Width.LONG)
             .withImportance(Importance.MEDIUM)
             .withDescription(
-                    "A name of class to that creates SSL Sockets. Use org.postgresql.ssl.NonValidatingFactory to disable SSL validation in development environments");
+                    "A name of class to that creates SSL Sockets. Use com.yugabyte.ssl.NonValidatingFactory to disable SSL validation in development environments");
 
     public static final Field SNAPSHOT_MODE = Field.create("snapshot.mode")
             .withDisplayName("Snapshot mode")
@@ -891,7 +892,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDefault(2)
             .withDescription("Number of fractional digits when money type is converted to 'precise' decimal number.");
-
     public static final Field SHOULD_FLUSH_LSN_IN_SOURCE_DB = Field.create("flush.lsn.source")
             .withDisplayName("Boolean to determine if Debezium should flush LSN in the source database")
             .withType(Type.BOOLEAN)
@@ -1138,6 +1138,15 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     + "' is set to 'false', the LSN will not be flushed to the database source and WAL logs will not be cleared. User is expected to handle this outside Debezium.");
         }
         return 0;
+    }
+
+    public JdbcConnection.ConnectionFactory getConnectionFactory() {
+        String hostName = getJdbcConfig().getHostname();
+        return hostName.contains(":")
+                 ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, org.postgresql.Driver.class.getName(),
+                    PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
+                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, org.postgresql.Driver.class.getName(),
+                    PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
     }
 
     protected static int validateReplicaAutoSetField(Configuration config, Field field, Field.ValidationOutput problems) {
