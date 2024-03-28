@@ -46,6 +46,7 @@ public class ReplicaIdentityInfo {
      * Table REPLICA IDENTITY information.
      */
     public enum ReplicaIdentity {
+        // YB Note: CHANGE is a YugabyteDB specific replica identity.
         NOTHING("UPDATE and DELETE events will not contain any old values"),
         FULL("UPDATE AND DELETE events will contain the previous values of all the columns"),
         DEFAULT("UPDATE and DELETE events will contain previous values only for PK columns"),
@@ -68,6 +69,7 @@ public class ReplicaIdentityInfo {
             this.description = description;
         }
 
+        // YB Note: CHANGE is a YugabyteDB specific replica identity.
         static ReplicaIdentityInfo.ReplicaIdentity parseFromDB(String s) {
             switch (s) {
                 case "n":

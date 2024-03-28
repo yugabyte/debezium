@@ -204,6 +204,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
               value = converter.convert(value);
             }
             try {
+              // YB Note: YugabyteDB specific code to incorporate the replica identity CHANGE
               if (getReplicaIdentityFor(columnSetName) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
                 if (value != null && !UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                   Struct cell = new Struct(fields[i].schema());
@@ -286,6 +287,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
 
           if (converter != null) {
             try {
+              // YB Note: YugabyteDB specific code to incorporate the replica identity CHANGE
               if (getReplicaIdentityFor(tableId) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
                 if (value != null && !UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                   value = converter.convert(((Object[]) value)[0]);
@@ -431,6 +433,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
         }
       }
 
+      // YB Note: YugabyteDB specific code to incorporate the replica identity CHANGE
       if (getReplicaIdentityFor(table.id()) ==  ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
         Schema optionalCellSchema = cellSchema(fieldNamer.fieldNameFor(column), fieldBuilder.build(), column.isOptional());
         builder.field(fieldNamer.fieldNameFor(column), optionalCellSchema);
@@ -463,6 +466,11 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
     return customConverterRegistry.getValueConverter(tableId, column).orElse(valueConverterProvider.converter(column, fieldDefn));
   }
 
+  /**
+   * YugabyteDB specific.
+   * @param tableId to identify the table
+   * @return the replica identity for the given table
+   */
   protected ReplicaIdentityInfo.ReplicaIdentity getReplicaIdentityFor(TableId tableId) {
     YBReplicaIdentity ybReplicaIdentity = replicaIdentityMap.get(tableId);
 
@@ -474,6 +482,14 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
     return ybReplicaIdentity.getReplicaIdentity();
   }
 
+  /**
+   * Get a custom schema for columns when replica identity is CHANGE. The schema is of the format
+   * {@code fieldName:{"value":fieldValue,"set":booleanValue}}.
+   * @param name of the field
+   * @param valueSchema is the schema of the value the field is supposed to take
+   * @param isOptional indicates whether the field is optional
+   * @return a custom schema for the columns when replica identity is CHANGE
+   */
   static Schema cellSchema(String name, Schema valueSchema, boolean isOptional) {
     if (valueSchema != null) {
       SchemaBuilder schemaBuilder = SchemaBuilder.struct().name(name)
