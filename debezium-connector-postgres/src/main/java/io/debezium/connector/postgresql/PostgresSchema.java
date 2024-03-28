@@ -66,9 +66,7 @@ public class PostgresSchema extends RelationalDatabaseSchema {
 
     private static TableSchemaBuilder getTableSchemaBuilder(PostgresConnectorConfig config, PostgresValueConverter valueConverter,
                                                             PostgresDefaultValueConverter defaultValueConverter) {
-        return new TableSchemaBuilder(valueConverter, defaultValueConverter, config.schemaNameAdjuster(),
-                config.customConverterRegistry(), config.getSourceInfoStructMaker().schema(),
-                config.getFieldNamer(), false);
+        return new PGTableSchemaBuilder(valueConverter, defaultValueConverter, config, false /* multiPartitionMode */);
     }
 
     /**

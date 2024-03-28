@@ -7,12 +7,18 @@ package io.debezium.connector.postgresql;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
+import io.debezium.connector.postgresql.connection.YBReplicaIdentity;
+import io.debezium.connector.postgresql.connection.pgoutput.PgOutputReplicationMessage;
+import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +52,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     private final Snapshotter blockingSnapshotter;
     private final SlotCreationResult slotCreatedInfo;
     private final SlotState startingSlotInfo;
+    private final Map<TableId, YBReplicaIdentity> replicaIdentityMap;
 
     public PostgresSnapshotChangeEventSource(PostgresConnectorConfig connectorConfig, Snapshotter snapshotter,
                                              MainConnectionProvidingConnectionFactory<PostgresConnection> connectionFactory, PostgresSchema schema,
@@ -60,6 +67,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         this.slotCreatedInfo = slotCreatedInfo;
         this.startingSlotInfo = startingSlotInfo;
         this.blockingSnapshotter = new AlwaysSnapshotter();
+        this.replicaIdentityMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -86,6 +94,22 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     @Override
     protected SnapshotContext<PostgresPartition, PostgresOffsetContext> prepare(PostgresPartition partition, boolean onDemand) {
         return new PostgresSnapshotContext(partition, connectorConfig.databaseName(), onDemand);
+    }
+
+    @Override
+    protected ChangeRecordEmitter<PostgresPartition> getChangeRecordEmitter(
+      PostgresPartition partition, PostgresOffsetContext offset, TableId tableId, Object[] row,
+      Instant timestamp) {
+        offset.event(tableId, timestamp);
+
+        YBReplicaIdentity ybReplicaIdentity = replicaIdentityMap.get(tableId);
+        if (ybReplicaIdentity == null) {
+            ybReplicaIdentity = new YBReplicaIdentity(connectorConfig, tableId);
+            replicaIdentityMap.put(tableId, ybReplicaIdentity);
+        }
+
+        return new YBSnapshotChangeRecordEmitter<>(partition, offset, row, getClock(),
+                                                   connectorConfig, ybReplicaIdentity.getReplicaIdentity());
     }
 
     @Override

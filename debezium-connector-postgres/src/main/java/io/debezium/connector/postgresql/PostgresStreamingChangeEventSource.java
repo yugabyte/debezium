@@ -9,22 +9,17 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.debezium.connector.postgresql.connection.*;
 import org.apache.kafka.connect.errors.ConnectException;
 import com.yugabyte.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
-import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
-import io.debezium.connector.postgresql.connection.Lsn;
-import io.debezium.connector.postgresql.connection.PostgresConnection;
-import io.debezium.connector.postgresql.connection.ReplicationConnection;
-import io.debezium.connector.postgresql.connection.ReplicationMessage;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Operation;
-import io.debezium.connector.postgresql.connection.ReplicationStream;
-import io.debezium.connector.postgresql.connection.WalPositionLocator;
 import io.debezium.connector.postgresql.spi.Snapshotter;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.pipeline.ErrorHandler;
@@ -80,6 +75,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private long numberOfEventsSinceLastEventSentOrWalGrowingWarning = 0;
     private Lsn lastCompletelyProcessedLsn;
     private PostgresOffsetContext effectiveOffset;
+    private final Map<TableId, YBReplicaIdentity> replicaIdentityMap;
 
     /**
      * For DEBUGGING
@@ -100,7 +96,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         this.snapshotter = snapshotter;
         this.replicationConnection = replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
-
+        this.replicaIdentityMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -331,6 +327,15 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     tableId,
                     message.getOperation());
 
+            LOGGER.info("Received record of type {}", message.getOperation());
+
+            // YB Note: Get the cached replica identity.
+            YBReplicaIdentity ybReplicaIdentity = replicaIdentityMap.get(tableId);
+            if (ybReplicaIdentity == null) {
+                ybReplicaIdentity = new YBReplicaIdentity(connectorConfig, tableId);
+                replicaIdentityMap.put(tableId, ybReplicaIdentity);
+            }
+
             boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
                     partition,
                     tableId,
@@ -342,7 +347,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                             schema,
                             connection,
                             tableId,
-                            message));
+                            message,
+                            ybReplicaIdentity.getReplicaIdentity()));
 
             maybeWarnAboutGrowingWalBacklog(dispatched);
         }
