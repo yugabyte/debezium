@@ -95,7 +95,7 @@ public class PostgresConnector extends RelationalBaseSourceConnector {
                 testConnection(connection);
 
                 // YB Note: This check validates that the WAL level is "logical" - skipping this
-                //          since it is not applicable to YugabyteDB.
+                // since it is not applicable to YugabyteDB.
                 if (!YugabyteDBServer.isEnabled()) {
                     checkWalLevel(connection, postgresConfig);
                 }

@@ -62,6 +62,9 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import com.yugabyte.util.PSQLState;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.debezium.DebeziumException;
@@ -103,8 +106,6 @@ import io.debezium.relational.TableId;
 import io.debezium.schema.DatabaseSchema;
 import io.debezium.util.Strings;
 import io.debezium.util.Testing;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Integration test for {@link PostgresConnector} using an {@link io.debezium.engine.DebeziumEngine}
@@ -532,9 +533,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // YB Note: Creating a table before deploying the connector since dynamic table addition is
         // not supported yet.
         TestHelper.execute(
-          "CREATE SCHEMA IF NOT EXISTS default_change;",
-          "DROP TABLE IF EXISTS default_change.test_table;",
-          "CREATE TABLE default_change.test_table (pk SERIAL, i INT DEFAULT 1, text TEXT DEFAULT 'foo', PRIMARY KEY(pk));");
+                "CREATE SCHEMA IF NOT EXISTS default_change;",
+                "DROP TABLE IF EXISTS default_change.test_table;",
+                "CREATE TABLE default_change.test_table (pk SERIAL, i INT DEFAULT 1, text TEXT DEFAULT 'foo', PRIMARY KEY(pk));");
 
         TestHelper.execute("INSERT INTO default_change.test_table(i, text) VALUES (DEFAULT, DEFAULT);");
 
@@ -1373,9 +1374,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute("CREATE TABLE s1.b (pk SERIAL, aa integer, bb integer, PRIMARY KEY(pk));");
         TestHelper.execute("ALTER TABLE s1.a ADD COLUMN bb integer;");
         TestHelper.execute("INSERT INTO s1.a (aa, bb) VALUES (2, 2); "
-                            + "INSERT INTO s1.a (aa, bb) VALUES (3, 3); "
-                            + "INSERT INTO s1.b (aa, bb) VALUES (4, 4); "
-                            + "INSERT INTO s2.a (aa) VALUES (5);");
+                + "INSERT INTO s1.a (aa, bb) VALUES (3, 3); "
+                + "INSERT INTO s1.b (aa, bb) VALUES (4, 4); "
+                + "INSERT INTO s2.a (aa) VALUES (5);");
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
@@ -2567,7 +2568,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false)
                 .build();
 
-
         // Start connector with no snapshot; by default replication slot and publication should be created
         // Wait until streaming mode begins to proceed
         start(PostgresConnector.class, config);
@@ -2640,24 +2640,24 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // update and verify update
         // YB Note: update not supported yet
         // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
-//
-//        actualRecords = consumeRecordsByTopic(1);
-//        assertThat(actualRecords.topics().size()).isEqualTo(1);
-//
-//        recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
-//        assertThat(recordsForTopicS2.size()).isEqualTo(1);
-//
-//        record = recordsForTopicS2.remove(0);
-//        VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
-//
-//        value = (Struct) record.value();
-//        if (value.getStruct("before") != null) {
-//            assertThat(value.getStruct("before").getString("bb")).isEqualTo("*****");
-//        }
-//        if (value.getStruct("after") != null) {
-//            assertThat(value.getStruct("after").getString("bb")).isEqualTo("*****");
-//        }
+        // TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+        //
+        // actualRecords = consumeRecordsByTopic(1);
+        // assertThat(actualRecords.topics().size()).isEqualTo(1);
+        //
+        // recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
+        // assertThat(recordsForTopicS2.size()).isEqualTo(1);
+        //
+        // record = recordsForTopicS2.remove(0);
+        // VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
+        //
+        // value = (Struct) record.value();
+        // if (value.getStruct("before") != null) {
+        // assertThat(value.getStruct("before").getString("bb")).isEqualTo("*****");
+        // }
+        // if (value.getStruct("after") != null) {
+        // assertThat(value.getStruct("after").getString("bb")).isEqualTo("*****");
+        // }
     }
 
     @Test
@@ -2704,21 +2704,21 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // update and verify update
         // YB Note: update not supported yet
         // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+        // TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
-//        actualRecords = consumeRecordsByTopic(1);
-//        assertThat(actualRecords.topics().size()).isEqualTo(1);
-//
-//        recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
-//        assertThat(recordsForTopicS2.size()).isEqualTo(1);
-//
-//        record = recordsForTopicS2.remove(0);
-//        VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
-//
-//        value = (Struct) record.value();
-//        if (value.getStruct("after") != null) {
-//            assertThat(value.getStruct("after").getString("bb")).isEqualTo("b4d39ab0d198fb4cac8b");
-//        }
+        // actualRecords = consumeRecordsByTopic(1);
+        // assertThat(actualRecords.topics().size()).isEqualTo(1);
+        //
+        // recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
+        // assertThat(recordsForTopicS2.size()).isEqualTo(1);
+        //
+        // record = recordsForTopicS2.remove(0);
+        // VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
+        //
+        // value = (Struct) record.value();
+        // if (value.getStruct("after") != null) {
+        // assertThat(value.getStruct("after").getString("bb")).isEqualTo("b4d39ab0d198fb4cac8b");
+        // }
 
         // insert and verify inserts
         TestHelper.execute("INSERT INTO s2.b (bb) VALUES ('hello');");
@@ -2779,24 +2779,24 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // YB Note: updates not supported yet
         // update and verify update
         // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
-//
-//        actualRecords = consumeRecordsByTopic(1);
-//        assertThat(actualRecords.topics().size()).isEqualTo(1);
-//
-//        recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
-//        assertThat(recordsForTopicS2.size()).isEqualTo(1);
-//
-//        record = recordsForTopicS2.remove(0);
-//        VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
-//
-//        value = (Struct) record.value();
-//        if (value.getStruct("before") != null && value.getStruct("before").getString("bb") != null) {
-//            assertThat(value.getStruct("before").getString("bb")).isEqualTo("tes");
-//        }
-//        if (value.getStruct("after") != null) {
-//            assertThat(value.getStruct("after").getString("bb")).isEqualTo("hel");
-//        }
+        // TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+        //
+        // actualRecords = consumeRecordsByTopic(1);
+        // assertThat(actualRecords.topics().size()).isEqualTo(1);
+        //
+        // recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
+        // assertThat(recordsForTopicS2.size()).isEqualTo(1);
+        //
+        // record = recordsForTopicS2.remove(0);
+        // VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
+        //
+        // value = (Struct) record.value();
+        // if (value.getStruct("before") != null && value.getStruct("before").getString("bb") != null) {
+        // assertThat(value.getStruct("before").getString("bb")).isEqualTo("tes");
+        // }
+        // if (value.getStruct("after") != null) {
+        // assertThat(value.getStruct("after").getString("bb")).isEqualTo("hel");
+        // }
     }
 
     @Test
@@ -2824,7 +2824,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // YB note: since update records are not yet supported, commenting this and reducing the
         // expected count by 1 makes sense.
         // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+        // TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
         start(PostgresConnector.class, configBuilder.build());
 
@@ -2869,7 +2869,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // YB note: since update records are not yet supported, commenting this and reducing the
         // expected count by 1 makes sense.
         // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+        // TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
         start(PostgresConnector.class, configBuilder.build());
 
@@ -3872,7 +3872,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     protected void assertConnectorIsRunning() {
         try {
             Thread.sleep(10_000);
-        } catch (InterruptedException e) {
+        }
+        catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
 

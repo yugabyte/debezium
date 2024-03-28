@@ -220,7 +220,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 // replicationStream.close();
                 // close the connection - this should also disconnect the current stream even if it's blocking
                 try {
-                    if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {
+                    if ((offsetContext != null) && !isInPreSnapshotCatchUpStreaming(offsetContext)) {
                         connection.commit();
                     }
                     replicationConnection.close();
@@ -236,6 +236,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private void processMessages(ChangeEventSourceContext context, PostgresPartition partition, PostgresOffsetContext offsetContext, final ReplicationStream stream)
             throws SQLException, InterruptedException {
         LOGGER.info("Processing messages");
+        LOGGER.info("AS: IS this context running ???? {}", context.isRunning());
         int noMessageIterations = 0;
         while (context.isRunning() && (offsetContext.getStreamingStoppingLsn() == null ||
                 (lastCompletelyProcessedLsn.compareTo(offsetContext.getStreamingStoppingLsn()) < 0))) {
@@ -245,10 +246,12 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             probeConnectionIfNeeded();
 
             if (receivedMessage) {
+                LOGGER.info("AS: Received a message");
                 noMessageIterations = 0;
                 lsnFlushingAllowed = true;
             }
             else {
+                // LOGGER.info("AS: No message");
                 dispatcher.dispatchHeartbeatEvent(partition, offsetContext);
                 noMessageIterations++;
                 if (noMessageIterations >= THROTTLE_NO_MESSAGE_BEFORE_PAUSE) {
@@ -277,6 +280,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             throws SQLException, InterruptedException {
 
         final Lsn lsn = stream.lastReceivedLsn();
+        LOGGER.info("AS: Processing message of type {} and with lsn {}", message.getOperation(), lsn);
 
         if (message.isLastEventForLsn()) {
             lastCompletelyProcessedLsn = lsn;
