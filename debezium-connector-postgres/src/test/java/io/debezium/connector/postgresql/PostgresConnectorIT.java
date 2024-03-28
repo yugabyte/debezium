@@ -2860,8 +2860,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
+    // YB Note: Running this test also requires a change of values in the method TestHelper#defaultJdbcConfig
     @Test
-    public void testYBCustomChangesForUpdate() throws Exception {
+    public void testYBChangesForMultiHostConfiguration() throws Exception {
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.execute(CREATE_TABLES_STMT);
         TestHelper.createDefaultReplicationSlot();
@@ -2869,6 +2870,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         final Configuration.Builder configBuilder = TestHelper.defaultConfig()
               .with(PostgresConnectorConfig.HOSTNAME, "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433")
               .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+              .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false)
               .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
               .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
 
@@ -2883,9 +2885,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.waitFor(Duration.ofMinutes(1));
 
         LOGGER.info("Inserting and waiting for another 30s");
-        TestHelper.execute("INSERT INTO s1.a (aa) VALUES (11);");
+        TestHelper.execute("INSERT INTO s2.a (aa) VALUES (11);");
 
         TestHelper.waitFor(Duration.ofMinutes(2));
+        SourceRecords actualRecords = consumeRecordsByTopic(2);
+
+        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
     }
 
     @Test

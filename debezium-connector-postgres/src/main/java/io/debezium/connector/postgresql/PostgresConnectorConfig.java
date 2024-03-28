@@ -1193,4 +1193,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     !t.schema().startsWith(TEMP_TABLE_SCHEMA_PREFIX);
         }
     }
+
+
 }
