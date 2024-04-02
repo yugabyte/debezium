@@ -826,6 +826,7 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
 
     private static int validateHostname(Configuration config, Field field, ValidationOutput problems) {
         // YB Note: Bypassing this check.
+        LOGGER.info("YB: Bypassing hostname validation");
         return 0;
 
         //String hostName = config.getString(field);
