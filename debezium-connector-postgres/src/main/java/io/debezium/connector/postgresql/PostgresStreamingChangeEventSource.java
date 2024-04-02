@@ -328,13 +328,14 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     tableId,
                     message.getOperation());
 
-            LOGGER.info("Received record of type {}", message.getOperation());
-
             // YB Note: Get the cached replica identity.
-            YBReplicaIdentity ybReplicaIdentity = replicaIdentityMap.get(tableId);
-            if (ybReplicaIdentity == null) {
-                ybReplicaIdentity = new YBReplicaIdentity(connectorConfig, tableId);
-                replicaIdentityMap.put(tableId, ybReplicaIdentity);
+            YBReplicaIdentity ybReplicaIdentity = null;
+            if (message.getOperation() != Operation.NOOP) {
+                ybReplicaIdentity = replicaIdentityMap.get(tableId);
+                if (ybReplicaIdentity == null) {
+                    ybReplicaIdentity = new YBReplicaIdentity(connectorConfig, tableId);
+                    replicaIdentityMap.put(tableId, ybReplicaIdentity);
+                }
             }
 
             boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
