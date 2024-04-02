@@ -5,10 +5,20 @@ FROM debezium/connect:2.5.2.Final
 
 WORKDIR $KAFKA_CONNECT_PLUGINS_DIR
 RUN rm -f debezium-connector-postgres/debezium-connector-postgres-*.jar
+RUN rm -rf debezium-connector-db2
+RUN rm -rf debezium-connector-informix
+RUN rm -rf debezium-connector-mongodb
+RUN rm -rf debezium-connector-jdbc
+RUN rm -rf debezium-connector-mysql
+RUN rm -rf debezium-connector-oracle
+RUN rm -rf debezium-connector-spanner
+RUN rm -rf debezium-connector-sqlserver
+RUN rm -rf debezium-connector-vitess
 WORKDIR /
 
 # Copy the Debezium Connector for Postgres adapted for YugabyteDB
 COPY debezium-connector-postgres/target/debezium-connector-postgres-*.jar $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres
+COPY debezium-core/target/debezium-core-*.jar $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres
 
 # Set the TLS version to be used by Kafka processes
 ENV KAFKA_OPTS="-Djdk.tls.client.protocols=TLSv1.2"

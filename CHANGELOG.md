@@ -2,7 +2,7 @@
 
 All notable changes are documented in this file. Release numbers follow [Semantic Versioning](http://semver.org)
 
-## 2.5.2.Final
+## 2.5.2.Final-SNAPSHOT
 February 27th 2024 [Detailed release notes](https://issues.redhat.com/secure/ReleaseNote.jspa?projectId=12317320&version=12422552)
 
 ### New features since 2.5.1.Final
