@@ -59,11 +59,10 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
     private final PostgresConnection connection;
     private final TableId tableId;
     private final Map<String, Object> cachedOldToastedValues = new HashMap<>();
-    private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity;
 
     public PostgresChangeRecordEmitter(PostgresPartition partition, OffsetContext offset, Clock clock, PostgresConnectorConfig connectorConfig, PostgresSchema schema,
                                        PostgresConnection connection, TableId tableId,
-                                       ReplicationMessage message, ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) {
+                                       ReplicationMessage message) {
         super(partition, offset, clock, connectorConfig);
 
         this.schema = schema;
@@ -73,14 +72,6 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
 
         this.tableId = tableId;
         Objects.requireNonNull(this.tableId);
-
-        this.replicaIdentity = replicaIdentity;
-    }
-
-    public PostgresChangeRecordEmitter(PostgresPartition partition, OffsetContext offset, Clock clock, PostgresConnectorConfig connectorConfig, PostgresSchema schema,
-                                       PostgresConnection connection, TableId tableId,
-                                       ReplicationMessage message) {
-        this(partition, offset, clock, connectorConfig, schema, connection, tableId, message, ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
     }
 
     @Override
@@ -119,7 +110,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
                     return null;
                 case UPDATE:
                     // YB Note: For replica identity CHANGE, there is no old column value available.
-                    if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+                    if (connectorConfig.plugin().isYBOutput()) {
                         return null;
                     }
 
@@ -205,12 +196,12 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
                     }
                 }
 
-                if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+                if (connectorConfig.plugin().isYBOutput()) {
                     if (!UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                         values[position] = new Object[]{value, Boolean.TRUE};
                     }
                 } else {
-                    LOGGER.info("Replica identity is NOT CHANGE");
+                    LOGGER.debug("Plugin is NOT yboutput");
                     values[position] = value;
                 }
             }
@@ -250,7 +241,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
         // YB Note: If replica identity is change, one hack is that we always know there will be no
         // oldKey present so we should simply go ahead with this block. Also, oldKey would be null
         // at this stage if replica identity is CHANGE
-        if (oldKey == null || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE || Objects.equals(oldKey, newKey)) {
+        if (oldKey == null || connectorConfig.plugin().isYBOutput() || Objects.equals(oldKey, newKey)) {
             Struct envelope = tableSchema.getEnvelopeSchema().update(oldValue, newValue, getOffset().getSourceInfo(), getClock().currentTimeAsInstant());
             receiver.changeRecord(getPartition(), tableSchema, Operation.UPDATE, newKey, envelope, getOffset(), null);
         }

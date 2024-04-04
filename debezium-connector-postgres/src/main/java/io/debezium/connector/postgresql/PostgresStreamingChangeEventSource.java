@@ -9,7 +9,6 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalLong;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.debezium.connector.postgresql.connection.*;
@@ -76,7 +75,6 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private long numberOfEventsSinceLastEventSentOrWalGrowingWarning = 0;
     private Lsn lastCompletelyProcessedLsn;
     private PostgresOffsetContext effectiveOffset;
-    private final Map<TableId, YBReplicaIdentity> replicaIdentityMap;
 
     /**
      * For DEBUGGING
@@ -97,7 +95,6 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         this.snapshotter = snapshotter;
         this.replicationConnection = replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
-        this.replicaIdentityMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -328,16 +325,6 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     tableId,
                     message.getOperation());
 
-            // YB Note: Get the cached replica identity.
-            YBReplicaIdentity ybReplicaIdentity = null;
-            if (message.getOperation() != Operation.NOOP) {
-                ybReplicaIdentity = replicaIdentityMap.get(tableId);
-                if (ybReplicaIdentity == null) {
-                    ybReplicaIdentity = new YBReplicaIdentity(connectorConfig, tableId);
-                    replicaIdentityMap.put(tableId, ybReplicaIdentity);
-                }
-            }
-
             boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
                     partition,
                     tableId,
@@ -349,8 +336,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                             schema,
                             connection,
                             tableId,
-                            message,
-                            ybReplicaIdentity.getReplicaIdentity()));
+                            message));
 
             maybeWarnAboutGrowingWalBacklog(dispatched);
         }

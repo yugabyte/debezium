@@ -12,12 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
-import io.debezium.connector.postgresql.connection.YBReplicaIdentity;
-import io.debezium.connector.postgresql.connection.pgoutput.PgOutputReplicationMessage;
 import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +48,6 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     private final Snapshotter blockingSnapshotter;
     private final SlotCreationResult slotCreatedInfo;
     private final SlotState startingSlotInfo;
-    private final Map<TableId, YBReplicaIdentity> replicaIdentityMap;
 
     public PostgresSnapshotChangeEventSource(PostgresConnectorConfig connectorConfig, Snapshotter snapshotter,
                                              MainConnectionProvidingConnectionFactory<PostgresConnection> connectionFactory, PostgresSchema schema,
@@ -67,7 +62,6 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         this.slotCreatedInfo = slotCreatedInfo;
         this.startingSlotInfo = startingSlotInfo;
         this.blockingSnapshotter = new AlwaysSnapshotter();
-        this.replicaIdentityMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -102,14 +96,8 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
       Instant timestamp) {
         offset.event(tableId, timestamp);
 
-        YBReplicaIdentity ybReplicaIdentity = replicaIdentityMap.get(tableId);
-        if (ybReplicaIdentity == null) {
-            ybReplicaIdentity = new YBReplicaIdentity(connectorConfig, tableId);
-            replicaIdentityMap.put(tableId, ybReplicaIdentity);
-        }
-
         return new YBSnapshotChangeRecordEmitter<>(partition, offset, row, getClock(),
-                                                   connectorConfig, ybReplicaIdentity.getReplicaIdentity());
+                                                   connectorConfig);
     }
 
     @Override
