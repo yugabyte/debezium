@@ -145,6 +145,10 @@ public class ServerInfo {
             return catalogXmin;
         }
 
+        protected boolean isInvalid() {
+            return this == INVALID;
+        }
+
         protected boolean hasValidFlushedLsn() {
             return latestFlushedLsn != null;
         }
