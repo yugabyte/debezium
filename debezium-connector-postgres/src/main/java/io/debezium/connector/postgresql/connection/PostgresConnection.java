@@ -97,6 +97,7 @@ public class PostgresConnection extends JdbcConnection {
      * @param config {@link Configuration} instance, may not be null.
      * @param valueConverterBuilder supplies a configured {@link PostgresValueConverter} for a given {@link TypeRegistry}
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
+     * @param factory a {@link io.debezium.jdbc.JdbcConnection.ConnectionFactory} instance
      */
     public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage, ConnectionFactory factory) {
         super(addDefaultSettings(config, connectionUsage), factory, PostgresConnection::validateServerVersion, "\"", "\"");
@@ -600,7 +601,7 @@ public class PostgresConnection extends JdbcConnection {
 
     public Charset getDatabaseCharset() {
         try {
-            return Charset.forName(((com.yugabyte.jdbc.PgConnection) connection()).getEncoding().name());
+            return Charset.forName(((BaseConnection) connection()).getEncoding().name());
         }
         catch (SQLException e) {
             throw new DebeziumException("Couldn't obtain encoding for database " + database(), e);
