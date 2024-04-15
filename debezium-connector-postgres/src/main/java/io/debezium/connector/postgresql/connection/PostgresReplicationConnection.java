@@ -792,6 +792,11 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         connection(false);
     }
 
+    @Override
+    public JdbcConnection getJdbcConnection() {
+        return jdbcConnection;
+    }
+
     protected static class ReplicationConnectionBuilder implements Builder {
 
         private final PostgresConnectorConfig config;

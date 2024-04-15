@@ -17,6 +17,7 @@ import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresSchema;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
+import io.debezium.jdbc.JdbcConnection;
 import io.debezium.relational.RelationalTableFilters;
 
 /**
@@ -92,6 +93,8 @@ public interface ReplicationConnection extends AutoCloseable {
     }
 
     void reconnect() throws SQLException;
+
+    public JdbcConnection getJdbcConnection();
 
     /**
      * A builder for {@link ReplicationConnection}

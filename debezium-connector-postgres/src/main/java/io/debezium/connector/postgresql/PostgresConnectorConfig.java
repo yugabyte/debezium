@@ -6,6 +6,9 @@
 
 package io.debezium.connector.postgresql;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -1193,6 +1196,21 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     !t.schema().startsWith(TEMP_TABLE_SCHEMA_PREFIX);
         }
     }
-
-
+    
+    // Method which returns the address of the node to which the connection is made
+    public static String GetConnectedNodeAddress(JdbcConnection connection) {
+        String query = "SELECT inet_server_addr() connected_to_host;";
+        try (PreparedStatement statement = connection.connection().prepareStatement(query)) {
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return resultSet.getString(1);
+                } else {
+                    throw new SQLException("Query returned no results.");
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.info("Encountered exception while trying to fetch node address");
+        }
+        return "";
+    }
 }

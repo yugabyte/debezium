@@ -83,7 +83,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
         final Charset databaseCharset;
         try (PostgresConnection tempConnection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_GENERAL)) {
-            databaseCharset = tempConnection.getDatabaseCharset();
+            LOGGER.info("Connection node address: " + PostgresConnectorConfig.GetConnectedNodeAddress(tempConnection));
+            databaseCharset = tempConnection.getDatabaseCharset(); // Sumukh: Works on taking the connected node down
         }
 
         final PostgresValueConverterBuilder valueConverterBuilder = (typeRegistry) -> PostgresValueConverter.of(
@@ -97,6 +98,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
         // Must be able to resolve datatypes.
         jdbcConnection = connectionFactory.mainConnection();
         try {
+            LOGGER.info("Connection node address: " + PostgresConnectorConfig.GetConnectedNodeAddress(jdbcConnection));
             jdbcConnection.setAutoCommit(false);
         }
         catch (SQLException e) {
@@ -133,6 +135,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                 if (LOGGER.isInfoEnabled()) {
                     LOGGER.info(jdbcConnection.serverInfo().toString());
                 }
+                LOGGER.info("Connection node address: " + PostgresConnectorConfig.GetConnectedNodeAddress(jdbcConnection));
                 slotInfo = jdbcConnection.getReplicationSlotState(connectorConfig.slotName(), connectorConfig.plugin().getPostgresPluginName());
             }
             catch (SQLException e) {
@@ -151,6 +154,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
             SlotCreationResult slotCreatedInfo = null;
             if (snapshotter.shouldStream()) {
+                LOGGER.info("Connection node address: " + PostgresConnectorConfig.GetConnectedNodeAddress(jdbcConnection));
                 replicationConnection = createReplicationConnection(this.taskContext,
                         connectorConfig.maxRetries(), connectorConfig.retryDelay());
 
@@ -158,6 +162,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                 // otherwise we can't stream back changes happening while the snapshot is taking place
                 if (slotInfo == null) {
                     try {
+                        LOGGER.info("Connection node address: " + PostgresConnectorConfig.GetConnectedNodeAddress(replicationConnection.getJdbcConnection()));
                         slotCreatedInfo = replicationConnection.createReplicationSlot().orElse(null);
                     }
                     catch (SQLException ex) {
