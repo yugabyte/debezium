@@ -24,3 +24,6 @@ ADD metrics.yml /etc/jmx-exporter/
 
 ENV CLASSPATH=$KAFKA_HOME
 
+# properties file having instructions to roll over log files in case the size exceeds a given limit
+COPY log4j.properties $KAFKA_HOME/config/log4j.properties
+
