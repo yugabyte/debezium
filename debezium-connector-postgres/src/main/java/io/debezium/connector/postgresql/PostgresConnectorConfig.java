@@ -1143,9 +1143,9 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public JdbcConnection.ConnectionFactory getConnectionFactory() {
         String hostName = getJdbcConfig().getHostname();
         return hostName.contains(":")
-                 ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, org.postgresql.Driver.class.getName(),
+                 ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
-                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, org.postgresql.Driver.class.getName(),
+                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, com.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
     }
 
