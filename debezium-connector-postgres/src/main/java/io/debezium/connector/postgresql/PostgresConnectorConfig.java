@@ -1141,11 +1141,16 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return 0;
     }
 
+    /**
+     * Method to get the connection factory depending on the provided hostname value.
+     * @param hostName the host(s) for the PostgreSQL/YugabyteDB instance
+     * @return a {@link io.debezium.jdbc.JdbcConnection.ConnectionFactory} instance
+     */
     public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName) {
         return hostName.contains(":")
                  ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
-                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, org.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
     }
 
