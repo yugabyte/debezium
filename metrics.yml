@@ -48,3 +48,15 @@ rules:
       plugin: "$1"
       name: "$3"
       context: "$2"
+  
+  #kafka.connect:type=task-error-metrics,connector="{connector}",task="{task}"
+  #kafka.connect:type=source-task-metrics,connector="{connector}",task="{task}"
+  #kafka.connect:type=sink-task-metrics,connector="{connector}",task="{task}"
+  #kafka.connect:type=connector-task-metrics,connector="{connector}",task="{task}"
+  - pattern: kafka.connect<type=(.+)-metrics, connector=(.+), task=(.+)><>(.+-total|.+-count|.+-ms|.+-ratio|.+-rate|.+-avg|.+-failures|.+-requests|.+-timestamp|.+-logged|.+-errors|.+-retries|.+-skipped)
+    name: kafka_connect_$1_$4
+    labels:
+      connector: "$2"
+      task: "$3"
+    help: "Kafka Connect JMX metric type $1"
+    type: GAUGE
