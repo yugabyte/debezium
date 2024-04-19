@@ -491,6 +491,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
 
+
     public static final Field PLUGIN_NAME = Field.create("plugin.name")
             .withDisplayName("Plugin")
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 0))
@@ -1140,8 +1141,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return 0;
     }
 
-    public JdbcConnection.ConnectionFactory getConnectionFactory() {
-        String hostName = getJdbcConfig().getHostname();
+    public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName) {
         return hostName.contains(":")
                  ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
@@ -1193,6 +1193,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     !t.schema().startsWith(TEMP_TABLE_SCHEMA_PREFIX);
         }
     }
+
+
 
 
 }

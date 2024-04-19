@@ -824,19 +824,15 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
         return problemCount;
     }
 
-    private static int validateHostname(Configuration config, Field field, ValidationOutput problems) {
-        // YB Note: Bypassing this check.
-        LOGGER.info("YB: Bypassing hostname validation");
+    protected static int validateHostname(Configuration config, Field field, ValidationOutput problems) {
+        String hostName = config.getString(field);
+        if (!Strings.isNullOrBlank(hostName)) {
+            if (!HOSTNAME_PATTERN.asPredicate().test(hostName)) {
+                problems.accept(field, hostName, hostName + " has invalid format (only the underscore, hyphen, dot and alphanumeric characters are allowed)");
+                return 1;
+            }
+        }
         return 0;
-
-        //String hostName = config.getString(field);
-        //if (!Strings.isNullOrBlank(hostName)) {
-        //    if (!HOSTNAME_PATTERN.asPredicate().test(hostName)) {
-        //        problems.accept(field, hostName, hostName + " has invalid format (only the underscore, hyphen, dot and alphanumeric characters are allowed)");
-        //        return 1;
-        //    }
-        //}
-        //return 0;
     }
 
     public FieldNamer<Column> getFieldNamer() {
