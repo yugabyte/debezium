@@ -118,9 +118,7 @@ public class PostgresConnection extends JdbcConnection {
     }
 
     public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage) {
-        this(config, valueConverterBuilder, connectionUsage,
-             config.getHostname().contains(":") ? JdbcConnection.patternBasedFactory(MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(), PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
-                                                    : JdbcConnection.patternBasedFactory(URL_PATTERN, com.yugabyte.Driver.class.getName(), PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString())));
+        this(config, valueConverterBuilder, connectionUsage, PostgresConnectorConfig.getConnectionFactory(config.getHostname()));
     }
 
     /**
@@ -146,7 +144,7 @@ public class PostgresConnection extends JdbcConnection {
     }
 
     public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage) {
-        this(config, typeRegistry, connectionUsage, config.getConnectionFactory());
+        this(config, typeRegistry, connectionUsage, PostgresConnectorConfig.getConnectionFactory(config.getJdbcConfig().getHostname()));
     }
 
     /**
@@ -609,7 +607,7 @@ public class PostgresConnection extends JdbcConnection {
         }
     }
 
-    public com.yugabyte.jdbc.TimestampUtils getTimestampUtils() {
+    public TimestampUtils getTimestampUtils() {
         try {
             return ((com.yugabyte.jdbc.PgConnection) this.connection()).getTimestampUtils();
         }

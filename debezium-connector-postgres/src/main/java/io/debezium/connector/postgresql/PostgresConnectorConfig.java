@@ -491,6 +491,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
 
+
     public static final Field PLUGIN_NAME = Field.create("plugin.name")
             .withDisplayName("Plugin")
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 0))
@@ -1140,12 +1141,16 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return 0;
     }
 
-    public JdbcConnection.ConnectionFactory getConnectionFactory() {
-        String hostName = getJdbcConfig().getHostname();
+    /**
+     * Method to get the connection factory depending on the provided hostname value.
+     * @param hostName the host(s) for the PostgreSQL/YugabyteDB instance
+     * @return a {@link io.debezium.jdbc.JdbcConnection.ConnectionFactory} instance
+     */
+    public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName) {
         return hostName.contains(":")
-                 ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, org.postgresql.Driver.class.getName(),
+                 ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
-                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, org.postgresql.Driver.class.getName(),
+                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, org.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
     }
 
@@ -1193,6 +1198,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     !t.schema().startsWith(TEMP_TABLE_SCHEMA_PREFIX);
         }
     }
+
+
 
 
 }
