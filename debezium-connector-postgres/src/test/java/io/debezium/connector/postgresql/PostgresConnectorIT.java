@@ -2860,7 +2860,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
-    // YB Note: Running this test also requires a change of values in the method TestHelper#defaultJdbcConfig
+    // This test is for manual testing and if this is being run then change the method TestHelper#defaultJdbcConfig
+    // to include all three nodes "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433".
+    //
+    // Now while running this test, as soon as you see "Take a node down now" in the logs now,
+    // take down the node at IP 127.0.0.1 in order to simulate a node going down scenario.
     @Test
     public void testYBChangesForMultiHostConfiguration() throws Exception {
         TestHelper.dropDefaultReplicationSlot();
