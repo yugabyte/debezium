@@ -21,8 +21,13 @@ import io.debezium.relational.TableId;
 
 public abstract class QueryingSnapshotter implements Snapshotter {
 
+    private SlotState slotState;
+
     @Override
     public void init(PostgresConnectorConfig config, OffsetState sourceInfo, SlotState slotState) {
+        if (YugabyteDBServer.isEnabled()) {
+            this.slotState = slotState;
+        }
     }
 
     @Override
@@ -63,8 +68,13 @@ public abstract class QueryingSnapshotter implements Snapshotter {
              * For an on demand blocking snapshot we don't need to reuse
              * the same snapshot from the existing exported transaction as for the initial snapshot.
              */
-             String snapSet = String.format("SET TRANSACTION SNAPSHOT '%s';", newSlotInfo.snapshotName());
-             return "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; \n" + snapSet;
+            String snapSet = String.format("SET TRANSACTION SNAPSHOT '%s';", newSlotInfo.snapshotName());
+            return "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; \n" + snapSet;
+        }
+        else if (!isOnDemand) {
+            if (YugabyteDBServer.isEnabled()) {
+                return String.format("SET LOCAL yb_read_time TO '%s ht'", slotState.slotRestartCommitHT());
+            }
         }
         return Snapshotter.super.snapshotTransactionIsolationLevelStatement(newSlotInfo, isOnDemand);
     }

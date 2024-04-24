@@ -325,6 +325,33 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         assertRecordsAfterInsert(2, 3, 3);
     }
+    @Test
+    public void InitialSnapshotWithExistingSlot() throws Exception {
+        TestHelper.execute(SETUP_TABLES_STMT);
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
+
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        // now stop the connector
+        stopConnector();
+
+        // insert some more records
+        TestHelper.execute(INSERT_STMT);
+
+        // check the records from the snapshot
+        // start the connector back up and perform snapshot with an existing slot
+        // but the 2 records that were inserted while we were down will NOT be retrieved
+        Configuration.Builder configBuilderInitial = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
+
+        start(PostgresConnector.class, configBuilderInitial.build());
+        assertConnectorIsRunning();
+
+        assertRecordsFromSnapshot(2, 1, 1);
+    }
 
     @Test
     @FixFor("DBZ-1235")

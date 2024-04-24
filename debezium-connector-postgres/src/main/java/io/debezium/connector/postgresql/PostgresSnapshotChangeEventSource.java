@@ -97,7 +97,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         // streaming phase so that the snapshot is performed from a consistent view of the data. Since the isolation
         // level on the transaction used in catch up streaming has already set the isolation level and executed
         // statements, the transaction does not need to get set the level again here.
-        if (snapshotter.shouldStreamEventsStartingFromSnapshot() && startingSlotInfo == null) {
+        if (snapshotter.shouldStreamEventsStartingFromSnapshot() && (startingSlotInfo == null || YugabyteDBServer.isEnabled())) {
             setSnapshotTransactionIsolationLevel(snapshotContext.onDemand);
         }
         schema.refresh(jdbcConnection, false);
@@ -173,7 +173,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             // they'll be lost.
             return slotCreatedInfo.startLsn();
         }
-        else if (!snapshotter.shouldStreamEventsStartingFromSnapshot() && startingSlotInfo != null) {
+        else if ((!snapshotter.shouldStreamEventsStartingFromSnapshot() && startingSlotInfo != null) || YugabyteDBServer.isEnabled()) {
             // Allow streaming to resume from where streaming stopped last rather than where the current snapshot starts.
             SlotState currentSlotState = jdbcConnection.getReplicationSlotState(connectorConfig.slotName(),
                     connectorConfig.plugin().getPostgresPluginName());
