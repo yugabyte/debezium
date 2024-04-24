@@ -351,6 +351,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertConnectorIsRunning();
 
         assertRecordsFromSnapshot(2, 1, 1);
+        assertRecordsAfterInsert(2, 2, 2);
     }
 
     @Test
