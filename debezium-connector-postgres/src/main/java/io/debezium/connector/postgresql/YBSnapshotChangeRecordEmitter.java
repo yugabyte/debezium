@@ -15,14 +15,14 @@ import io.debezium.util.Clock;
  */
 public class YBSnapshotChangeRecordEmitter<P extends PostgresPartition> extends RelationalChangeRecordEmitter<P> {
   private final Object[] row;
-  private final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity;
+  private final PostgresConnectorConfig connectorConfig;
 
-  public YBSnapshotChangeRecordEmitter(P partition, OffsetContext offset, Object[] row, Clock clock, RelationalDatabaseConnectorConfig connectorConfig,
-                                       ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) {
+  public YBSnapshotChangeRecordEmitter(P partition, OffsetContext offset, Object[] row, Clock clock,
+                                       PostgresConnectorConfig connectorConfig) {
     super(partition, offset, clock, connectorConfig);
 
     this.row = row;
-    this.replicaIdentity = replicaIdentity;
+    this.connectorConfig = connectorConfig;
   }
 
   @Override
@@ -40,7 +40,7 @@ public class YBSnapshotChangeRecordEmitter<P extends PostgresPartition> extends 
     Object[] values = new Object[row.length];
 
     for (int position = 0; position < values.length; ++position) {
-      if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+      if (connectorConfig.plugin().isYBOutput()) {
         values[position] = new Object[]{row[position], Boolean.TRUE};
       } else {
         values[position] = row[position];

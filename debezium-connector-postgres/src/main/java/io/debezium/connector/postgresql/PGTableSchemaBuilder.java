@@ -7,15 +7,11 @@ package io.debezium.connector.postgresql;
 
 import java.sql.Types;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
-import io.debezium.connector.postgresql.connection.YBReplicaIdentity;
 import io.debezium.relational.*;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -68,7 +64,6 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
   private final CustomConverterRegistry customConverterRegistry;
   private final boolean multiPartitionMode;
   private final PostgresConnectorConfig connectorConfig;
-  private final Map<TableId, YBReplicaIdentity> replicaIdentityMap;
 
   /**
    * Create a new instance of the builder.
@@ -96,7 +91,6 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
     this.customConverterRegistry = connectorConfig.customConverterRegistry();
     this.multiPartitionMode = multiPartitionMode;
     this.connectorConfig = connectorConfig;
-    this.replicaIdentityMap = new ConcurrentHashMap<>();
   }
 
   /**
@@ -198,14 +192,14 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
             // It thus makes sense to convert them to a sensible default replacement value.
 
             // YB Note: Adding YB specific changes.
-            if (getReplicaIdentityFor(columnSetName) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+            if (connectorConfig.plugin().isYBOutput()) {
               value = converter.convert(((Object[]) value)[0]);
             } else {
               value = converter.convert(value);
             }
             try {
-              // YB Note: YugabyteDB specific code to incorporate the replica identity CHANGE
-              if (getReplicaIdentityFor(columnSetName) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+              // YB Note: YugabyteDB specific code to incorporate the plugin name yboutput
+              if (connectorConfig.plugin().isYBOutput()) {
                 if (value != null && !UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                   Struct cell = new Struct(fields[i].schema());
                   cell.put("value", value);
@@ -287,8 +281,8 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
 
           if (converter != null) {
             try {
-              // YB Note: YugabyteDB specific code to incorporate the replica identity CHANGE
-              if (getReplicaIdentityFor(tableId) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+              // YB Note: YugabyteDB specific code to incorporate the plugin name yboutput
+              if (connectorConfig.plugin().isYBOutput()) {
                 if (value != null && !UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                   value = converter.convert(((Object[]) value)[0]);
                   Struct cell = new Struct(fields[i].schema());
@@ -433,8 +427,8 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
         }
       }
 
-      // YB Note: YugabyteDB specific code to incorporate the replica identity CHANGE
-      if (getReplicaIdentityFor(table.id()) ==  ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+      // YB Note: YugabyteDB specific code to incorporate the plugin name yboutput
+      if (connectorConfig.plugin().isYBOutput()) {
         Schema optionalCellSchema = cellSchema(fieldNamer.fieldNameFor(column), fieldBuilder.build(), column.isOptional());
         builder.field(fieldNamer.fieldNameFor(column), optionalCellSchema);
       } else {
@@ -467,28 +461,12 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
   }
 
   /**
-   * YugabyteDB specific.
-   * @param tableId to identify the table
-   * @return the replica identity for the given table
-   */
-  protected ReplicaIdentityInfo.ReplicaIdentity getReplicaIdentityFor(TableId tableId) {
-    YBReplicaIdentity ybReplicaIdentity = replicaIdentityMap.get(tableId);
-
-    if (ybReplicaIdentity == null) {
-      ybReplicaIdentity = new YBReplicaIdentity(connectorConfig, tableId);
-      replicaIdentityMap.put(tableId, ybReplicaIdentity);
-    }
-
-    return ybReplicaIdentity.getReplicaIdentity();
-  }
-
-  /**
-   * Get a custom schema for columns when replica identity is CHANGE. The schema is of the format
+   * Get a custom schema for columns when plugin name is yboutput. The schema is of the format
    * {@code fieldName:{"value":fieldValue,"set":booleanValue}}.
    * @param name of the field
    * @param valueSchema is the schema of the value the field is supposed to take
    * @param isOptional indicates whether the field is optional
-   * @return a custom schema for the columns when replica identity is CHANGE
+   * @return a custom schema for the columns when plugin name is yboutput
    */
   static Schema cellSchema(String name, Schema valueSchema, boolean isOptional) {
     if (valueSchema != null) {
