@@ -325,8 +325,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         assertRecordsAfterInsert(2, 3, 3);
     }
+
     @Test
-    public void InitialSnapshotWithExistingSlot() throws Exception {
+    public void initialSnapshotWithExistingSlot() throws Exception {
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
@@ -336,6 +337,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertConnectorIsRunning();
         // now stop the connector
         stopConnector();
+        assertNoRecordsToConsume();
 
         // insert some more records
         TestHelper.execute(INSERT_STMT);
