@@ -319,6 +319,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 Objects.requireNonNull(tableId);
             }
 
+            LOGGER.info("Received record from service for table {}: {}", tableId, message.getNewTupleList());
+
             offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
                     taskContext.getSlotXmin(connection),
                     tableId,

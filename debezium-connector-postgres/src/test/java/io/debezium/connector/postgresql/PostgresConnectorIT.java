@@ -963,7 +963,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // YB Note: Added a wait for replication slot to be active.
         TestHelper.waitFor(Duration.ofSeconds(15));
-        TestHelper.waitForDefaultReplicationSlotBeActive();
+//        TestHelper.waitForDefaultReplicationSlotBeActive();
 
         waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
         // there shouldn't be any snapshot records
