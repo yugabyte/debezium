@@ -345,6 +345,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // check the records from the snapshot
         // start the connector back up and perform snapshot with an existing slot
         // but the 2 records that were inserted while we were down will NOT be retrieved
+        // as part of the snapshot. These records will be retrieved as part of streaming
         Configuration.Builder configBuilderInitial = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
