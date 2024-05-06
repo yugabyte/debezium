@@ -100,7 +100,6 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             jdbcConnection.setAutoCommit(false);
         }
         catch (SQLException e) {
-            // todo Vaibhav: if it fails, it will fail here.
             throw new DebeziumException(e);
         }
 
@@ -131,18 +130,14 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             // Print out the server information
             SlotState slotInfo = null;
             try {
-                // todo vaibhav: how does it fail here, what happens
-                // todo: put a debugger and whatever tserver it is connected to
                 if (LOGGER.isInfoEnabled()) {
                     LOGGER.info(jdbcConnection.serverInfo().toString());
                 }
                 slotInfo = jdbcConnection.getReplicationSlotState(connectorConfig.slotName(), connectorConfig.plugin().getPostgresPluginName());
             }
             catch (SQLException e) {
-                // todo vaibhav: what is the exception we are getting, log it
                 LOGGER.warn("unable to load info of replication slot, Debezium will try to create the slot", e);
                 throw e;
-                // todo vaibhav: what happens when a slot actually doesn't exist.
             }
 
             if (previousOffset == null) {
@@ -264,8 +259,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             coordinator.start(taskContext, this.queue, metadataProvider);
 
             return coordinator;
-        } // todo vaibhav: wrap everything thrown in a retriable exception and then throw it out
-        catch (Exception exception) {
+        } catch (Exception exception) {
             // YB Note: Catch all the exceptions and retry.
             throw new RetriableException(exception);
         }
