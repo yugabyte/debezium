@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import io.debezium.connector.postgresql.connection.PostgresReplicationConnection;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -65,7 +66,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
     private volatile ChangeEventQueue<DataChangeEvent> queue;
     private volatile PostgresConnection jdbcConnection;
     private volatile PostgresConnection beanRegistryJdbcConnection;
-    private volatile ReplicationConnection replicationConnection = null;
+    private volatile PostgresReplicationConnection replicationConnection = null;
 
     private volatile ErrorHandler errorHandler;
     private volatile PostgresSchema schema;
@@ -152,9 +153,10 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
             SlotCreationResult slotCreatedInfo = null;
             if (snapshotter.shouldStream()) {
-                replicationConnection = createReplicationConnection(this.taskContext,
+                replicationConnection = (PostgresReplicationConnection) createReplicationConnection(this.taskContext,
                         connectorConfig.maxRetries(), connectorConfig.retryDelay());
 
+                LOGGER.info("PID for replication connection: {}", replicationConnection.getBackendPid());
                 // we need to create the slot before we start streaming if it doesn't exist
                 // otherwise we can't stream back changes happening while the snapshot is taking place
                 if (slotInfo == null) {
