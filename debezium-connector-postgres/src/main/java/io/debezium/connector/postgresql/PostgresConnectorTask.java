@@ -99,9 +99,6 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
         // Global JDBC connection used both for snapshotting and streaming.
         // Must be able to resolve datatypes.
         jdbcConnection = connectionFactory.mainConnection();
-
-        LOGGER.info("Created connection to node: {}", getConnectedNode(jdbcConnection));
-
         try {
             jdbcConnection.setAutoCommit(false);
         }
@@ -360,21 +357,5 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
     public PostgresTaskContext getTaskContext() {
         return taskContext;
-    }
-
-    /**
-     * @param jdbcConnection object representing a JDBC connection
-     * @return the IP of the node the connection is made to
-     */
-    protected String getConnectedNode(JdbcConnection jdbcConnection) {
-        try (Statement st = jdbcConnection.connection().createStatement()) {
-            ResultSet rs = st.executeQuery("select inet_server_addr() connected_to_host;");
-
-            if (rs.next()) {
-                return rs.getString("connected_to_host");
-            }
-        } catch (SQLException sqle) {
-            LOGGER.warn("Unable to obtain the node for connection", sqle);
-        }
     }
 }

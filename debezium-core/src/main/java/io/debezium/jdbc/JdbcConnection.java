@@ -880,6 +880,9 @@ public class JdbcConnection implements AutoCloseable {
             if (initialOps != null) {
                 execute(initialOps);
             }
+
+            LOGGER.info("Connected to node: {}", getConnectedNode(conn));
+
             final String statements = config.getString(JdbcConfiguration.ON_CONNECT_STATEMENTS);
             if (statements != null && executeOnConnect) {
                 final List<String> splitStatements = parseSqlStatementString(statements);
@@ -887,6 +890,24 @@ public class JdbcConnection implements AutoCloseable {
             }
         }
         return conn;
+    }
+
+    /**
+     * @param jdbcConnection object representing a JDBC connection
+     * @return the IP of the node the connection is made to
+     */
+    protected String getConnectedNode(Connection connection) {
+        try (Statement st = connection.createStatement()) {
+            ResultSet rs = st.executeQuery("select inet_server_addr() connected_to_host;");
+
+            if (rs.next()) {
+                return rs.getString("connected_to_host");
+            }
+        } catch (SQLException sqle) {
+            LOGGER.warn("Unable to obtain the node for connection", sqle);
+        }
+
+        return "FAILED_TO_OBTAIN_NODE";
     }
 
     protected List<String> parseSqlStatementString(final String statements) {
