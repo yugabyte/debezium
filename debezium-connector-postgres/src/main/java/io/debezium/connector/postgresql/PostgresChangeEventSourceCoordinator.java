@@ -84,7 +84,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
             if(!snapshotResult.isSkipped()) {
                 LOGGER.info("Will wait for snapshot completion before transitioning to streaming");
                 waitForSnapshotCompletion = true;
-                while(waitForSnapshotCompletion) {
+                while (waitForSnapshotCompletion) {
                     LOGGER.debug("sleeping for 1s to receive snapshot completion offset");
                     Metronome metronome = Metronome.sleeper(Duration.ofSeconds(1), Clock.SYSTEM);
                     metronome.pause();
@@ -139,6 +139,9 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
             }
         }
 
+        // This block won't be executed when we receive an offset that conveys that snapshot is completed because
+        // streamingSource would be null. It is only initialised once we have transitioned to streaming. So, this
+        // block would only be executed once we have switched to streaming phase.
         if (!commitOffsetLock.isLocked() && streamingSource != null && offset != null) {
             streamingSource.commitOffset(partition, offset);
         }
