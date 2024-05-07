@@ -7,15 +7,12 @@
 package io.debezium.connector.postgresql;
 
 import java.nio.charset.Charset;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import io.debezium.jdbc.JdbcConnection;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord;
