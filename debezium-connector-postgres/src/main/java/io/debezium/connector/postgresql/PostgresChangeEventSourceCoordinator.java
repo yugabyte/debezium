@@ -81,13 +81,15 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
         LOGGER.debug("Snapshot result {}", snapshotResult);
 
         if (context.isRunning() && snapshotResult.isCompletedOrSkipped()) {
-            if(!snapshotResult.isSkipped()) {
+            if(YugabyteDBServer.isEnabled() && !snapshotResult.isSkipped()) {
                 LOGGER.info("Will wait for snapshot completion before transitioning to streaming");
                 waitForSnapshotCompletion = true;
                 while (waitForSnapshotCompletion) {
                     LOGGER.debug("sleeping for 1s to receive snapshot completion offset");
                     Metronome metronome = Metronome.sleeper(Duration.ofSeconds(1), Clock.SYSTEM);
                     metronome.pause();
+                    // Note: This heartbeat call is only required to support applications using debezium engine/embedded
+                    // engine. It is not required when the connector is run with kakfa-connect.
                     eventDispatcher.alwaysDispatchHeartbeatEvent(partition, snapshotResult.getOffset());
                 }
             }
@@ -130,11 +132,11 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
 
     @Override
     public void commitOffset(Map<String, ?> partition, Map<String, ?> offset) {
-        if (waitForSnapshotCompletion) {
+        if (YugabyteDBServer.isEnabled() && waitForSnapshotCompletion) {
             LOGGER.debug("Checking the offset value for snapshot completion");
             OffsetState offsetState = new PostgresOffsetContext.Loader((PostgresConnectorConfig) connectorConfig).load(offset).asOffsetState();
             if(!offsetState.snapshotInEffect()) {
-                LOGGER.debug("Offset conveys that snapshot has completed.");
+                LOGGER.info("Offset conveys that snapshot has completed");
                 waitForSnapshotCompletion = false;
             }
         }

@@ -1209,13 +1209,17 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                                      SchemaNameAdjuster schemaNameAdjuster,
                                      HeartbeatConnectionProvider connectionProvider,
                                      HeartbeatErrorHandler errorHandler) {
-        // We do not need any heartbeat when snapshot is never required.
-        if (snapshotMode.equals(SnapshotMode.NEVER)) {
-            return Heartbeat.DEFAULT_NOOP_HEARTBEAT;
-        }
+        if (YugabyteDBServer.isEnabled()) {
+            // We do not need any heartbeat when snapshot is never required.
+            if (snapshotMode.equals(SnapshotMode.NEVER)) {
+                return Heartbeat.DEFAULT_NOOP_HEARTBEAT;
+            }
 
-        return new YBHeartbeatImpl(getHeartbeatInterval(), topicNamingStrategy.heartbeatTopic(),
-                getLogicalName(), schemaNameAdjuster);
+            return new YBHeartbeatImpl(getHeartbeatInterval(), topicNamingStrategy.heartbeatTopic(),
+                    getLogicalName(), schemaNameAdjuster);
+        } else {
+            return super.createHeartbeat(topicNamingStrategy, schemaNameAdjuster, connectionProvider, errorHandler);
+        }
     }
 
 
