@@ -881,7 +881,7 @@ public class JdbcConnection implements AutoCloseable {
                 execute(initialOps);
             }
 
-            LOGGER.info("Connected to node: {}", "", getConnectedNode(conn));
+            LOGGER.info("Connected to node: {}", getConnectedNode(conn));
 
             final String statements = config.getString(JdbcConfiguration.ON_CONNECT_STATEMENTS);
             if (statements != null && executeOnConnect) {

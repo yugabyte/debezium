@@ -55,7 +55,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private final PostgresSchema schema;
     private final PostgresConnectorConfig connectorConfig;
     private final PostgresTaskContext taskContext;
-    private final ReplicationConnection replicationConnection;
+    private final PostgresReplicationConnection replicationConnection;
     private final AtomicReference<ReplicationStream> replicationStream = new AtomicReference<>();
     private final Snapshotter snapshotter;
     private final DelayStrategy pauseNoMessage;
@@ -92,7 +92,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         pauseNoMessage = DelayStrategy.constant(taskContext.getConfig().getPollInterval());
         this.taskContext = taskContext;
         this.snapshotter = snapshotter;
-        this.replicationConnection = replicationConnection;
+        this.replicationConnection = (PostgresReplicationConnection) replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
     }
 
@@ -173,6 +173,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 walPosition.enableFiltering();
                 stream.stopKeepAlive();
                 replicationConnection.reconnect();
+
+                LOGGER.info("PID for replication connection after wal position found: {}", replicationConnection.getBackendPid());
+
                 replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
                 stream = this.replicationStream.get();
                 stream.startKeepAlive(Threads.newSingleThreadExecutor(PostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
