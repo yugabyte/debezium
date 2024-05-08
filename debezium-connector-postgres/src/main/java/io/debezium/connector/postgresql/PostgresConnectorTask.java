@@ -156,7 +156,6 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                 replicationConnection = (PostgresReplicationConnection) createReplicationConnection(this.taskContext,
                         connectorConfig.maxRetries(), connectorConfig.retryDelay());
 
-                LOGGER.info("PID for replication connection: {}", replicationConnection.getBackendPid());
                 // we need to create the slot before we start streaming if it doesn't exist
                 // otherwise we can't stream back changes happening while the snapshot is taking place
                 if (slotInfo == null) {

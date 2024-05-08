@@ -131,6 +131,15 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         try {
             final WalPositionLocator walPosition;
 
+            // This log can be printed either once or twice.
+            // once - it means that the wal position is not being searched
+            // twice - the wal position locator is searching for a wal position
+            if (YugabyteDBServer.isEnabled()) {
+                LOGGER.info("PID for replication connection: {} on node {}",
+                  replicationConnection.getBackendPid(),
+                  replicationConnection.getConnectedNodeIp());
+            }
+
             if (hasStartLsnStoredInContext) {
                 // start streaming from the last recorded position in the offset
                 final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
@@ -175,12 +184,17 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 stream.stopKeepAlive();
                 replicationConnection.reconnect();
 
-                LOGGER.info("PID for replication connection after wal position found: {} on node {}", replicationConnection.getBackendPid(), replicationConnection.getConnectedNodeIp());
+                if (YugabyteDBServer.isEnabled()) {
+                    LOGGER.info("PID for replication connection: {} on node {}",
+                                replicationConnection.getBackendPid(),
+                                replicationConnection.getConnectedNodeIp());
+                }
 
                 replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
                 stream = this.replicationStream.get();
                 stream.startKeepAlive(Threads.newSingleThreadExecutor(PostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
             }
+
             processMessages(context, partition, this.effectiveOffset, stream);
         }
         catch (Throwable e) {
