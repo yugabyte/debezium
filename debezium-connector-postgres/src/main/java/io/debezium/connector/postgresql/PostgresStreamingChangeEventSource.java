@@ -174,7 +174,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 stream.stopKeepAlive();
                 replicationConnection.reconnect();
 
-                LOGGER.info("PID for replication connection after wal position found: {}", replicationConnection.getBackendPid());
+                LOGGER.info("PID for replication connection after wal position found: {} on node {}", replicationConnection.getBackendPid(), replicationConnection.getConnectedNodeIp());
 
                 replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
                 stream = this.replicationStream.get();
