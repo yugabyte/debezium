@@ -276,7 +276,7 @@ public final class TestHelper {
     }
 
     public static JdbcConfiguration defaultJdbcConfig() {
-        return defaultJdbcConfig("127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433", 5433);
+        return defaultJdbcConfig("127.0.0.1", 5433);
     }
 
     public static Configuration.Builder defaultConfig() {
