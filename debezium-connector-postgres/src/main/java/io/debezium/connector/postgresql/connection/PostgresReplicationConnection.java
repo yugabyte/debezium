@@ -550,7 +550,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                 return rs.getString("backend_pid");
             }
         } catch (SQLException sqle) {
-            LOGGER.info("Unable to get the backend PID", sqle);
+            LOGGER.warn("Unable to get the backend PID", sqle);
         }
 
         return "FAILED_TO_GET_BACKEND_PID";
