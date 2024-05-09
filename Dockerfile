@@ -27,28 +27,28 @@ ENV KAFKA_OPTS="-Djdk.tls.client.protocols=TLSv1.2 -javaagent:/kafka/etc/jmx_pro
 # Package all the Avro related jar files
 RUN mkdir -p $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres/avro-supporting-jars/
 WORKDIR $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres/avro-supporting-jars
-RUN curl -sLo kafka-connect-avro-converter-7.6.0.jar https://packages.confluent.io/maven/io/confluent/kafka-connect-avro-converter/7.6.0/kafka-connect-avro-converter-7.6.0.jar
-RUN curl -sLo kafka-connect-avro-data-7.6.0.jar https://packages.confluent.io/maven/io/confluent/kafka-connect-avro-data/7.6.0/kafka-connect-avro-data-7.6.0.jar
-RUN curl -sLo kafka-avro-serializer-5.3.0.jar https://maven.repository.redhat.com/earlyaccess/all/io/confluent/kafka-avro-serializer/5.3.0/kafka-avro-serializer-5.3.0.jar
-RUN curl -sLo kafka-schema-serializer-7.6.0.jar https://packages.confluent.io/maven/io/confluent/kafka-schema-serializer/7.6.0/kafka-schema-serializer-7.6.0.jar
-RUN curl -sLo kafka-schema-converter-7.6.0.jar https://packages.confluent.io/maven/io/confluent/kafka-schema-converter/7.6.0/kafka-schema-converter-7.6.0.jar
-RUN curl -sLo kafka-schema-registry-client-5.3.2.jar https://maven.repository.redhat.com/ga/io/confluent/kafka-schema-registry-client/5.3.2/kafka-schema-registry-client-5.3.2.jar
-RUN curl -sLo common-config-5.3.0.jar https://maven.repository.redhat.com/earlyaccess/all/io/confluent/common-config/5.3.0/common-config-5.3.0.jar
-RUN curl -sLo common-utils-5.3.0.jar https://maven.repository.redhat.com/ga/io/confluent/common-utils/5.3.2/common-utils-5.3.2.jar
+RUN curl -sLo kafka-connect-avro-converter-7.5.3.jar https://packages.confluent.io/maven/io/confluent/kafka-connect-avro-converter/7.5.3/kafka-connect-avro-converter-7.5.3.jar 
+RUN curl -sLo kafka-connect-avro-data-7.5.3.jar https://packages.confluent.io/maven/io/confluent/kafka-connect-avro-data/7.5.3/kafka-connect-avro-data-7.5.3.jar
+RUN curl -sLo kafka-avro-serializer-7.5.3.jar https://packages.confluent.io/maven/io/confluent/kafka-avro-serializer/7.5.3/kafka-avro-serializer-7.5.3.jar
+RUN curl -sLo kafka-schema-serializer-7.5.3.jar https://packages.confluent.io/maven/io/confluent/kafka-schema-serializer/7.5.3/kafka-schema-serializer-7.5.3.jar 
+RUN curl -sLo kafka-schema-converter-7.5.3.jar https://packages.confluent.io/maven/io/confluent/kafka-schema-converter/7.5.3/kafka-schema-converter-7.5.3.jar
+RUN curl -sLo kafka-schema-registry-client-7.5.3.jar https://packages.confluent.io/maven/io/confluent/kafka-schema-registry-client/7.5.3/kafka-schema-registry-client-7.5.3.jar 
+RUN curl -sLo common-config-7.5.3.jar https://packages.confluent.io/maven/io/confluent/common-config/7.5.3/common-config-7.5.3.jar
+RUN curl -sLo common-utils-7.5.3.jar https://packages.confluent.io/maven/io/confluent/common-utils/7.5.3/common-utils-7.5.3.jar 
 
 RUN curl -sLo avro-1.11.3.jar https://repo1.maven.org/maven2/org/apache/avro/avro/1.11.3/avro-1.11.3.jar
-RUN curl -sLo commons-compress-1.26.1.jar https://repo1.maven.org/maven2/org/apache/commons/commons-compress/1.26.1/commons-compress-1.26.1.jar
-RUN curl -sLo failureaccess-1.0.2.jar https://repo1.maven.org/maven2/com/google/guava/failureaccess/1.0.2/failureaccess-1.0.2.jar
-RUN curl -sLo guava-33.2.0-jre.jar https://repo1.maven.org/maven2/com/google/guava/guava/33.2.0-jre/guava-33.2.0-jre.jar
+RUN curl -sLo commons-compress-1.21.jar https://repo1.maven.org/maven2/org/apache/commons/commons-compress/1.21/commons-compress-1.21.jar
+RUN curl -sLo failureaccess-1.0.jar https://repo1.maven.org/maven2/com/google/guava/failureaccess/1.0/failureaccess-1.0.jar
+RUN curl -sLo guava-33.0.0-jre.jar https://repo1.maven.org/maven2/com/google/guava/guava/33.0.0-jre/guava-33.0.0-jre.jar 
 RUN curl -sLo minimal-json-0.9.5.jar https://repo1.maven.org/maven2/com/eclipsesource/minimal-json/minimal-json/0.9.5/minimal-json-0.9.5.jar
-RUN curl -sLo re2j-1.7.jar https://repo1.maven.org/maven2/com/google/re2j/re2j/1.7/re2j-1.7.jar
-RUN curl -sLo slf4j-api-2.0.13.jar https://repo1.maven.org/maven2/org/slf4j/slf4j-api/2.0.13/slf4j-api-2.0.13.jar
-RUN curl -sLo snakeyaml-2.2.jar https://repo1.maven.org/maven2/org/yaml/snakeyaml/2.2/snakeyaml-2.2.jar
-RUN curl -sLo swagger-annotations-2.2.21.jar https://repo1.maven.org/maven2/io/swagger/core/v3/swagger-annotations/2.2.21/swagger-annotations-2.2.21.jar
-RUN curl -sLo jackson-databind-2.17.1.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.17.1/jackson-databind-2.17.1.jar
-RUN curl -sLo jackson-core-2.17.1.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.17.1/jackson-core-2.17.1.jar
-RUN curl -sLo jackson-annotations-2.17.1.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.17.1/jackson-annotations-2.17.1.jar
-RUN curl -sLo jackson-dataformat-csv-2.17.1.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-csv/2.17.1/jackson-dataformat-csv-2.17.1.jar
+RUN curl -sLo re2j-1.6.jar https://repo1.maven.org/maven2/com/google/re2j/re2j/1.6/re2j-1.6.jar 
+RUN curl -sLo slf4j-api-1.7.36.jar https://repo1.maven.org/maven2/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar
+RUN curl -sLo snakeyaml-2.0.jar https://repo1.maven.org/maven2/org/yaml/snakeyaml/2.0/snakeyaml-2.0.jar 
+RUN curl -sLo swagger-annotations-2.1.10.jar https://repo1.maven.org/maven2/io/swagger/core/v3/swagger-annotations/2.1.10/swagger-annotations-2.1.10.jar 
+RUN curl -sLo jackson-databind-2.14.2.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.jar 
+RUN curl -sLo jackson-core-2.14.2.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.jar 
+RUN curl -sLo jackson-annotations-2.14.2.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.jar 
+RUN curl -sLo jackson-dataformat-csv-2.14.2.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-csv/2.14.2/jackson-dataformat-csv-2.14.2.jar 
 RUN curl -sLo logredactor-1.0.12.jar https://repo1.maven.org/maven2/io/confluent/logredactor/1.0.12/logredactor-1.0.12.jar
 RUN curl -sLo logredactor-metrics-1.0.12.jar https://repo1.maven.org/maven2/io/confluent/logredactor-metrics/1.0.12/logredactor-metrics-1.0.12.jar
 WORKDIR /
