@@ -151,7 +151,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             }
 
             SlotCreationResult slotCreatedInfo = null;
-            if (snapshotter.shouldStream()) {
+            if (snapshotter.shouldStream() || YugabyteDBServer.isEnabled()) {
                 replicationConnection = createReplicationConnection(this.taskContext,
                         connectorConfig.maxRetries(), connectorConfig.retryDelay());
 
