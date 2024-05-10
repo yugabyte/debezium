@@ -266,13 +266,13 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         // Tx BEGIN/END event
         if (message.isTransactionalMessage()) {
-            LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
+            LOGGER.info("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
 
             OptionalLong currentTxnid = message.getTransactionId();
             if (lastTxnidForWhichCommitSeen.isPresent() && currentTxnid.isPresent()) {
                 long delta = currentTxnid.getAsLong() - lastTxnidForWhichCommitSeen.getAsLong();
                 if (delta > 1) {
-                    LOGGER.warn("Skipped {} transactions between {} and {}, possible data loss ?", delta, lastTxnidForWhichCommitSeen, currentTxnid);
+                    LOGGER.info("Skipped {} transactions between {} and {}, possible data loss ?", delta, lastTxnidForWhichCommitSeen, currentTxnid);
                 }
             }
             lastTxnidForWhichCommitSeen = currentTxnid;
