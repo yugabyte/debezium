@@ -3262,7 +3262,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     public void nonSuperUserSnapshotAndStreaming() throws Exception {
-        TestHelper.execute("CREATE ROLE ybpgconn WITH LOGIN REPLICATION;");
         TestHelper.executeDDL("replication_role_user.ddl");
         TestHelper.execute(SETUP_TABLES_STMT);
 
