@@ -147,7 +147,6 @@ public abstract class AbstractSnapshotTest<T extends SourceConnector> extends Ab
     }
 
     protected void populate4PkTable(JdbcConnection connection, String tableName) throws SQLException {
-        logger.info("AS: In populate4PkTable");
         connection.setAutoCommit(false);
         for (int i = 0; i < ROW_COUNT; i++) {
             final int id = i + 1;

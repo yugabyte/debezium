@@ -54,7 +54,7 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
             + "CREATE TABLE s1.a42 (pk1 integer, pk2 integer, pk3 integer, pk4 integer, aa integer);"
             + "CREATE TABLE s1.anumeric (pk numeric, aa integer, PRIMARY KEY(pk));"
             + "CREATE TABLE s1.debezium_signal (id varchar(64), type varchar(32), data varchar(2048), PRIMARY KEY(id));"
-            // + "ALTER TABLE s1.debezium_signal REPLICA IDENTITY FULL;"
+            //+ "ALTER TABLE s1.debezium_signal REPLICA IDENTITY FULL;"
             + "CREATE TYPE enum_type AS ENUM ('UP', 'DOWN', 'LEFT', 'RIGHT', 'STORY');"
             + "CREATE TABLE s1.enumpk (pk enum_type, aa integer, PRIMARY KEY(pk));";
 
@@ -64,7 +64,6 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
         initializeConnectorTestFramework();
 
         TestHelper.dropDefaultReplicationSlot();
-        LOGGER.info("AS: About to create tables etc");
         TestHelper.execute(SETUP_TABLES_STMT);
     }
 
@@ -94,9 +93,8 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
     @After
     public void after() {
         stopConnector();
-        // TestHelper.dropDefaultReplicationSlot();
-        // TestHelper.dropPublication();
-
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.dropPublication();
     }
 
     protected Configuration.Builder config() {
@@ -127,7 +125,7 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.SIGNAL_DATA_COLLECTION, "s1.debezium_signal")
                 .with(CommonConnectorConfig.SIGNAL_POLL_INTERVAL_MS, 5)
-                .with(PostgresConnectorConfig.INCREMENTAL_SNAPSHOT_CHUNK_SIZE, 10)
+                .with(PostgresConnectorConfig.INCREMENTAL_SNAPSHOT_CHUNK_SIZE, 200)
                 .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1")
                 .with(RelationalDatabaseConnectorConfig.MSG_KEY_COLUMNS, "s1.a42:pk1,pk2,pk3,pk4")
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, tableIncludeList)
@@ -221,11 +219,11 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
         startConnector();
         TestHelper.waitFor(Duration.ofMinutes(1));
 
-        LOGGER.info("AS: Sending signal to table s1.a4");
+        LOGGER.info("Sending signal to table s1.a4");
         sendAdHocSnapshotSignal("s1.a4");
 
         Thread.sleep(5000);
-        LOGGER.info("AS: Inserting more records into the table s1.a4");
+        LOGGER.info("Inserting more records into the table s1.a4");
         try (JdbcConnection connection = databaseConnection()) {
             connection.setAutoCommit(false);
             for (int i = 0; i < ROW_COUNT; i++) {
@@ -245,7 +243,6 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
             connection.commit();
         }
 
-        LOGGER.info("AS: consumeMixedWithIncrementalSnapshot");
         final int expectedRecordCount = ROW_COUNT * 2;
         final Map<Integer, Integer> dbChanges = consumeMixedWithIncrementalSnapshot(
                 expectedRecordCount,
@@ -257,7 +254,6 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
         for (int i = 0; i < expectedRecordCount; i++) {
             assertThat(dbChanges).contains(entry(i + 1, i));
         }
-        LOGGER.info("AS: SUCCESS !!!!!!!!!");
     }
 
     @Test
@@ -348,7 +344,6 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
         for (int i = 0; i < expectedRecordCount; i++) {
             assertThat(dbChanges).contains(entry(i + 1, i));
         }
-        LOGGER.info("AS: SUCCESS !!!!!!!!!");
     }
 
     @Test
@@ -372,8 +367,6 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
         waitForConnectorToStart();
 
         sendAdHocSnapshotSignal("s1.part", "s1.part1", "s1.part2");
-        // sendAdHocSnapshotSignal("s1.part1");
-        // sendAdHocSnapshotSignal("s1.part2");
 
         // check the records from the snapshot
         final int expectedRecordCount = ROW_COUNT;
