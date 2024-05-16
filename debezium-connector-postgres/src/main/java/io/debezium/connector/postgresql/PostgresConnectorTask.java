@@ -88,6 +88,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
         }
         catch (Exception exception) {
             // YB Note: Catch all the exceptions and retry.
+            LOGGER.warn("Received exception, task will be retrying ", exception);
             throw new RetriableException(exception);
         }
 
@@ -107,6 +108,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
         catch (Exception e) {
             // YB Note: Catch all the exceptions and retry.
             // throw new DebeziumException(e);
+            LOGGER.warn("Received exception, task will be retrying ", e);
             throw new RetriableException(e);
         }
 
@@ -268,6 +270,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             return coordinator;
         } catch (Exception exception) {
             // YB Note: Catch all the exceptions and retry.
+            LOGGER.warn("Received exception, task will be retrying ", exception);
             throw new RetriableException(exception);
         }
         finally {
