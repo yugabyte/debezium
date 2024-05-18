@@ -72,6 +72,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
     @Override
     public ChangeEventSourceCoordinator<PostgresPartition, PostgresOffsetContext> start(Configuration config) {
+        try {
         final PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
         final TopicNamingStrategy<TableId> topicNamingStrategy = connectorConfig.getTopicNamingStrategy(CommonConnectorConfig.TOPIC_NAMING_STRATEGY);
         final Snapshotter snapshotter = connectorConfig.getSnapshotter();
@@ -268,13 +269,14 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             coordinator.start(taskContext, this.queue, metadataProvider);
 
             return coordinator;
+        }
+        finally {
+                previousContext.restore();
+        }
         } catch (Exception exception) {
             // YB Note: Catch all the exceptions and retry.
             LOGGER.warn("Received exception, task will be retrying ", exception);
             throw new RetriableException(exception);
-        }
-        finally {
-            previousContext.restore();
         }
     }
 
