@@ -407,23 +407,11 @@ public final class TestHelper {
     }
 
     protected static void waitForDefaultReplicationSlotBeActive() {
-        String query;
-        String databaseName;
-
-        if (YugabyteDBServer.isEnabled()) {
-            query = "select * from pg_replication_slots where slot_name = ? and database = ? and plugin = ?";
-            databaseName = "yugabyte";
-        }
-        else {
-            query = "select * from pg_replication_slots where slot_name = ? and database = ? and plugin = ? and active = true";
-            databaseName = "postgres";
-        }
-
         try (PostgresConnection connection = create()) {
-            Awaitility.await().atMost(60, TimeUnit.SECONDS).until(() -> connection.prepareQueryAndMap(query,
-                    statement -> {
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> connection.prepareQueryAndMap(
+                    "select * from pg_replication_slots where slot_name = ? and database = ? and plugin = ? and active = true", statement -> {
                         statement.setString(1, ReplicationConnection.Builder.DEFAULT_SLOT_NAME);
-                        statement.setString(2, databaseName);
+                        statement.setString(2, "postgres");
                         statement.setString(3, TestHelper.decoderPlugin().getPostgresPluginName());
                     },
                     rs -> rs.next()));
@@ -462,9 +450,9 @@ public final class TestHelper {
 
     protected static void waitFor(Duration duration) throws InterruptedException {
         Awaitility.await()
-                .pollDelay(duration)
-                .atMost(duration.plusSeconds(1))
-                .until(() -> true);
+          .pollDelay(duration)
+          .atMost(duration.plusSeconds(1))
+          .until(() -> true);
     }
 
     private static List<String> getOpenIdleTransactions(PostgresConnection connection) throws SQLException {
