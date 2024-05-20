@@ -271,13 +271,14 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             return coordinator;
         }
         finally {
-                previousContext.restore();
+            previousContext.restore();
         }
         } catch (Exception exception) {
             // YB Note: Catch all the exceptions and retry.
             LOGGER.warn("Received exception, task will be retrying ", exception);
             throw new RetriableException(exception);
         }
+
     }
 
     public ReplicationConnection createReplicationConnection(PostgresTaskContext taskContext, int maxRetries, Duration retryDelay)
