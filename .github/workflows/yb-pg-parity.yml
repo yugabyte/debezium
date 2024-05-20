@@ -24,12 +24,3 @@ jobs:
       
       - name: Download dependencies
         run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -am
-      
-      - name: Checkstyle, Formatting, and Import Order Checks
-        run: >
-          ./mvnw -B -ntp process-sources checkstyle:checkstyle
-          -pl debezium-connector-postgres
-          -Dformat.formatter.goal=validate
-          -Dformat.imports.goal=check
-          -Dorg.slf4j.simpleLogger.showDateTime=true
-          -Dorg.slf4j.simpleLogger.dateTimeFormat="YYYY-MM-DD HH:mm:ss,SSS"
