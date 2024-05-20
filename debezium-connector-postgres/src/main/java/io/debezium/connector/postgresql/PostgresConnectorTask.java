@@ -266,6 +266,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
         }
         catch (Exception exception) {
             // YB Note: Catch all the exceptions and retry.
+            LOGGER.warn("Received exception, will be retrying", exception);
             throw new RetriableException(exception);
         }
 
