@@ -23,4 +23,4 @@ jobs:
           java-version: 17
       
       - name: Download dependencies
-        run: ./mvnw clean install -pl debezium-connector-postgres -am
+        run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -am
