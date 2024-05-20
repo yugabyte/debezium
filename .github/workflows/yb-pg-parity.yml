@@ -1,4 +1,4 @@
-name: Build Debezium for YugabyteDB/Postgres parity
+name: YugabyteDB PG parity sanity
 
 on:
   push:
@@ -24,6 +24,15 @@ jobs:
       
       - name: Download dependencies
         run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -am
+      
+      - name: Cache Maven Repository
+        id: maven-cache-check
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-debezium-test-build-${{ hashFiles('**/pom.xml') }}
   
   check_style:
     name: "Checkstyle and formatting"
