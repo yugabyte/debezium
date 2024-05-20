@@ -99,7 +99,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             jdbcConnection = connectionFactory.mainConnection();
             try {
                 jdbcConnection.setAutoCommit(false);
-            } catch (SQLException e) {
+            }
+            catch (SQLException e) {
                 throw new DebeziumException(e);
             }
 
@@ -134,7 +135,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                         LOGGER.info(jdbcConnection.serverInfo().toString());
                     }
                     slotInfo = jdbcConnection.getReplicationSlotState(connectorConfig.slotName(), connectorConfig.plugin().getPostgresPluginName());
-                } catch (SQLException e) {
+                }
+                catch (SQLException e) {
                     LOGGER.warn("unable to load info of replication slot, Debezium will try to create the slot", e);
                     throw e;
                 }
@@ -158,7 +160,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                     if (slotInfo == null) {
                         try {
                             slotCreatedInfo = replicationConnection.createReplicationSlot().orElse(null);
-                        } catch (SQLException ex) {
+                        }
+                        catch (SQLException ex) {
                             String message = "Creation of replication slot failed";
                             if (ex.getMessage().contains("already exists")) {
                                 message += "; when setting up multiple connectors for the same database host, please make sure to use a distinct replication slot name for each.";
@@ -172,7 +175,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
                 try {
                     jdbcConnection.commit();
-                } catch (SQLException e) {
+                }
+                catch (SQLException e) {
                     throw new DebeziumException(e);
                 }
 
@@ -257,7 +261,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             } finally {
                 previousContext.restore();
             }
-        } catch (Exception exception) {
+        }
+        catch (Exception exception) {
             // YB Note: Catch all the exceptions and retry.
             throw new RetriableException(exception);
         }
