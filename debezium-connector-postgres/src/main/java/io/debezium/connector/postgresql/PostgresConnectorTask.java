@@ -145,7 +145,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                     LOGGER.info("No previous offset found");
                     // if we have no initial offset, indicate that to Snapshotter by passing null
                     snapshotter.init(connectorConfig, null, slotInfo);
-                } else {
+                }
+                else {
                     LOGGER.info("Found previous offset {}", previousOffset);
                     snapshotter.init(connectorConfig, previousOffset.asOffsetState(), slotInfo);
                 }
@@ -168,7 +169,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                             }
                             throw new DebeziumException(message, ex);
                         }
-                    } else {
+                    }
+                    else {
                         slotCreatedInfo = null;
                     }
                 }
