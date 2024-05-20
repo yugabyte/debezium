@@ -66,7 +66,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
     private volatile ChangeEventQueue<DataChangeEvent> queue;
     private volatile PostgresConnection jdbcConnection;
     private volatile PostgresConnection beanRegistryJdbcConnection;
-    private volatile PostgresReplicationConnection replicationConnection = null;
+    private volatile ReplicationConnection replicationConnection = null;
 
     private volatile ErrorHandler errorHandler;
     private volatile PostgresSchema schema;
