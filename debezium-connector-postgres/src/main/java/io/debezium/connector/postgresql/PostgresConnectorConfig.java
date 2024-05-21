@@ -12,11 +12,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import io.debezium.data.Envelope;
+import io.debezium.heartbeat.Heartbeat;
+import io.debezium.heartbeat.HeartbeatConnectionProvider;
+import io.debezium.heartbeat.HeartbeatErrorHandler;
+import io.debezium.jdbc.JdbcConnection;
+import io.debezium.schema.SchemaNameAdjuster;
+import io.debezium.spi.topic.TopicNamingStrategy;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigValue;
+import org.apache.kafka.connect.data.Struct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -530,6 +538,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
 
+
     public static final Field PLUGIN_NAME = Field.create("plugin.name")
             .withDisplayName("Plugin")
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 0))
@@ -777,7 +786,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withWidth(Width.LONG)
             .withImportance(Importance.MEDIUM)
             .withDescription(
-                    "A name of class to that creates SSL Sockets. Use org.postgresql.ssl.NonValidatingFactory to disable SSL validation in development environments");
+                    "A name of class to that creates SSL Sockets. Use com.yugabyte.ssl.NonValidatingFactory to disable SSL validation in development environments");
 
     public static final Field SNAPSHOT_MODE = Field.create("snapshot.mode")
             .withDisplayName("Snapshot mode")
@@ -931,7 +940,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDefault(2)
             .withDescription("Number of fractional digits when money type is converted to 'precise' decimal number.");
-
     public static final Field SHOULD_FLUSH_LSN_IN_SOURCE_DB = Field.create("flush.lsn.source")
             .withDisplayName("Boolean to determine if Debezium should flush LSN in the source database")
             .withType(Type.BOOLEAN)
@@ -1180,6 +1188,19 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return 0;
     }
 
+    /**
+     * Method to get the connection factory depending on the provided hostname value.
+     * @param hostName the host(s) for the PostgreSQL/YugabyteDB instance
+     * @return a {@link io.debezium.jdbc.JdbcConnection.ConnectionFactory} instance
+     */
+    public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName) {
+        return hostName.contains(":")
+                 ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                    PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
+                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                    PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
+    }
+
     protected static int validateReplicaAutoSetField(Configuration config, Field field, Field.ValidationOutput problems) {
         String replica_autoset_values = config.getString(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES);
         int problemCount = 0;
@@ -1224,4 +1245,41 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     !t.schema().startsWith(TEMP_TABLE_SCHEMA_PREFIX);
         }
     }
+
+    @Override
+    public Heartbeat createHeartbeat(TopicNamingStrategy topicNamingStrategy,
+                                     SchemaNameAdjuster schemaNameAdjuster,
+                                     HeartbeatConnectionProvider connectionProvider,
+                                     HeartbeatErrorHandler errorHandler) {
+        if (YugabyteDBServer.isEnabled()) {
+            // We do not need any heartbeat when snapshot is never required.
+            if (snapshotMode.equals(SnapshotMode.NEVER)) {
+                return Heartbeat.DEFAULT_NOOP_HEARTBEAT;
+            }
+
+            return new YBHeartbeatImpl(getHeartbeatInterval(), topicNamingStrategy.heartbeatTopic(),
+                    getLogicalName(), schemaNameAdjuster);
+        } else {
+            return super.createHeartbeat(topicNamingStrategy, schemaNameAdjuster, connectionProvider, errorHandler);
+        }
+    }
+
+    @Override
+    public Optional<String[]> parseSignallingMessage(Struct value) {
+        final Struct after = value.getStruct(Envelope.FieldName.AFTER);
+        if (after == null) {
+            LOGGER.warn("After part of signal '{}' is missing", value);
+            return Optional.empty();
+        }
+        List<org.apache.kafka.connect.data.Field> fields = after.schema().fields();
+        return Optional.of(new String[]{
+                after.getString(fields.get(0).name()),
+                after.getString(fields.get(1).name()),
+                after.getString(fields.get(2).name())
+        });
+    }
+
+
+
+
 }

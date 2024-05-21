@@ -21,7 +21,7 @@ import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.core.BaseConnection;
+import com.yugabyte.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
