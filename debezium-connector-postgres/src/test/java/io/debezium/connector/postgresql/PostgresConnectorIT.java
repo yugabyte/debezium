@@ -1056,6 +1056,46 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
+    public void shouldHaveBeforeImageOfUpdatedRow() throws InterruptedException {
+        Testing.Print.enable();
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(SETUP_TABLES_STMT);
+        TestHelper.execute("ALTER TABLE s1.a REPLICA IDENTITY FULL;");
+        Configuration config = TestHelper.defaultConfig()
+                                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+                                 .build();
+        start(PostgresConnector.class, config);
+        assertConnectorIsRunning();
+
+        // YB Note: Added a wait for replication slot to be active.
+        TestHelper.waitFor(Duration.ofSeconds(15));
+
+        waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+        // there shouldn't be any snapshot records
+        assertNoRecordsToConsume();
+
+        // insert and verify 2 new records
+        TestHelper.execute(INSERT_STMT);
+        TestHelper.execute("UPDATE s1.a SET aa = 404 WHERE pk = 2;");
+
+        SourceRecords actualRecords = consumeRecordsByTopic(3);
+        List<SourceRecord> records = actualRecords.recordsForTopic(topicName("s1.a"));
+
+        SourceRecord insertRecord = records.get(0);
+        SourceRecord updateRecord = records.get(1);
+
+        YBVerifyRecord.isValidInsert(insertRecord, PK_FIELD, 2);
+        YBVerifyRecord.isValidUpdate(updateRecord, PK_FIELD, 2);
+
+        Struct updateRecordValue = (Struct) updateRecord.value();
+        assertThat(updateRecordValue.get(Envelope.FieldName.AFTER)).isNotNull();
+        assertThat(updateRecordValue.get(Envelope.FieldName.BEFORE)).isNotNull();
+        assertThat(updateRecordValue.getStruct(Envelope.FieldName.BEFORE).getStruct("aa").getInt32("value")).isEqualTo(1);
+        assertThat(updateRecordValue.getStruct(Envelope.FieldName.AFTER).getStruct("aa").getInt32("value")).isEqualTo(404);
+    }
+
+    @Test
     public void shouldResumeSnapshotIfFailingMidstream() throws Exception {
         // insert another set of rows so we can stop at certain point
         CountDownLatch latch = new CountDownLatch(1);

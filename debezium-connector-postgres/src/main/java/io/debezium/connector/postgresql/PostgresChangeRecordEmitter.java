@@ -110,7 +110,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
                     return null;
                 case UPDATE:
                     // YB Note: For replica identity CHANGE, there is no old column value available.
-                    if (connectorConfig.plugin().isYBOutput()) {
+                    if (schema.getReplicaIdentity(tableId) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
                         return null;
                     }
 

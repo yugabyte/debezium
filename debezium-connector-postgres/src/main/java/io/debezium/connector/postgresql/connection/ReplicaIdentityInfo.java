@@ -70,7 +70,7 @@ public class ReplicaIdentityInfo {
         }
 
         // YB Note: CHANGE is a YugabyteDB specific replica identity.
-        static ReplicaIdentityInfo.ReplicaIdentity parseFromDB(String s) {
+        public static ReplicaIdentityInfo.ReplicaIdentity parseFromDB(String s) {
             switch (s) {
                 case "n":
                     return NOTHING;
