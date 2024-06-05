@@ -177,29 +177,33 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
             this.lastCompletelyProcessedLsn = replicationStream.get().startLsn();
 
-            if (walPosition.searchingEnabled()) {
-                searchWalPosition(context, partition, this.effectiveOffset, stream, walPosition);
-                try {
-                    if (!isInPreSnapshotCatchUpStreaming(this.effectiveOffset)) {
-                        connection.commit();
+            // Against YB, filtering of records based on Wal position is only enabled when PG connector is not configured to send transactional metadata in a separate topic.
+            if(!YugabyteDBServer.isEnabled() || (YugabyteDBServer.isEnabled() && !connectorConfig.shouldProvideTransactionMetadata())) {
+                if (walPosition.searchingEnabled()) {
+                    searchWalPosition(context, partition, this.effectiveOffset, stream, walPosition);
+                    try {
+                        if (!isInPreSnapshotCatchUpStreaming(this.effectiveOffset)) {
+                            connection.commit();
+                        }
+                    } catch (Exception e) {
+                        LOGGER.info("Commit failed while preparing for reconnect", e);
                     }
-                }
-                catch (Exception e) {
-                    LOGGER.info("Commit failed while preparing for reconnect", e);
-                }
-                walPosition.enableFiltering();
-                stream.stopKeepAlive();
-                replicationConnection.reconnect();
+                    walPosition.enableFiltering();
+                    stream.stopKeepAlive();
+                    replicationConnection.reconnect();
 
-                if (YugabyteDBServer.isEnabled()) {
-                    LOGGER.info("PID for replication connection: {} on node {}",
+                    if (YugabyteDBServer.isEnabled()) {
+                        LOGGER.info("PID for replication connection: {} on node {}",
                                 replicationConnection.getBackendPid(),
                                 replicationConnection.getConnectedNodeIp());
-                }
+                    }
 
-                replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
-                stream = this.replicationStream.get();
-                stream.startKeepAlive(Threads.newSingleThreadExecutor(PostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
+                    replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
+                    stream = this.replicationStream.get();
+                    stream.startKeepAlive(Threads.newSingleThreadExecutor(PostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
+                }
+            } else {
+                LOGGER.info("Skip records filtering since PG connector is configured to send transactional metadata in a separate topic.");
             }
 
             processMessages(context, partition, this.effectiveOffset, stream);
