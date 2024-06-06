@@ -177,7 +177,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
             this.lastCompletelyProcessedLsn = replicationStream.get().startLsn();
 
-            // Against YB, filtering of records based on Wal position is only enabled when PG connector is not configured to send transactional metadata in a separate topic.
+            // Against YB, filtering of records based on Wal position is only enabled when connector config provide.transaction.metadata is set to false.
             if(!YugabyteDBServer.isEnabled() || (YugabyteDBServer.isEnabled() && !connectorConfig.shouldProvideTransactionMetadata())) {
                 if (walPosition.searchingEnabled()) {
                     searchWalPosition(context, partition, this.effectiveOffset, stream, walPosition);
@@ -203,7 +203,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     stream.startKeepAlive(Threads.newSingleThreadExecutor(PostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
                 }
             } else {
-                LOGGER.info("Skip records filtering since PG connector is configured to send transactional metadata in a separate topic.");
+                LOGGER.info("Connector config provide.transaction.metadata is set to true. Therefore, skip records filtering so as to ship entire transactions.");
             }
 
             processMessages(context, partition, this.effectiveOffset, stream);
