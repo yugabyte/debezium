@@ -203,7 +203,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     stream.startKeepAlive(Threads.newSingleThreadExecutor(PostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
                 }
             } else {
-                LOGGER.info("Connector config provide.transaction.metadata is set to true. Therefore, skip records filtering so as to ship entire transactions.");
+                LOGGER.info("Connector config provide.transaction.metadata is set to true. Therefore, skip records filtering in order to ship entire transactions.");
             }
 
             processMessages(context, partition, this.effectiveOffset, stream);
