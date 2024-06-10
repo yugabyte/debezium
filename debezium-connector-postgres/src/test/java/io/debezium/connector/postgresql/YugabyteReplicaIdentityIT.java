@@ -158,18 +158,21 @@ public class YugabyteReplicaIdentityIT extends AbstractConnectorTest {
     // there shouldn't be any snapshot records
     assertNoRecordsToConsume();
 
-    // insert and verify 2 new records
+    // insert and verify 3 new records
     TestHelper.execute("INSERT INTO s2.a VALUES (1, 22, 'random text value');");
     TestHelper.execute("UPDATE s2.a SET aa = 12345 WHERE pk = 1;");
+    TestHelper.execute("UPDATE s2.a SET aa = null WHERE pk = 1;");
 
     SourceRecords actualRecords = consumeRecordsByTopic(3);
     List<SourceRecord> records = actualRecords.recordsForTopic(topicName("s2.a"));
 
     SourceRecord insertRecord = records.get(0);
     SourceRecord updateRecord = records.get(1);
+    SourceRecord updateRecordWithNullCol = records.get(2);
 
     YBVerifyRecord.isValidInsert(insertRecord, PK_FIELD, 1);
     YBVerifyRecord.isValidUpdate(updateRecord, PK_FIELD, 1);
+    YBVerifyRecord.isValidUpdate(updateRecordWithNullCol, PK_FIELD, 1);
 
     Struct updateRecordValue = (Struct) updateRecord.value();
     assertThat(updateRecordValue.get(Envelope.FieldName.AFTER)).isNotNull();
@@ -179,6 +182,12 @@ public class YugabyteReplicaIdentityIT extends AbstractConnectorTest {
     assertThat(updateRecordValue.getStruct(Envelope.FieldName.AFTER).getStruct("pk").getInt32("value")).isEqualTo(1);
     assertThat(updateRecordValue.getStruct(Envelope.FieldName.AFTER).getStruct("aa").getInt32("value")).isEqualTo(12345);
     assertThat(updateRecordValue.getStruct(Envelope.FieldName.AFTER).getStruct("bb")).isNull();
+
+    // After field will have a null value in place of the column explicitly set as null.
+    Struct updateRecordWithNullColValue = (Struct) updateRecordWithNullCol.value();
+    assertThat(updateRecordWithNullColValue.getStruct(Envelope.FieldName.AFTER).getStruct("pk").getInt32("value")).isEqualTo(1);
+    assertThat(updateRecordWithNullColValue.getStruct(Envelope.FieldName.AFTER).getStruct("aa").getInt32("value")).isNull();
+    assertThat(updateRecordWithNullColValue.getStruct(Envelope.FieldName.AFTER).getStruct("bb")).isNull();
   }
 
   @Test
