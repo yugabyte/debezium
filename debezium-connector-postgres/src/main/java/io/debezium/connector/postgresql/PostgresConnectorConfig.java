@@ -593,6 +593,14 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withDescription("The name of the Postgres 10+ publication used for streaming changes from a plugin. " +
                     "Defaults to '" + ReplicationConnection.Builder.DEFAULT_PUBLICATION_NAME + "'");
 
+    public static final Field YB_CONSISTENT_SNAPSHOT = Field.create("yb.consistent.snapshot")
+            .withDisplayName("YB Consistent Snapshot")
+            .withType(Type.BOOLEAN)
+            .withDefault(true)
+            .withImportance(Importance.LOW)
+            .withDescription("Whether or not to take a consistent snapshot of the tables." +
+                           "Disabling this option may result in duplication of some already snapshot data in the streaming phase.");
+
     public enum AutoCreateMode implements EnumeratedValue {
         /**
          * No Publication will be created, it's expected the user
@@ -1059,6 +1067,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return getConfig().validate(ALL_FIELDS);
     }
 
+    public boolean isYbConsistentSnapshotEnabled() {
+        return getConfig().getBoolean(YB_CONSISTENT_SNAPSHOT);
+    }
+
     protected Snapshotter getSnapshotter() {
         return this.snapshotMode.getSnapshotter(getConfig());
     }
@@ -1134,6 +1146,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .connector(
                     SNAPSHOT_MODE,
                     SNAPSHOT_MODE_CLASS,
+                    YB_CONSISTENT_SNAPSHOT,
                     HSTORE_HANDLING_MODE,
                     BINARY_HANDLING_MODE,
                     SCHEMA_NAME_ADJUSTMENT_MODE,
