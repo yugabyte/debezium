@@ -596,7 +596,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field YB_CONSISTENT_SNAPSHOT = Field.create("yb.consistent.snapshot")
             .withDisplayName("YB Consistent Snapshot")
             .withType(Type.BOOLEAN)
-            .withDefault(true)
+            .withDefault(false)
             .withImportance(Importance.LOW)
             .withDescription("Whether or not to take a consistent snapshot of the tables." +
                            "Disabling this option may result in duplication of some already snapshot data in the streaming phase.");
