@@ -27,7 +27,6 @@ import java.util.Set;
 import java.util.function.Function;
 
 import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
-import io.debezium.connector.postgresql.YugabyteDBServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -361,11 +360,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         primaryKeyColumns.retainAll(columnNames);
 
         Table table = resolveRelationFromMetadata(new PgOutputRelationMetaData(relationId, schemaName, tableName, columns, primaryKeyColumns));
-        if (YugabyteDBServer.isEnabled()) {
-            decoderContext.getSchema().applySchemaChangesForTableWithReplicaIdentity(relationId, table, replicaIdentityId);
-        } else {
-            decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
-        }
+        decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
     }
 
     private List<io.debezium.relational.Column> getTableColumnsFromDatabase(PostgresConnection connection, DatabaseMetaData databaseMetadata, TableId tableId)

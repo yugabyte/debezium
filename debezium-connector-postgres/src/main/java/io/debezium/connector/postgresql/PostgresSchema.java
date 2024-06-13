@@ -12,7 +12,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -47,7 +46,6 @@ public class PostgresSchema extends RelationalDatabaseSchema {
 
     private final Map<TableId, List<String>> tableIdToToastableColumns;
     private final Map<Integer, TableId> relationIdToTableId;
-    private final Map<TableId, ReplicaIdentityInfo.ReplicaIdentity> tableIdToReplicaIdentity;
     private final boolean readToastableColumns;
 
     /**
@@ -64,12 +62,13 @@ public class PostgresSchema extends RelationalDatabaseSchema {
         this.tableIdToToastableColumns = new HashMap<>();
         this.relationIdToTableId = new HashMap<>();
         this.readToastableColumns = config.skipRefreshSchemaOnMissingToastableData();
-        this.tableIdToReplicaIdentity = new HashMap<>();
     }
 
     private static TableSchemaBuilder getTableSchemaBuilder(PostgresConnectorConfig config, PostgresValueConverter valueConverter,
                                                             PostgresDefaultValueConverter defaultValueConverter) {
-        return new PGTableSchemaBuilder(valueConverter, defaultValueConverter, config, false /* multiPartitionMode */);
+        return new TableSchemaBuilder(valueConverter, defaultValueConverter, config.schemaNameAdjuster(),
+                config.customConverterRegistry(), config.getSourceInfoStructMaker().schema(),
+                config.getFieldNamer(), false);
     }
 
     /**
@@ -93,13 +92,6 @@ public class PostgresSchema extends RelationalDatabaseSchema {
             tableIds().forEach(tableId -> refreshToastableColumnsMap(connection, tableId));
         }
         return this;
-    }
-
-    public ReplicaIdentityInfo.ReplicaIdentity getReplicaIdentity(TableId tableId) {
-        ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = tableIdToReplicaIdentity.get(tableId);
-        Objects.requireNonNull(replicaIdentity);
-
-        return replicaIdentity;
     }
 
     private void printReplicaIdentityInfo(PostgresConnection connection, TableId tableId) {
@@ -233,23 +225,6 @@ public class PostgresSchema extends RelationalDatabaseSchema {
 
         relationIdToTableId.put(relationId, table.id());
         refresh(table);
-    }
-
-    /**
-     * YugabyteDB specific. Applies schema changes for the specified table, also stores the replica
-     * identity information.
-     *
-     * @param relationId the postgres relation unique identifier for the table
-     * @param table externally constructed table, typically from the decoder; must not be null
-     * @param replicaIdentityId the integer ID for replica identity
-     */
-    public void applySchemaChangesForTableWithReplicaIdentity(int relationId, Table table, int replicaIdentityId) {
-        applySchemaChangesForTable(relationId, table);
-
-        tableIdToReplicaIdentity.put(table.id(),
-          ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId)));
-
-        LOGGER.info("Replica identity being stored for table {} is {}", table.id(), getReplicaIdentity(table.id()));
     }
 
     /**
