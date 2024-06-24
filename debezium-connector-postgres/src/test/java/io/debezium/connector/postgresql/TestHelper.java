@@ -286,7 +286,7 @@ public final class TestHelper {
         builder.with(CommonConnectorConfig.TOPIC_PREFIX, TEST_SERVER)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, true)
                 .with(PostgresConnectorConfig.STATUS_UPDATE_INTERVAL_MS, 100)
-                .with(PostgresConnectorConfig.PLUGIN_NAME, "PGOUTPUT")
+                .with(PostgresConnectorConfig.PLUGIN_NAME, "YBOUTPUT")
                 .with(PostgresConnectorConfig.SSL_MODE, SecureConnectionMode.DISABLED)
                 .with(PostgresConnectorConfig.MAX_RETRIES, 2)
                 .with(PostgresConnectorConfig.RETRY_DELAY_MS, 2000);

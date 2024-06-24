@@ -94,10 +94,14 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     protected ChangeRecordEmitter<PostgresPartition> getChangeRecordEmitter(
       PostgresPartition partition, PostgresOffsetContext offset, TableId tableId, Object[] row,
       Instant timestamp) {
-        offset.event(tableId, timestamp);
+        if (YugabyteDBServer.isEnabled() && connectorConfig.plugin().isYBOutput()) {
+            offset.event(tableId, timestamp);
 
-        return new YBSnapshotChangeRecordEmitter<>(partition, offset, row, getClock(),
-                                                   connectorConfig);
+            return new YBSnapshotChangeRecordEmitter<>(partition, offset, row, getClock(),
+              connectorConfig);
+        } else {
+            return super.getChangeRecordEmitter(partition, offset, tableId, row, timestamp);
+        }
     }
 
     @Override

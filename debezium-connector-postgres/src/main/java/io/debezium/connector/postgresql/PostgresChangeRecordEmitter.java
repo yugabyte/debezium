@@ -197,6 +197,9 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
                 }
 
                 if (connectorConfig.plugin().isYBOutput()) {
+                    // YB Note: In this case, if we have the plugin yboutput and the column contains
+                    // the unchanged toasted value, we will not form a value struct for it.
+                    // Ultimately, it will be emitted as a NULL value.
                     if (!UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                         values[position] = new Object[]{value, Boolean.TRUE};
                     }
