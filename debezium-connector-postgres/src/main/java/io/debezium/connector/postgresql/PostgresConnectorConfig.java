@@ -395,9 +395,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
             @Override
             public boolean isYBOutput() {
-                // YB Note: Making the temporary change to be removed before merging the PR for this
-                // change.
-                return true;
+                return false;
             }
         },
         DECODERBUFS("decoderbufs") {
@@ -548,6 +546,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withDescription("The name of the Postgres logical decoding plugin installed on the server. " +
                     "Supported values are '" + LogicalDecoder.DECODERBUFS.getValue()
                     + "' and '" + LogicalDecoder.PGOUTPUT.getValue()
+                    + "' and '" + LogicalDecoder.YBOUTPUT.getValue()
                     + "'. " +
                     "Defaults to '" + LogicalDecoder.DECODERBUFS.getValue() + "'.");
 
@@ -1253,7 +1252,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                                      HeartbeatErrorHandler errorHandler) {
         if (YugabyteDBServer.isEnabled()) {
             // We do not need any heartbeat when snapshot is never required.
-            if (snapshotMode.equals(SnapshotMode.NEVER)) {
+            if (snapshotMode.equals(SnapshotMode.NEVER) || getHeartbeatInterval().isZero()) {
                 return Heartbeat.DEFAULT_NOOP_HEARTBEAT;
             }
 
