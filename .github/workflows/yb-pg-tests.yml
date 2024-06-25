@@ -1,4 +1,4 @@
-name: YugabyteDB PG parity tests
+name: Testing
 
 on:
   push:
@@ -28,14 +28,14 @@ jobs:
           cwd: ./
           files: yugabytedb-linux.tar.gz
           outPath: ./
-      - name: List everything
-        run: ls
-      - name: List everything under YB
-        run: ls ./yugabyte-2024.1.0.0
       - name: Complete post install actions for YugabyteDB
         run: ./yugabyte-2024.1.0.0/bin/post_install.sh
       - name: Start yugabyted
-        run: ./yugabyte-2024.1.0.0/bin/yugabyted start
+        run: >
+          ./yugabyte-2024.1.0.0/bin/yugabyted start
+          --advertise_address 127.0.0.1 --ui=false
+          --master_flags="yb_enable_cdc_consistent_snapshot_streams=true,allowed_preview_flags_csv={yb_enable_cdc_consistent_snapshot_streams,ysql_yb_enable_replication_commands,ysql_yb_enable_replica_identity},ysql_yb_enable_replica_identity=true,ysql_yb_enable_replication_commands=true,ysql_TEST_enable_replication_slot_consumption=true"
+          --tserver_flags="allowed_preview_flags_csv={yb_enable_cdc_consistent_snapshot_streams,ysql_yb_enable_replication_commands,ysql_yb_enable_replica_identity,cdcsdk_enable_dynamic_table_support},cdcsdk_enable_dynamic_table_support=true,ysql_yb_enable_replica_identity=true,ysql_yb_enable_replication_commands=true,yb_enable_cdc_consistent_snapshot_streams=true,ysql_TEST_enable_replication_slot_consumption=true,ysql_cdc_active_replication_slot_window_ms=0,ysql_sequence_cache_method=server,cdcsdk_publication_list_refresh_interval_secs=3"
       - name: Checkout Action
         uses: actions/checkout@v4
       
