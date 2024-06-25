@@ -1,0 +1,45 @@
+name: YugabyteDB PG parity tests
+
+on:
+  push:
+    branches:
+      - ybdb-debezium-2.5.2
+  pull_request:
+    branches:
+      - ybdb-debezium-2.5.2
+
+env:
+  YUGABYTEDB_VERSION: 2024.1.0.0-b19
+
+jobs:
+  build:
+    name: Build and run PG tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download YugabyteDB
+        uses: wei/wget@v1
+        with:
+          args: -0 yugabytedb-linux.tar.gz https://downloads.yugabyte.com/releases/2024.1.0.0/yugabyte-2024.1.0.0-b129-el8-aarch64.tar.gz
+      - name: Extract YugabyteDB package
+        uses: a7ul/tar-action@v1.2.0
+        id: extract
+        with:
+          command: x
+          cwd: ./
+          files: yugabytedb-linux.tar.gz
+          outPath: ./
+      - name: Complete post install actions for YugabyteDB
+        run: ./yugabyte-2024.1.0.0/bin/post_install.sh
+      - name: Start yugabyted
+        run: ./yugabyte-2024.1.0.0/bin/yugabyted start
+      - name: Checkout Action
+        uses: actions/checkout@v4
+      
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+      
+      - name: Download dependencies
+        run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -am
