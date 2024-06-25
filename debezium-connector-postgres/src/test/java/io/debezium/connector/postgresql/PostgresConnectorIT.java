@@ -2398,6 +2398,17 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
+    private void assertFieldAbsentInBeforeImage(SourceRecord record, String fieldName) {
+        Struct value = (Struct) ((Struct) record.value()).get(Envelope.FieldName.BEFORE);
+        try {
+            value.get(fieldName);
+            fail("field should not be present");
+        }
+        catch (DataException e) {
+            // expected
+        }
+    }
+
     @Test
     @Ignore
     public void testStreamingPerformance() throws Exception {
@@ -2910,6 +2921,81 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertValueField(actualRecords.allRecordsInOrder().get(2), "after/pk/value", 1);
         assertValueField(actualRecords.allRecordsInOrder().get(2), "after/aa/value", null);
         assertValueField(actualRecords.allRecordsInOrder().get(2), "after/bb", null);
+    }
+
+    @Test
+    public void shouldNotSkipMessagesWithoutChangeWithReplicaIdentityChange() throws Exception {
+        testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
+    }
+
+    @Test
+    public void shouldSkipMessagesWithoutChangeWithReplicaIdentityFull() throws Exception {
+        testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.FULL);
+    }
+
+    public void testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+
+        boolean isReplicaIdentityFull = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.FULL);
+
+        if (isReplicaIdentityFull) {
+            TestHelper.execute("ALTER TABLE s2.a REPLICA IDENTITY FULL;");
+            TestHelper.waitFor(Duration.ofSeconds(10));
+        }
+
+        TestHelper.createDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                                                      .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                                                      .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                                                      .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a")
+                                                      .with(PostgresConnectorConfig.SKIP_MESSAGES_WITHOUT_CHANGE, true)
+                                                      .with(PostgresConnectorConfig.COLUMN_INCLUDE_LIST, "s2.a.pk,s2.a.aa");
+
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+        TestHelper.waitFor(Duration.ofSeconds(5));
+
+        TestHelper.execute(INSERT_STMT);
+        // This update will not be propagated if replica identity is FULL.
+        TestHelper.execute("UPDATE s2.a SET bb = 'random_value' WHERE pk=1;");
+        TestHelper.execute("UPDATE s2.a SET aa = 12345 WHERE pk=1;");
+
+        // YB Note: We will be receiving all the records if replica identity is CHANGE.
+        SourceRecords actualRecords = consumeRecordsByTopic(isReplicaIdentityFull ? 2 : 3);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/aa/value", 1);
+
+        if (isReplicaIdentityFull) {
+            // In this case the second record we get is the operation where one of the monitored columns
+            // is changed.
+            assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/aa/value", 12345);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "before/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "before/aa/value", 1);
+            assertFieldAbsentInBeforeImage(actualRecords.allRecordsInOrder().get(1), "bb");
+        } else {
+            assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(3);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+            // Column aa would be not be present since it is unchanged column.
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(1).value()).getStruct("after").get("aa")).isNull();
+
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(1).value()).getStruct("before")).isNull();
+
+            assertValueField(actualRecords.allRecordsInOrder().get(2), "after/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(2), "after/aa/value", 12345);
+            assertFieldAbsent(actualRecords.allRecordsInOrder().get(2), "bb");
+
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(2).value()).getStruct("before")).isNull();
+
+        }
     }
 
     // YB Note: This test is only applicable when replica identity is CHANGE.
