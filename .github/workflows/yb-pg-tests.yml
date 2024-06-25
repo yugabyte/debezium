@@ -19,7 +19,7 @@ jobs:
       - name: Download YugabyteDB
         uses: wei/wget@v1
         with:
-          args: -O yugabytedb-linux.tar.gz https://downloads.yugabyte.com/releases/2024.1.0.0/yugabyte-2024.1.0.0-b129-el8-aarch64.tar.gz
+          args: -O yugabytedb-linux.tar.gz https://downloads.yugabyte.com/releases/2024.1.0.0/yugabyte-2024.1.0.0-b129-linux-x86_64.tar.gz
       - name: Extract YugabyteDB package
         uses: a7ul/tar-action@v1.2.0
         id: extract
