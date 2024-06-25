@@ -118,15 +118,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
      * Specific tests that need to extend the initial DDL set should do it in a form of
      * TestHelper.execute(SETUP_TABLES_STMT + ADDITIONAL_STATEMENTS)
      */
-    private static final String INSERT_STMT = "INSERT INTO s1.a (aa) VALUES (1);" +
+    protected static final String INSERT_STMT = "INSERT INTO s1.a (aa) VALUES (1);" +
             "INSERT INTO s2.a (aa) VALUES (1);";
-    private static final String CREATE_TABLES_STMT = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
+    protected static final String CREATE_TABLES_STMT = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
             "DROP SCHEMA IF EXISTS s2 CASCADE;" +
             "CREATE SCHEMA s1; " +
             "CREATE SCHEMA s2; " +
             "CREATE TABLE s1.a (pk SERIAL, aa integer, PRIMARY KEY(pk));" +
             "CREATE TABLE s2.a (pk SERIAL, aa integer, bb varchar(20), PRIMARY KEY(pk));";
-    private static final String SETUP_TABLES_STMT = CREATE_TABLES_STMT + INSERT_STMT;
+    protected static final String SETUP_TABLES_STMT = CREATE_TABLES_STMT + INSERT_STMT;
     private PostgresConnector connector;
 
     @Rule
@@ -463,7 +463,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
             SourceRecord insertRecord = records.recordsForTopic(topicName).get(0);
             assertEquals(topicName, insertRecord.topic());
-            VerifyRecord.isValidInsert(insertRecord, "newpk", 2);
+            YBVerifyRecord.isValidInsert(insertRecord, "newpk", 2);
 
             TestHelper.execute(
                     "ALTER TABLE changepk.test_table ADD COLUMN pk2 SERIAL;"
@@ -474,8 +474,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
             insertRecord = records.recordsForTopic(topicName).get(0);
             assertEquals(topicName, insertRecord.topic());
-            VerifyRecord.isValidInsert(insertRecord, newPkField, 3);
-            VerifyRecord.isValidInsert(insertRecord, "pk2", 8);
+            YBVerifyRecord.isValidInsert(insertRecord, newPkField, 3);
+            YBVerifyRecord.isValidInsert(insertRecord, "pk2", 8);
 
             stopConnector();
 
@@ -494,7 +494,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
             insertRecord = records.recordsForTopic(topicName).get(0);
             assertEquals(topicName, insertRecord.topic());
-            VerifyRecord.isValidInsert(insertRecord, newPkField, 4);
+            YBVerifyRecord.isValidInsert(insertRecord, newPkField, 4);
             Struct key = (Struct) insertRecord.key();
             // The problematic record PK info is temporarily desynced
             assertThat(key.schema().field("pk2")).isNull();
@@ -502,8 +502,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
             insertRecord = records.recordsForTopic(topicName).get(1);
             assertEquals(topicName, insertRecord.topic());
-            VerifyRecord.isValidInsert(insertRecord, newPkField, 5);
-            VerifyRecord.isValidInsert(insertRecord, "pk3", 10);
+            YBVerifyRecord.isValidInsert(insertRecord, newPkField, 5);
+            YBVerifyRecord.isValidInsert(insertRecord, "pk3", 10);
             key = (Struct) insertRecord.key();
             assertThat(key.schema().field("pk2")).isNull();
 
@@ -1056,6 +1056,46 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
+    public void shouldHaveBeforeImageOfUpdatedRow() throws InterruptedException {
+        Testing.Print.enable();
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(SETUP_TABLES_STMT);
+        TestHelper.execute("ALTER TABLE s1.a REPLICA IDENTITY FULL;");
+        Configuration config = TestHelper.defaultConfig()
+                                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+                                 .build();
+        start(PostgresConnector.class, config);
+        assertConnectorIsRunning();
+
+        // YB Note: Added a wait for replication slot to be active.
+        TestHelper.waitFor(Duration.ofSeconds(15));
+
+        waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+        // there shouldn't be any snapshot records
+        assertNoRecordsToConsume();
+
+        // insert and verify 2 new records
+        TestHelper.execute(INSERT_STMT);
+        TestHelper.execute("UPDATE s1.a SET aa = 404 WHERE pk = 2;");
+
+        SourceRecords actualRecords = consumeRecordsByTopic(3);
+        List<SourceRecord> records = actualRecords.recordsForTopic(topicName("s1.a"));
+
+        SourceRecord insertRecord = records.get(0);
+        SourceRecord updateRecord = records.get(1);
+
+        YBVerifyRecord.isValidInsert(insertRecord, PK_FIELD, 2);
+        YBVerifyRecord.isValidUpdate(updateRecord, PK_FIELD, 2);
+
+        Struct updateRecordValue = (Struct) updateRecord.value();
+        assertThat(updateRecordValue.get(Envelope.FieldName.AFTER)).isNotNull();
+        assertThat(updateRecordValue.get(Envelope.FieldName.BEFORE)).isNotNull();
+        assertThat(updateRecordValue.getStruct(Envelope.FieldName.BEFORE).getStruct("aa").getInt32("value")).isEqualTo(1);
+        assertThat(updateRecordValue.getStruct(Envelope.FieldName.AFTER).getStruct("aa").getInt32("value")).isEqualTo(404);
+    }
+
+    @Test
     public void shouldResumeSnapshotIfFailingMidstream() throws Exception {
         // insert another set of rows so we can stop at certain point
         CountDownLatch latch = new CountDownLatch(1);
@@ -1130,7 +1170,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertRecordsAfterInsert(2, 3, 3);
     }
 
-    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldUpdateReplicaIdentity() throws Exception {
 
@@ -1159,11 +1198,14 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             assertEquals(ReplicaIdentityInfo.ReplicaIdentity.FULL, connection.readReplicaIdentityInfo(tableIds1).getReplicaIdentity());
             assertEquals(ReplicaIdentityInfo.ReplicaIdentity.DEFAULT, connection.readReplicaIdentityInfo(tableIds2).getReplicaIdentity());
             assertThat(logInterceptor.containsMessage(String.format("Replica identity set to FULL for table '%s'", tableIds1))).isTrue();
-            assertThat(logInterceptor.containsMessage(String.format("Replica identity for table '%s' is already DEFAULT", tableIds2))).isTrue();
+
+            // YB Note: Fails because we do not get this message when replica identity is already set.
+//            assertThat(logInterceptor.containsMessage(String.format("Replica identity for table '%s' is already DEFAULT", tableIds2))).isTrue();
+            // YB Note: Adding an alternate log message.
+            assertThat(logInterceptor.containsMessage(String.format("Replica identity set to DEFAULT for table '%s'", tableIds2))).isTrue();
         }
     }
 
-    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldUpdateReplicaIdentityWithRegExp() throws Exception {
 
@@ -1195,7 +1237,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
-    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldNotUpdateReplicaIdentityWithRegExpDuplicated() throws Exception {
 
@@ -1224,7 +1265,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(logInterceptor.containsStacktraceElement("More than one Regular expressions matched table s2.b")).isTrue();
     }
 
-    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldUpdateReplicaIdentityWithOneTable() throws Exception {
 
@@ -1254,7 +1294,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
-    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
+    @Ignore("YB Note: alter replica identity INDEX is unsupported")
     @Test
     public void shouldUpdateReplicaIdentityUsingIndex() throws Exception {
 
@@ -1292,7 +1332,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
-    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldLogOwnershipErrorForReplicaIdentityUpdate() throws Exception {
 
@@ -1321,7 +1360,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(logInterceptor.containsMessage(String.format("Replica identity could not be updated because of lack of privileges"))).isTrue();
     }
 
-    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     public void shouldCheckTablesToUpdateReplicaIdentityAreCaptured() throws Exception {
 
@@ -1344,6 +1382,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // Waiting for Replica Identity is updated
         waitForAvailableRecords(5, TimeUnit.SECONDS);
 
+        // YB Note: The following block only checks if a certain log message has appeared or not.
+        // In our case, we can alter the replica identity but the actual replica identity for a table
+        // will remain what is set at the time of replication slot creation.
         try (PostgresConnection connection = TestHelper.create()) {
             TableId tableIds1 = new TableId("", "s1", "a");
             assertEquals(ReplicaIdentityInfo.ReplicaIdentity.FULL.toString(), connection.readReplicaIdentityInfo(tableIds1).toString());
@@ -1395,7 +1436,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForS1a.size()).isEqualTo(3);
         AtomicInteger pkValue = new AtomicInteger(1);
         recordsForS1a.forEach(record -> {
-            VerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
+            YBVerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
             assertFieldAbsent(record, "bb");
         });
 
@@ -1441,7 +1482,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForS1a.size()).isEqualTo(3);
         AtomicInteger pkValue = new AtomicInteger(1);
         recordsForS1a.forEach(record -> {
-            VerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
+            YBVerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
             assertFieldAbsent(record, "bb");
         });
 
@@ -1481,7 +1522,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             assertFieldAbsent(record, "bb");
 
             Struct recordValue = ((Struct) record.value());
-            assertThat(recordValue.getStruct("after").getString("cc")).isEqualTo("*****");
+            assertThat(recordValue.getStruct("after").getStruct("cc").getString("value")).isEqualTo("*****");
         });
     }
 
@@ -1510,7 +1551,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(records.size()).isEqualTo(1);
 
         SourceRecord record = records.get(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         String sourceTable = ((Struct) record.value()).getStruct("source").getString("table");
         assertThat(sourceTable).isEqualTo("b");
@@ -1540,7 +1581,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(records.size()).isEqualTo(1);
 
         SourceRecord record = records.get(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         String sourceTable = ((Struct) record.value()).getStruct("source").getString("table");
         assertThat(sourceTable).isEqualTo("b");
@@ -1572,8 +1613,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(records.size()).isEqualTo(1);
 
         SourceRecord record = records.get(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 1);
-        final String isbn = new String(((Struct) record.value()).getStruct("after").getString("aa"));
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 1);
+        final String isbn = new String(((Struct) record.value()).getStruct("after").getStruct("aa").getString("value"));
         assertThat(isbn).isEqualTo("0-393-04002-X");
 
         TestHelper.assertNoOpenTransactions();
@@ -1602,7 +1643,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(records.size()).isEqualTo(1);
 
         SourceRecord record = records.get(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         String sourceTable = ((Struct) record.value()).getStruct("source").getString("table");
         assertThat(sourceTable).isEqualTo("dbz_878_some|test@data");
@@ -1752,7 +1793,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s2recs).isNull();
 
         SourceRecord record = s1recs.get(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         TestHelper.execute(INSERT_STMT);
         actualRecords = consumeRecordsByTopic(2);
@@ -1762,9 +1803,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
         record = s1recs.get(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
         record = s2recs.get(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
         stopConnector();
 
         config = TestHelper.defaultConfig()
@@ -1780,10 +1821,10 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(2);
         assertThat(s2recs.size()).isEqualTo(2);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 2);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 2);
     }
 
     @Test
@@ -1805,7 +1846,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs).isNull();
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
 
         /* streaming should work normally */
         TestHelper.execute(INSERT_STMT);
@@ -1816,8 +1857,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
 
         stopConnector();
 
@@ -1834,8 +1875,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         assertThat(s2recs.size()).isEqualTo(2);
         assertThat(s1recs).isNull();
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 2);
     }
 
     @Test
@@ -1862,8 +1903,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
 
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         // Insert 2 more rows
         // These are captured by the stream
@@ -1877,8 +1918,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
 
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
         stopConnector();
 
         config = TestHelper.defaultConfig()
@@ -1896,8 +1937,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 3);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 3);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 3);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 3);
     }
 
     @Test
@@ -2028,8 +2069,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         // Stop the connector
         stopConnector();
@@ -2117,8 +2158,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         stopConnector();
 
@@ -2145,14 +2186,14 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s2recs.size()).isEqualTo(3);
 
         // Validate the first record is from streaming
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
 
         // Validate the rest of the records are from the snapshot
-        VerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
-        VerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(2), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(2), PK_FIELD, 2);
 
         TestHelper.assertNoOpenTransactions();
     }
@@ -2178,8 +2219,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         stopConnector();
 
@@ -2208,12 +2249,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s2recs.size()).isEqualTo(1);
 
         // streaming records
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
 
         // snapshot records
-        VerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
 
         assertNoRecordsToConsume();
 
@@ -2244,8 +2285,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         stopConnector();
 
@@ -2284,12 +2325,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s2recs.size()).isEqualTo(1);
 
         // streaming records
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
 
         // snapshot records
-        VerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
 
         assertNoRecordsToConsume();
 
@@ -2349,6 +2390,17 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     private void assertFieldAbsent(SourceRecord record, String fieldName) {
         Struct value = (Struct) ((Struct) record.value()).get(Envelope.FieldName.AFTER);
+        try {
+            value.get(fieldName);
+            fail("field should not be present");
+        }
+        catch (DataException e) {
+            // expected
+        }
+    }
+
+    private void assertFieldAbsentInBeforeImage(SourceRecord record, String fieldName) {
+        Struct value = (Struct) ((Struct) record.value()).get(Envelope.FieldName.BEFORE);
         try {
             value.get(fieldName);
             fail("field should not be present");
@@ -2613,11 +2665,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         SourceRecord record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         Struct value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("*****");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("*****");
         }
 
         // insert and verify inserts
@@ -2630,34 +2682,33 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
 
         value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("*****");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("*****");
         }
 
         // update and verify update
-        // YB Note: update not supported yet
-        // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
-//
-//        actualRecords = consumeRecordsByTopic(1);
-//        assertThat(actualRecords.topics().size()).isEqualTo(1);
-//
-//        recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
-//        assertThat(recordsForTopicS2.size()).isEqualTo(1);
-//
-//        record = recordsForTopicS2.remove(0);
-//        VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
-//
-//        value = (Struct) record.value();
-//        if (value.getStruct("before") != null) {
-//            assertThat(value.getStruct("before").getString("bb")).isEqualTo("*****");
-//        }
-//        if (value.getStruct("after") != null) {
-//            assertThat(value.getStruct("after").getString("bb")).isEqualTo("*****");
-//        }
+        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+
+        actualRecords = consumeRecordsByTopic(1);
+        assertThat(actualRecords.topics().size()).isEqualTo(1);
+
+        recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
+        assertThat(recordsForTopicS2.size()).isEqualTo(1);
+
+        record = recordsForTopicS2.remove(0);
+        YBVerifyRecord.isValidUpdate(record, PK_FIELD, 2);
+
+        value = (Struct) record.value();
+        // TODO Vaibhav: Note to self - the following assertion is only valid when before image is enabled.
+        if (value.getStruct("before") != null) {
+            assertThat(value.getStruct("before").getStruct("bb").getString("value")).isEqualTo("*****");
+        }
+        if (value.getStruct("after") != null) {
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("*****");
+        }
     }
 
     @Test
@@ -2677,11 +2728,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         SourceRecord record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         Struct value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isNull();
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isNull();
         }
 
         // insert and verify inserts
@@ -2694,31 +2745,29 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
 
         value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("8e68c68edbbac316dfe2");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("8e68c68edbbac316dfe2");
         }
 
         // update and verify update
-        // YB Note: update not supported yet
-        // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
-//        actualRecords = consumeRecordsByTopic(1);
-//        assertThat(actualRecords.topics().size()).isEqualTo(1);
-//
-//        recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
-//        assertThat(recordsForTopicS2.size()).isEqualTo(1);
-//
-//        record = recordsForTopicS2.remove(0);
-//        VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
-//
-//        value = (Struct) record.value();
-//        if (value.getStruct("after") != null) {
-//            assertThat(value.getStruct("after").getString("bb")).isEqualTo("b4d39ab0d198fb4cac8b");
-//        }
+        actualRecords = consumeRecordsByTopic(1);
+        assertThat(actualRecords.topics().size()).isEqualTo(1);
+
+        recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
+        assertThat(recordsForTopicS2.size()).isEqualTo(1);
+
+        record = recordsForTopicS2.remove(0);
+        YBVerifyRecord.isValidUpdate(record, PK_FIELD, 2);
+
+        value = (Struct) record.value();
+        if (value.getStruct("after") != null) {
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("b4d39ab0d198fb4cac8b");
+        }
 
         // insert and verify inserts
         TestHelper.execute("INSERT INTO s2.b (bb) VALUES ('hello');");
@@ -2730,14 +2779,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 1);
 
         value = (Struct) record.value();
+        // TODO Vaibhav: Note to self - the following assertion is only valid when before image is enabled.
         if (value.getStruct("before") != null) {
-            assertThat(value.getStruct("before").getString("bb")).isNull();
+            assertThat(value.getStruct("before").getStruct("bb").getString("value")).isNull();
         }
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("b4d39ab0d198fb4cac8b2f023da74f670bcaf192dcc79b5d6361b7ae6b2fafdf");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("b4d39ab0d198fb4cac8b2f023da74f670bcaf192dcc79b5d6361b7ae6b2fafdf");
         }
     }
 
@@ -2757,7 +2807,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         SourceRecord record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+//        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         // insert and verify inserts
         TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
@@ -2769,34 +2820,34 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+//        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
 
         Struct value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("tes");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("tes");
         }
 
-        // YB Note: updates not supported yet
         // update and verify update
-        // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
-//
-//        actualRecords = consumeRecordsByTopic(1);
-//        assertThat(actualRecords.topics().size()).isEqualTo(1);
-//
-//        recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
-//        assertThat(recordsForTopicS2.size()).isEqualTo(1);
-//
-//        record = recordsForTopicS2.remove(0);
-//        VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
-//
-//        value = (Struct) record.value();
-//        if (value.getStruct("before") != null && value.getStruct("before").getString("bb") != null) {
-//            assertThat(value.getStruct("before").getString("bb")).isEqualTo("tes");
-//        }
-//        if (value.getStruct("after") != null) {
-//            assertThat(value.getStruct("after").getString("bb")).isEqualTo("hel");
-//        }
+        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+
+        actualRecords = consumeRecordsByTopic(1);
+        assertThat(actualRecords.topics().size()).isEqualTo(1);
+
+        recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
+        assertThat(recordsForTopicS2.size()).isEqualTo(1);
+
+        record = recordsForTopicS2.remove(0);
+        YBVerifyRecord.isValidUpdate(record, PK_FIELD, 2);
+
+        value = (Struct) record.value();
+        // TODO Vaibhav: Note to self: the following before image assertion is only for cases with before image enabled.
+        if (value.getStruct("before") != null && value.getStruct("before").getStruct("bb").getString("value") != null) {
+            assertThat(value.getStruct("before").getStruct("bb").getString("value")).isEqualTo("tes");
+        }
+        if (value.getStruct("after") != null) {
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("hel");
+        }
     }
 
     @Test
@@ -2821,22 +2872,165 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         final SlotState slotAfterSnapshot = getDefaultReplicationSlot();
 
         TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
-        // YB note: since update records are not yet supported, commenting this and reducing the
-        // expected count by 1 makes sense.
-        // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
         start(PostgresConnector.class, configBuilder.build());
 
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
-        actualRecords = consumeRecordsByTopic(1);
-        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(1);
+        actualRecords = consumeRecordsByTopic(2);
+        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
         stopConnector();
 
         final SlotState slotAfterIncremental = getDefaultReplicationSlot();
         Assert.assertEquals(1, slotAfterIncremental.slotLastFlushedLsn().compareTo(slotAfterSnapshot.slotLastFlushedLsn()));
+    }
+
+    // YB Note: This test is only applicable when replica identity is CHANGE.
+    @Test
+    public void testYBCustomChangesForUpdate() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.createDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+              .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+              .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+              .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+        TestHelper.waitFor(Duration.ofSeconds(5));
+
+        TestHelper.execute(INSERT_STMT);
+        TestHelper.execute("UPDATE s2.a SET aa=2 WHERE pk=1;");
+        TestHelper.execute("UPDATE s2.a SET aa=NULL WHERE pk=1;");
+
+        SourceRecords actualRecords = consumeRecordsByTopic(3);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/aa/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/bb/value", null);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(1), "after/aa/value", 2);
+        assertValueField(actualRecords.allRecordsInOrder().get(1), "after/bb", null);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(2), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(2), "after/aa/value", null);
+        assertValueField(actualRecords.allRecordsInOrder().get(2), "after/bb", null);
+    }
+
+    @Test
+    public void shouldNotSkipMessagesWithoutChangeWithReplicaIdentityChange() throws Exception {
+        testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
+    }
+
+    @Test
+    public void shouldSkipMessagesWithoutChangeWithReplicaIdentityFull() throws Exception {
+        testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.FULL);
+    }
+
+    public void testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+
+        boolean isReplicaIdentityFull = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.FULL);
+
+        if (isReplicaIdentityFull) {
+            TestHelper.execute("ALTER TABLE s2.a REPLICA IDENTITY FULL;");
+            TestHelper.waitFor(Duration.ofSeconds(10));
+        }
+
+        TestHelper.createDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                                                      .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                                                      .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                                                      .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a")
+                                                      .with(PostgresConnectorConfig.SKIP_MESSAGES_WITHOUT_CHANGE, true)
+                                                      .with(PostgresConnectorConfig.COLUMN_INCLUDE_LIST, "s2.a.pk,s2.a.aa");
+
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+        TestHelper.waitFor(Duration.ofSeconds(5));
+
+        TestHelper.execute(INSERT_STMT);
+        // This update will not be propagated if replica identity is FULL.
+        TestHelper.execute("UPDATE s2.a SET bb = 'random_value' WHERE pk=1;");
+        TestHelper.execute("UPDATE s2.a SET aa = 12345 WHERE pk=1;");
+
+        // YB Note: We will be receiving all the records if replica identity is CHANGE.
+        SourceRecords actualRecords = consumeRecordsByTopic(isReplicaIdentityFull ? 2 : 3);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/aa/value", 1);
+
+        if (isReplicaIdentityFull) {
+            // In this case the second record we get is the operation where one of the monitored columns
+            // is changed.
+            assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/aa/value", 12345);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "before/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "before/aa/value", 1);
+            assertFieldAbsentInBeforeImage(actualRecords.allRecordsInOrder().get(1), "bb");
+        } else {
+            assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(3);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+            // Column aa would be not be present since it is unchanged column.
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(1).value()).getStruct("after").get("aa")).isNull();
+
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(1).value()).getStruct("before")).isNull();
+
+            assertValueField(actualRecords.allRecordsInOrder().get(2), "after/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(2), "after/aa/value", 12345);
+            assertFieldAbsent(actualRecords.allRecordsInOrder().get(2), "bb");
+
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(2).value()).getStruct("before")).isNull();
+
+        }
+    }
+
+    // YB Note: This test is only applicable when replica identity is CHANGE.
+    @Test
+    public void customYBStructureShouldBePresentInSnapshotRecords() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.createDefaultReplicationSlot();
+
+        // Insert 5 records to be included in snapshot.
+        for (int i = 0; i < 5; ++i) {
+            TestHelper.execute(String.format("INSERT INTO s2.a (aa) VALUES (%d);", i));
+        }
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForSnapshotToBeCompleted();
+
+        SourceRecords actualRecords = consumeRecordsByTopic(5);
+        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(5);
+
+        Set<Integer> expectedPKValues = new HashSet<>(Arrays.asList(1,2,3,4,5));
+        Set<Integer> actualPKValues = new HashSet<>();
+
+        for (SourceRecord record : actualRecords.allRecordsInOrder()) {
+            Struct value = (Struct) record.value();
+
+            actualPKValues.add(value.getStruct("after").getStruct("pk").getInt32("value"));
+        }
+
+        assertEquals(expectedPKValues, actualPKValues);
     }
 
     @Test
@@ -2866,18 +3060,16 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Assert.assertEquals(slotAtTheBeginning.slotLastFlushedLsn(), slotAfterSnapshot.slotLastFlushedLsn());
 
         TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
-        // YB note: since update records are not yet supported, commenting this and reducing the
-        // expected count by 1 makes sense.
-        // See https://github.com/yugabyte/yugabyte-db/issues/21591
-//        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
         start(PostgresConnector.class, configBuilder.build());
 
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
-        actualRecords = consumeRecordsByTopic(1);
-        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(1);
+        actualRecords = consumeRecordsByTopic(2);
+
+        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
         stopConnector();
 
         final SlotState slotAfterIncremental = getDefaultReplicationSlot();
@@ -3089,7 +3281,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s1recs).isNull();
         assertThat(s2recs).hasSize(1);
 
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
     }
 
     @Test
@@ -3145,7 +3337,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(initalS1recs).isNull();
         assertThat(initalS2recs).hasSize(1);
 
-        VerifyRecord.isValidInsert(initalS2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(initalS2recs.get(0), PK_FIELD, 2);
 
         stopConnector();
 
@@ -3217,8 +3409,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(part1recs).isNull();
         assertThat(part2recs).isNull();
 
-        VerifyRecord.isValidInsert(recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidInsert(recs.get(1), PK_FIELD, 501);
+        YBVerifyRecord.isValidInsert(recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidInsert(recs.get(1), PK_FIELD, 501);
     }
 
     @Test
@@ -3434,7 +3626,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         System.out.println(recordsForTopic.get(0));
     }
 
-    @Ignore("YB Note: alter replica identity unsupported, see https://github.com/yugabyte/yugabyte-db/issues/21599")
     @Test
     @FixFor("DBZ-5295")
     public void shouldReselectToastColumnsOnPrimaryKeyChange() throws Exception {
@@ -3457,35 +3648,35 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         SourceRecord record = recordsForTopic.get(0);
         Struct after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
-        assertThat(after.get("pk")).isEqualTo(1);
-        assertThat(after.get("data")).isEqualTo(toastValue1);
-        assertThat(after.get("data2")).isEqualTo(toastValue2);
+        assertThat(after.getStruct("pk").get("value")).isEqualTo(1);
+        assertThat(after.getStruct("data").get("value")).isEqualTo(toastValue1);
+        assertThat(after.getStruct("data2").get("value")).isEqualTo(toastValue2);
 
-        // See https://github.com/yugabyte/yugabyte-db/issues/21591
         TestHelper.execute("UPDATE s1.dbz5295 SET pk = 2 WHERE pk = 1;");
 
         // The update of the primary key causes a DELETE and a CREATE, mingled with a TOMBSTONE
-        records = consumeRecordsByTopic(3);
+        // YB Note: Consuming additional records since there are going to be heartbeat records as well.
+        records =  consumeRecordsByTopic(3 + 2);
         recordsForTopic = records.recordsForTopic(topicName("s1.dbz5295"));
         assertThat(recordsForTopic).hasSize(3);
 
         // First event: DELETE
         record = recordsForTopic.get(0);
-        VerifyRecord.isValidDelete(record, "pk", 1);
+        YBVerifyRecord.isValidDelete(record, "pk", 1);
         after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
         assertThat(after).isNull();
 
         // Second event: TOMBSTONE
         record = recordsForTopic.get(1);
-        VerifyRecord.isValidTombstone(record);
+        YBVerifyRecord.isValidTombstone(record);
 
         // Third event: CREATE
         record = recordsForTopic.get(2);
-        VerifyRecord.isValidInsert(record, "pk", 2);
+        YBVerifyRecord.isValidInsert(record, "pk", 2);
         after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
-        assertThat(after.get("pk")).isEqualTo(2);
-        assertThat(after.get("data")).isEqualTo(toastValue1);
-        assertThat(after.get("data2")).isEqualTo(toastValue2);
+        assertThat(after.getStruct("pk").get("value")).isEqualTo(2);
+        assertThat(after.getStruct("data").get("value")).isEqualTo(toastValue1);
+        assertThat(after.getStruct( "data2").get("value")).isEqualTo(toastValue2);
     }
 
     @Test
@@ -3689,10 +3880,10 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         AtomicInteger pkValue = new AtomicInteger(1);
         records.forEach(record -> {
             if (pkValue.get() <= 2) {
-                VerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
+                YBVerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
             }
             else {
-                VerifyRecord.isValidInsert(record, PK_FIELD, pkValue.getAndIncrement());
+                YBVerifyRecord.isValidInsert(record, PK_FIELD, pkValue.getAndIncrement());
             }
         });
     }
@@ -3777,7 +3968,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> recordsForTopicS1 = actualRecords.recordsForTopic(topicName("s1.a"));
         assertThat(recordsForTopicS1.size()).isEqualTo(expectedCountPerSchema);
         IntStream.range(0, expectedCountPerSchema)
-                .forEach(i -> VerifyRecord.isValidRead(recordsForTopicS1.remove(0), PK_FIELD, pks[i]));
+                .forEach(i -> YBVerifyRecord.isValidRead(recordsForTopicS1.remove(0), PK_FIELD, pks[i]));
 
         List<SourceRecord> recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(recordsForTopicS2.size()).isEqualTo(expectedCountPerSchema);
@@ -3801,17 +3992,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         List<SourceRecord> recordsForTopicS1 = actualRecords.recordsForTopic(topicName("s1.a"));
         assertThat(recordsForTopicS1.size()).isEqualTo(expectedCountPerSchema);
-        for (SourceRecord r : recordsForTopicS1) {
-            LOGGER.info("VKVK1: {}", r);
-        }
-        IntStream.range(0, expectedCountPerSchema).forEach(i -> VerifyRecord.isValidInsert(recordsForTopicS1.remove(0), PK_FIELD, pks[i]));
+        IntStream.range(0, expectedCountPerSchema).forEach(i -> YBVerifyRecord.isValidInsert(recordsForTopicS1.remove(0), PK_FIELD, pks[i]));
 
         List<SourceRecord> recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(recordsForTopicS2.size()).isEqualTo(expectedCountPerSchema);
-        for (SourceRecord r : recordsForTopicS2) {
-            LOGGER.info("VKVK2: {}", r);
-        }
-        IntStream.range(0, expectedCountPerSchema).forEach(i -> VerifyRecord.isValidInsert(recordsForTopicS2.remove(0), PK_FIELD, pks[i]));
+        IntStream.range(0, expectedCountPerSchema).forEach(i -> YBVerifyRecord.isValidInsert(recordsForTopicS2.remove(0), PK_FIELD, pks[i]));
     }
 
     protected void assertSourceInfoMillisecondTransactionTimestamp(SourceRecord record, long ts_ms, long tolerance_ms) {

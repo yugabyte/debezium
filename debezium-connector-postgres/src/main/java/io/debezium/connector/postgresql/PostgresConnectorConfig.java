@@ -392,6 +392,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             public boolean supportsLogicalDecodingMessage() {
                 return true;
             }
+
+            @Override
+            public boolean isYBOutput() {
+                return false;
+            }
         },
         DECODERBUFS("decoderbufs") {
             @Override
@@ -413,6 +418,37 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             public boolean supportsLogicalDecodingMessage() {
                 return false;
             }
+
+            @Override
+            public boolean isYBOutput() {
+                return false;
+            }
+        },
+        YBOUTPUT("yboutput") {
+            @Override
+            public MessageDecoder messageDecoder(MessageDecoderContext config, PostgresConnection connection) {
+                return new PgOutputMessageDecoder(config, connection);
+            }
+
+            @Override
+            public String getPostgresPluginName() {
+                return getValue();
+            }
+
+            @Override
+            public boolean supportsTruncate() {
+                return false;
+            }
+
+            @Override
+            public boolean supportsLogicalDecodingMessage() {
+                return true;
+            }
+
+            @Override
+            public boolean isYBOutput() {
+                return true;
+            }
         };
 
         private final String decoderName;
@@ -431,6 +467,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         public String getValue() {
             return decoderName;
         }
+
+        public abstract boolean isYBOutput();
 
         public abstract String getPostgresPluginName();
 
@@ -508,6 +546,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withDescription("The name of the Postgres logical decoding plugin installed on the server. " +
                     "Supported values are '" + LogicalDecoder.DECODERBUFS.getValue()
                     + "' and '" + LogicalDecoder.PGOUTPUT.getValue()
+                    + "' and '" + LogicalDecoder.YBOUTPUT.getValue()
                     + "'. " +
                     "Defaults to '" + LogicalDecoder.DECODERBUFS.getValue() + "'.");
 
@@ -552,6 +591,14 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withDefault(ReplicationConnection.Builder.DEFAULT_PUBLICATION_NAME)
             .withDescription("The name of the Postgres 10+ publication used for streaming changes from a plugin. " +
                     "Defaults to '" + ReplicationConnection.Builder.DEFAULT_PUBLICATION_NAME + "'");
+
+    public static final Field YB_CONSISTENT_SNAPSHOT = Field.create("yb.consistent.snapshot")
+            .withDisplayName("YB Consistent Snapshot")
+            .withType(Type.BOOLEAN)
+            .withDefault(true)
+            .withImportance(Importance.LOW)
+            .withDescription("Whether or not to take a consistent snapshot of the tables." +
+                           "Disabling this option may result in duplication of some already snapshot data in the streaming phase.");
 
     public enum AutoCreateMode implements EnumeratedValue {
         /**
@@ -1019,6 +1066,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return getConfig().validate(ALL_FIELDS);
     }
 
+    public boolean isYbConsistentSnapshotEnabled() {
+        return getConfig().getBoolean(YB_CONSISTENT_SNAPSHOT);
+    }
+
     protected Snapshotter getSnapshotter() {
         return this.snapshotMode.getSnapshotter(getConfig());
     }
@@ -1094,6 +1145,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .connector(
                     SNAPSHOT_MODE,
                     SNAPSHOT_MODE_CLASS,
+                    YB_CONSISTENT_SNAPSHOT,
                     HSTORE_HANDLING_MODE,
                     BINARY_HANDLING_MODE,
                     SCHEMA_NAME_ADJUSTMENT_MODE,
