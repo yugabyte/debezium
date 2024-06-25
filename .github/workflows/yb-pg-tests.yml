@@ -28,12 +28,12 @@ jobs:
           cwd: ./
           files: yugabytedb-linux.tar.gz
           outPath: ./
-      - name: Complete post install actions for YugabyteDB
-        run: ./yugabyte-2024.1.0.0/bin/post_install.sh
       - name: List everything
         run: ls
       - name: List everything under YB
         run: ls ./yugabyte-2024.1.0.0
+      - name: Complete post install actions for YugabyteDB
+        run: ./yugabyte-2024.1.0.0/bin/post_install.sh
       - name: Start yugabyted
         run: ./yugabyte-2024.1.0.0/bin/yugabyted start
       - name: Checkout Action
