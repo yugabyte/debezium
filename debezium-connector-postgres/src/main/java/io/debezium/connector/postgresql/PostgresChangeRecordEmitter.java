@@ -197,6 +197,9 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
                 }
 
                 if (connectorConfig.plugin().isYBOutput()) {
+                    // YB Note: In this case, if we have the plugin yboutput and the column contains
+                    // the unchanged toasted value, we will not form a value struct for it.
+                    // Ultimately, it will be emitted as a NULL value.
                     if (!UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
                         values[position] = new Object[]{value, Boolean.TRUE};
                     }
@@ -238,15 +241,19 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
         // some configurations does not provide old values in case of updates
         // in this case we handle all updates as regular ones
 
-        // YB Note: If replica identity is change, one hack is that we always know there will be no
+        // YB Note: If replica identity is change, we always know there will be no
         // oldKey present so we should simply go ahead with this block. Also, oldKey would be null
-        // at this stage if replica identity is CHANGE
-        if (oldKey == null || connectorConfig.plugin().isYBOutput() || Objects.equals(oldKey, newKey)) {
+        // at this stage if replica identity is CHANGE.
+        // Another point to be noted here is that in case the source database is YugabyteDB, we will
+        // always handle updates as regular ones since the CDC service itself sends the primary key
+        // updates as two separate records i.e. delete of the original key and insert with new key.
+        if (YugabyteDBServer.isEnabled() || oldKey == null || Objects.equals(oldKey, newKey)) {
             Struct envelope = tableSchema.getEnvelopeSchema().update(oldValue, newValue, getOffset().getSourceInfo(), getClock().currentTimeAsInstant());
             receiver.changeRecord(getPartition(), tableSchema, Operation.UPDATE, newKey, envelope, getOffset(), null);
         }
         // PK update -> emit as delete and re-insert with new key
         else {
+            // YB Note: In case of YugabyteDB as source database, the code flow will never come here.
             emitUpdateAsPrimaryKeyChangeRecord(receiver, tableSchema, oldKey, newKey, oldValue, newValue);
         }
     }

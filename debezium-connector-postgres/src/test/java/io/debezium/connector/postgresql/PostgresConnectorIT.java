@@ -118,15 +118,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
      * Specific tests that need to extend the initial DDL set should do it in a form of
      * TestHelper.execute(SETUP_TABLES_STMT + ADDITIONAL_STATEMENTS)
      */
-    private static final String INSERT_STMT = "INSERT INTO s1.a (aa) VALUES (1);" +
+    protected static final String INSERT_STMT = "INSERT INTO s1.a (aa) VALUES (1);" +
             "INSERT INTO s2.a (aa) VALUES (1);";
-    private static final String CREATE_TABLES_STMT = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
+    protected static final String CREATE_TABLES_STMT = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
             "DROP SCHEMA IF EXISTS s2 CASCADE;" +
             "CREATE SCHEMA s1; " +
             "CREATE SCHEMA s2; " +
             "CREATE TABLE s1.a (pk SERIAL, aa integer, PRIMARY KEY(pk));" +
             "CREATE TABLE s2.a (pk SERIAL, aa integer, bb varchar(20), PRIMARY KEY(pk));";
-    private static final String SETUP_TABLES_STMT = CREATE_TABLES_STMT + INSERT_STMT;
+    protected static final String SETUP_TABLES_STMT = CREATE_TABLES_STMT + INSERT_STMT;
     private PostgresConnector connector;
 
     @Rule
@@ -2399,6 +2399,17 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
+    private void assertFieldAbsentInBeforeImage(SourceRecord record, String fieldName) {
+        Struct value = (Struct) ((Struct) record.value()).get(Envelope.FieldName.BEFORE);
+        try {
+            value.get(fieldName);
+            fail("field should not be present");
+        }
+        catch (DataException e) {
+            // expected
+        }
+    }
+
     @Test
     @Ignore
     public void testStreamingPerformance() throws Exception {
@@ -2912,6 +2923,81 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertValueField(actualRecords.allRecordsInOrder().get(2), "after/bb", null);
     }
 
+    @Test
+    public void shouldNotSkipMessagesWithoutChangeWithReplicaIdentityChange() throws Exception {
+        testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
+    }
+
+    @Test
+    public void shouldSkipMessagesWithoutChangeWithReplicaIdentityFull() throws Exception {
+        testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.FULL);
+    }
+
+    public void testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+
+        boolean isReplicaIdentityFull = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.FULL);
+
+        if (isReplicaIdentityFull) {
+            TestHelper.execute("ALTER TABLE s2.a REPLICA IDENTITY FULL;");
+            TestHelper.waitFor(Duration.ofSeconds(10));
+        }
+
+        TestHelper.createDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                                                      .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                                                      .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                                                      .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a")
+                                                      .with(PostgresConnectorConfig.SKIP_MESSAGES_WITHOUT_CHANGE, true)
+                                                      .with(PostgresConnectorConfig.COLUMN_INCLUDE_LIST, "s2.a.pk,s2.a.aa");
+
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+        TestHelper.waitFor(Duration.ofSeconds(5));
+
+        TestHelper.execute(INSERT_STMT);
+        // This update will not be propagated if replica identity is FULL.
+        TestHelper.execute("UPDATE s2.a SET bb = 'random_value' WHERE pk=1;");
+        TestHelper.execute("UPDATE s2.a SET aa = 12345 WHERE pk=1;");
+
+        // YB Note: We will be receiving all the records if replica identity is CHANGE.
+        SourceRecords actualRecords = consumeRecordsByTopic(isReplicaIdentityFull ? 2 : 3);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/aa/value", 1);
+
+        if (isReplicaIdentityFull) {
+            // In this case the second record we get is the operation where one of the monitored columns
+            // is changed.
+            assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/aa/value", 12345);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "before/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "before/aa/value", 1);
+            assertFieldAbsentInBeforeImage(actualRecords.allRecordsInOrder().get(1), "bb");
+        } else {
+            assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(3);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+            // Column aa would be not be present since it is unchanged column.
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(1).value()).getStruct("after").get("aa")).isNull();
+
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(1).value()).getStruct("before")).isNull();
+
+            assertValueField(actualRecords.allRecordsInOrder().get(2), "after/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(2), "after/aa/value", 12345);
+            assertFieldAbsent(actualRecords.allRecordsInOrder().get(2), "bb");
+
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(2).value()).getStruct("before")).isNull();
+
+        }
+    }
+
     // YB Note: This test is only applicable when replica identity is CHANGE.
     @Test
     public void customYBStructureShouldBePresentInSnapshotRecords() throws Exception {
@@ -2945,6 +3031,30 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
 
         assertEquals(expectedPKValues, actualPKValues);
+    }
+
+    @Test
+    @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "Test is supposed to verify the default structure with pgoutout and replica identity default")
+    public void shouldWorkWithReplicaIdentityDefaultForPgoutput() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.execute("ALTER TABLE s2.a REPLICA IDENTITY DEFAULT");
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+              .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+              .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a")
+                                                      .with(PostgresConnectorConfig.PLUGIN_NAME, "PGOUTPUT");
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+
+        TestHelper.execute("INSERT INTO s2.a VALUES (1, 22, 'varchar_value');");
+        TestHelper.execute("UPDATE s2.a SET bb = 'varchar_value_updated' WHERE pk = 1;");
+
+        SourceRecords records = consumeRecordsByTopic(2);
+        List<SourceRecord> recordList = records.recordsForTopic(topicName("s2.a"));
+
+        assertThat(recordList.size()).isEqualTo(2);
     }
 
     @Test
