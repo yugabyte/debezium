@@ -19,13 +19,13 @@ import java.util.Arrays;
 
 import com.yugabyte.geometric.PGpoint;
 import com.yugabyte.jdbc.PgArray;
+import io.debezium.connector.yb.postgresql.PgOid;
+import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource;
+import io.debezium.connector.yb.postgresql.PostgresType;
+import io.debezium.connector.yb.postgresql.PostgresValueConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.debezium.connector.yb.postgresql.PgOid;
-import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
-import io.debezium.connector.yb.postgresql.PostgresType;
-import io.debezium.connector.yb.postgresql.PostgresValueConverter;
 import io.debezium.connector.yb.postgresql.TypeRegistry;
 import io.debezium.connector.yb.postgresql.connection.AbstractColumnValue;
 import io.debezium.connector.yb.postgresql.connection.DateTimeFormat;
@@ -310,7 +310,7 @@ public class PgProtoColumnValue extends AbstractColumnValue<PgProto.DatumMessage
     }
 
     @Override
-    public Object asArray(String columnName, PostgresType type, String fullType, PgConnectionSupplier connection) {
+    public Object asArray(String columnName, PostgresType type, String fullType, PostgresStreamingChangeEventSource.PgConnectionSupplier connection) {
         // Currently the logical decoding plugin sends unhandled types as a byte array containing the string
         // representation (in Postgres) of the array value.
         // The approach to decode this is sub-optimal but the only way to improve this is to update the plugin.
@@ -338,7 +338,7 @@ public class PgProtoColumnValue extends AbstractColumnValue<PgProto.DatumMessage
 
     @Override
     public Object asDefault(TypeRegistry typeRegistry, int columnType, String columnName, String fullType, boolean includeUnknownDatatypes,
-                            PgConnectionSupplier connection) {
+                            PostgresStreamingChangeEventSource.PgConnectionSupplier connection) {
         final PostgresType type = typeRegistry.get(columnType);
         if (type.getOid() == typeRegistry.geometryOid() ||
                 type.getOid() == typeRegistry.geographyOid() ||

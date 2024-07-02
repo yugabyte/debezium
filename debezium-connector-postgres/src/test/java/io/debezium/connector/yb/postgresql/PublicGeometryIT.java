@@ -6,14 +6,14 @@
 
 package io.debezium.connector.yb.postgresql;
 
-import static io.debezium.connector.yb.postgresql.TestHelper.PK_FIELD;
-import static io.debezium.connector.yb.postgresql.TestHelper.topicName;
 import static junit.framework.TestCase.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import io.debezium.connector.yb.postgresql.junit.SkipTestDependingOnDecoderPluginNameRule;
+import junit.framework.TestCase;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.Before;
 import org.junit.Rule;
@@ -25,7 +25,6 @@ import io.debezium.connector.SnapshotRecord;
 import io.debezium.connector.yb.postgresql.PostgresConnectorConfig.SnapshotMode;
 import io.debezium.connector.yb.postgresql.connection.PostgresConnection;
 import io.debezium.connector.yb.postgresql.connection.ReplicationConnection;
-import io.debezium.connector.yb.postgresql.junit.SkipTestDependingOnDecoderPluginNameRule;
 import io.debezium.data.Envelope;
 import io.debezium.data.VerifyRecord;
 import io.debezium.doc.FixFor;
@@ -103,7 +102,7 @@ public class PublicGeometryIT extends AbstractRecordsProducerTest {
 
         try {
             executeAndWait(statement);
-            SourceRecord record = assertRecordInserted(expectedTopicName, pk != null ? PK_FIELD : null, pk);
+            SourceRecord record = assertRecordInserted(expectedTopicName, pk != null ? TestHelper.PK_FIELD : null, pk);
             assertRecordOffsetAndSnapshotSource(record, SnapshotRecord.FALSE);
             assertSourceInfo(record, "postgres", table.schema(), table.table());
             assertRecordSchemaAndValues(expectedSchemaAndValuesByColumn, record, Envelope.FieldName.AFTER);
@@ -116,7 +115,7 @@ public class PublicGeometryIT extends AbstractRecordsProducerTest {
     private SourceRecord assertRecordInserted(String expectedTopicName, String pkColumn, Integer pk) throws InterruptedException {
         assertFalse("records not generated", consumer.isEmpty());
         SourceRecord insertedRecord = consumer.remove();
-        assertEquals(topicName(expectedTopicName), insertedRecord.topic());
+        TestCase.assertEquals(TestHelper.topicName(expectedTopicName), insertedRecord.topic());
 
         if (pk != null) {
             VerifyRecord.isValidInsert(insertedRecord, pkColumn, pk);

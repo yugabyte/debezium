@@ -6,7 +6,6 @@
 
 package io.debezium.connector.yb.postgresql;
 
-import static io.debezium.connector.yb.postgresql.TestHelper.PK_FIELD;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -972,7 +971,7 @@ public abstract class AbstractRecordsProducerTest extends AbstractConnectorTest 
         final ByteBuffer polygonByteBuffer = ByteBuffer.wrap("((0.0,0.0),(0.0,1.0),(1.0,0.0),(0.0,0.0))".getBytes());
 
         return Arrays.asList(
-                new SchemaAndValueField(PK_FIELD, SchemaBuilder.int32().defaultValue(0).build(), 1),
+                new SchemaAndValueField(TestHelper.PK_FIELD, SchemaBuilder.int32().defaultValue(0).build(), 1),
                 new SchemaAndValueField("bit_base", Bits.builder(3).build(), new byte[]{ 5 }),
                 new SchemaAndValueField("bit_alias", Bits.builder(3).build(), new byte[]{ 5 }),
                 new SchemaAndValueField("smallint_base", SchemaBuilder.INT16_SCHEMA, (short) 1),

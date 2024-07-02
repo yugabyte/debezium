@@ -11,7 +11,6 @@ import static io.debezium.connector.yb.postgresql.TestHelper.TYPE_LENGTH_PARAMET
 import static io.debezium.connector.yb.postgresql.TestHelper.TYPE_NAME_PARAMETER_KEY;
 import static io.debezium.connector.yb.postgresql.TestHelper.TYPE_SCALE_PARAMETER_KEY;
 import static io.debezium.connector.yb.postgresql.TestHelper.topicName;
-import static io.debezium.connector.yb.postgresql.junit.SkipWhenDecoderPluginNameIs.DecoderPluginName.PGOUTPUT;
 import static io.debezium.junit.EqualityCheck.LESS_THAN;
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
@@ -45,6 +44,9 @@ import java.util.stream.LongStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import io.debezium.connector.yb.postgresql.junit.SkipTestDependingOnDecoderPluginNameRule;
+import io.debezium.connector.yb.postgresql.junit.SkipWhenDecoderPluginNameIs;
+import io.debezium.connector.yb.postgresql.junit.SkipWhenDecoderPluginNameIsNot;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -72,9 +74,6 @@ import io.debezium.connector.yb.postgresql.PostgresConnectorConfig.SchemaRefresh
 import io.debezium.connector.yb.postgresql.PostgresConnectorConfig.SnapshotMode;
 import io.debezium.connector.yb.postgresql.connection.PostgresConnection;
 import io.debezium.connector.yb.postgresql.connection.ReplicationConnection;
-import io.debezium.connector.yb.postgresql.junit.SkipTestDependingOnDecoderPluginNameRule;
-import io.debezium.connector.yb.postgresql.junit.SkipWhenDecoderPluginNameIs;
-import io.debezium.connector.yb.postgresql.junit.SkipWhenDecoderPluginNameIsNot;
 import io.debezium.data.Bits;
 import io.debezium.data.Enum;
 import io.debezium.data.Envelope;
@@ -547,7 +546,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
 
     @Test
     @FixFor("DBZ-1029")
-    @SkipWhenDecoderPluginNameIs(value = PGOUTPUT, reason = "Decoder synchronizes all schema columns when processing relation messages")
+    @SkipWhenDecoderPluginNameIs(value = SkipWhenDecoderPluginNameIs.DecoderPluginName.PGOUTPUT, reason = "Decoder synchronizes all schema columns when processing relation messages")
     public void shouldReceiveChangesForInsertsIndependentOfReplicaIdentity() throws Exception {
         // insert statement should not be affected by replica identity settings in any way
 
@@ -637,7 +636,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
     }
 
     @Test
-    @SkipWhenDecoderPluginNameIs(value = PGOUTPUT, reason = "An update on a table with no primary key and default replica throws PSQLException as tables must have a PK")
+    @SkipWhenDecoderPluginNameIs(value = SkipWhenDecoderPluginNameIs.DecoderPluginName.PGOUTPUT, reason = "An update on a table with no primary key and default replica throws PSQLException as tables must have a PK")
     public void shouldReceiveChangesForUpdates() throws Exception {
         startConnector();
         executeAndWait("UPDATE test_table set text='update' WHERE pk=1");
@@ -1025,7 +1024,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
     }
 
     @Test
-    @SkipWhenDecoderPluginNameIs(value = PGOUTPUT, reason = "A delete on a table with no primary key and default replica throws PSQLException as tables must have a PK")
+    @SkipWhenDecoderPluginNameIs(value = SkipWhenDecoderPluginNameIs.DecoderPluginName.PGOUTPUT, reason = "A delete on a table with no primary key and default replica throws PSQLException as tables must have a PK")
     public void shouldReceiveChangesForDeletesDependingOnReplicaIdentity() throws Exception {
         String topicName = topicName("public.test_table");
 
@@ -1476,7 +1475,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
 
     @Test
     @FixFor("DBZ-911")
-    @SkipWhenDecoderPluginNameIs(value = PGOUTPUT, reason = "Decoder synchronizes all schema columns when processing relation messages")
+    @SkipWhenDecoderPluginNameIs(value = SkipWhenDecoderPluginNameIs.DecoderPluginName.PGOUTPUT, reason = "Decoder synchronizes all schema columns when processing relation messages")
     public void shouldNotRefreshSchemaOnUnchangedToastedData() throws Exception {
         startConnector(config -> config
                 .with(PostgresConnectorConfig.SCHEMA_REFRESH_MODE, PostgresConnectorConfig.SchemaRefreshMode.COLUMNS_DIFF_EXCLUDE_UNCHANGED_TOAST));
@@ -3835,7 +3834,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
             case DECODERBUFS:
                 return "SELECT pg_logical_slot_get_binary_changes('" + ReplicationConnection.Builder.DEFAULT_SLOT_NAME + "', " +
                         "NULL, NULL)";
-            case PGOUTPUT:
+            case SkipWhenDecoderPluginNameIs.DecoderPluginName.PGOUTPUT:
                 return "SELECT pg_logical_slot_get_binary_changes('" + ReplicationConnection.Builder.DEFAULT_SLOT_NAME + "', " +
                         "NULL, NULL, 'proto_version', '1', 'publication_names', '" + ReplicationConnection.Builder.DEFAULT_PUBLICATION_NAME + "')";
         }
