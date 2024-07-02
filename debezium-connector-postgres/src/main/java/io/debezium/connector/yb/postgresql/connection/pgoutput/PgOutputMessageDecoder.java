@@ -27,17 +27,16 @@ import java.util.Set;
 import java.util.function.Function;
 
 import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
-import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource;
-import io.debezium.connector.yb.postgresql.UnchangedToastedReplicationMessageColumn;
 import io.debezium.connector.yb.postgresql.YugabyteDBServer;
-import io.debezium.connector.yb.postgresql.connection.AbstractReplicationMessageColumn;
-import io.debezium.connector.yb.postgresql.connection.TransactionMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.yb.postgresql.PostgresType;
 import io.debezium.connector.yb.postgresql.TypeRegistry;
+import io.debezium.connector.yb.postgresql.UnchangedToastedReplicationMessageColumn;
 import io.debezium.connector.yb.postgresql.connection.AbstractMessageDecoder;
+import io.debezium.connector.yb.postgresql.connection.AbstractReplicationMessageColumn;
 import io.debezium.connector.yb.postgresql.connection.LogicalDecodingMessage;
 import io.debezium.connector.yb.postgresql.connection.Lsn;
 import io.debezium.connector.yb.postgresql.connection.MessageDecoderContext;
@@ -46,6 +45,7 @@ import io.debezium.connector.yb.postgresql.connection.ReplicationMessage.Column;
 import io.debezium.connector.yb.postgresql.connection.ReplicationMessage.NoopMessage;
 import io.debezium.connector.yb.postgresql.connection.ReplicationMessage.Operation;
 import io.debezium.connector.yb.postgresql.connection.ReplicationStream.ReplicationMessageProcessor;
+import io.debezium.connector.yb.postgresql.connection.TransactionMessage;
 import io.debezium.connector.yb.postgresql.connection.WalPositionLocator;
 import io.debezium.data.Envelope;
 import io.debezium.relational.ColumnEditor;
@@ -749,7 +749,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 final String valueStr = readColumnValueAsString(buffer);
                 replicationMessageColumn = new AbstractReplicationMessageColumn(columnName, columnType, typeExpression, optional) {
                     @Override
-                    public Object getValue(PostgresStreamingChangeEventSource.PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
+                    public Object getValue(PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
                         return PgOutputReplicationMessage.getValue(columnName, columnType, typeExpression, valueStr, connection, includeUnknownDatatypes,
                                 typeRegistry);
                     }
@@ -771,7 +771,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             else if (type == 'n') {
                 replicationMessageColumn = new AbstractReplicationMessageColumn(columnName, columnType, typeExpression, true) {
                     @Override
-                    public Object getValue(PostgresStreamingChangeEventSource.PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
+                    public Object getValue(PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
                         return null;
                     }
                 };

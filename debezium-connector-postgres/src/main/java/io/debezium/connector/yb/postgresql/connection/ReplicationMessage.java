@@ -21,6 +21,7 @@ import com.yugabyte.geometric.PGpoint;
 import com.yugabyte.geometric.PGpolygon;
 
 import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource;
+import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.yb.postgresql.PostgresType;
 import io.debezium.connector.yb.postgresql.TypeRegistry;
 
@@ -62,7 +63,7 @@ public interface ReplicationMessage {
          */
         ColumnTypeMetadata getTypeMetadata();
 
-        Object getValue(PostgresStreamingChangeEventSource.PgConnectionSupplier connection, boolean includeUnknownDatatypes);
+        Object getValue(PgConnectionSupplier connection, boolean includeUnknownDatatypes);
 
         boolean isOptional();
 
@@ -130,9 +131,9 @@ public interface ReplicationMessage {
 
         boolean isArray(PostgresType type);
 
-        Object asArray(String columnName, PostgresType type, String fullType, PostgresStreamingChangeEventSource.PgConnectionSupplier connection);
+        Object asArray(String columnName, PostgresType type, String fullType, PgConnectionSupplier connection);
 
-        Object asDefault(TypeRegistry typeRegistry, int columnType, String columnName, String fullType, boolean includeUnknownDatatypes, PostgresStreamingChangeEventSource.PgConnectionSupplier connection);
+        Object asDefault(TypeRegistry typeRegistry, int columnType, String columnName, String fullType, boolean includeUnknownDatatypes, PgConnectionSupplier connection);
     }
 
     /**

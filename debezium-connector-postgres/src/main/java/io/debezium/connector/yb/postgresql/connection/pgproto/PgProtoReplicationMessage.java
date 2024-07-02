@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import io.debezium.DebeziumException;
-import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource;
+import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.yb.postgresql.PostgresType;
 import io.debezium.connector.yb.postgresql.UnchangedToastedReplicationMessageColumn;
 import io.debezium.connector.yb.postgresql.connection.AbstractReplicationMessageColumn;
@@ -112,7 +112,7 @@ class PgProtoReplicationMessage implements ReplicationMessage {
                             typeInfo.map(PgProto.TypeInfo::getValueOptional).orElse(Boolean.FALSE)) {
 
                         @Override
-                        public Object getValue(PostgresStreamingChangeEventSource.PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
+                        public Object getValue(PgConnectionSupplier connection, boolean includeUnknownDatatypes) {
                             return PgProtoReplicationMessage.this.getValue(columnName, type, fullType, datum, connection, includeUnknownDatatypes);
                         }
 
@@ -130,7 +130,7 @@ class PgProtoReplicationMessage implements ReplicationMessage {
         return true;
     }
 
-    public Object getValue(String columnName, PostgresType type, String fullType, PgProto.DatumMessage datumMessage, final PostgresStreamingChangeEventSource.PgConnectionSupplier connection,
+    public Object getValue(String columnName, PostgresType type, String fullType, PgProto.DatumMessage datumMessage, final PgConnectionSupplier connection,
                            boolean includeUnknownDatatypes) {
         final PgProtoColumnValue columnValue = new PgProtoColumnValue(datumMessage);
         return ReplicationMessageColumnValueResolver.resolveValue(columnName, type, fullType, columnValue, connection, includeUnknownDatatypes, typeRegistry);

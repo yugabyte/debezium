@@ -9,10 +9,11 @@ import java.nio.ByteBuffer;
 import java.sql.SQLException;
 import java.time.Duration;
 
-import io.debezium.connector.yb.postgresql.TypeRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.debezium.connector.yb.postgresql.TypeRegistry;
+import io.debezium.connector.yb.postgresql.connection.ReplicationStream.ReplicationMessageProcessor;
 import io.debezium.util.Clock;
 import io.debezium.util.Threads;
 import io.debezium.util.Threads.Timer;
@@ -31,7 +32,7 @@ public abstract class AbstractMessageDecoder implements MessageDecoder {
     private Timer timer = null;
 
     @Override
-    public void processMessage(ByteBuffer buffer, ReplicationStream.ReplicationMessageProcessor processor, TypeRegistry typeRegistry) throws SQLException, InterruptedException {
+    public void processMessage(ByteBuffer buffer, ReplicationMessageProcessor processor, TypeRegistry typeRegistry) throws SQLException, InterruptedException {
         // if message is empty pass control right to ReplicationMessageProcessor to update WAL position info
         if (buffer == null) {
             processor.process(null);
@@ -41,7 +42,7 @@ public abstract class AbstractMessageDecoder implements MessageDecoder {
         }
     }
 
-    protected abstract void processNotEmptyMessage(ByteBuffer buffer, ReplicationStream.ReplicationMessageProcessor processor, TypeRegistry typeRegistry)
+    protected abstract void processNotEmptyMessage(ByteBuffer buffer, ReplicationMessageProcessor processor, TypeRegistry typeRegistry)
             throws SQLException, InterruptedException;
 
     @Override

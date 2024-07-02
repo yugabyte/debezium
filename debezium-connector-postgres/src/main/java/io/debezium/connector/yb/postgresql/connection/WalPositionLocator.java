@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
+import io.debezium.connector.yb.postgresql.connection.ReplicationMessage.Operation;
 
 /**
  * This class is responsible for finding out a LSN from which Debezium should
@@ -30,7 +31,7 @@ public class WalPositionLocator {
 
     private final Lsn lastCommitStoredLsn;
     private final Lsn lastEventStoredLsn;
-    private final ReplicationMessage.Operation lastProcessedMessageType;
+    private final Operation lastProcessedMessageType;
     private Lsn txStartLsn = null;
     private Lsn lsnAfterLastEventStoredLsn = null;
     private Lsn firstLsnReceived = null;
@@ -39,7 +40,7 @@ public class WalPositionLocator {
     private boolean storeLsnAfterLastEventStoredLsn = false;
     private Set<Lsn> lsnSeen = new HashSet<>(1_000);
 
-    public WalPositionLocator(Lsn lastCommitStoredLsn, Lsn lastEventStoredLsn, ReplicationMessage.Operation lastProcessedMessageType) {
+    public WalPositionLocator(Lsn lastCommitStoredLsn, Lsn lastEventStoredLsn, Operation lastProcessedMessageType) {
         this.lastCommitStoredLsn = lastCommitStoredLsn;
         this.lastEventStoredLsn = lastEventStoredLsn;
         this.lastProcessedMessageType = lastProcessedMessageType;
@@ -75,7 +76,7 @@ public class WalPositionLocator {
             if (currentLsn.equals(lastEventStoredLsn)) {
                 // BEGIN and first message after change have the same LSN
                 if (txStartLsn != null
-                        && (lastProcessedMessageType == null || lastProcessedMessageType == ReplicationMessage.Operation.BEGIN || lastProcessedMessageType == ReplicationMessage.Operation.COMMIT)) {
+                        && (lastProcessedMessageType == null || lastProcessedMessageType == Operation.BEGIN || lastProcessedMessageType == Operation.COMMIT)) {
                     // start from the BEGIN tx; prevent skipping of unprocessed event after BEGIN or previous tx COMMIT
                     LOGGER.info("Will restart from LSN '{}' corresponding to the event following the BEGIN event", txStartLsn);
                     startStreamingLsn = txStartLsn;

@@ -13,10 +13,6 @@ import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.ZoneOffset;
 
-import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource;
-import io.debezium.connector.yb.postgresql.PostgresType;
-import io.debezium.connector.yb.postgresql.PostgresValueConverter;
-import io.debezium.connector.yb.postgresql.TypeRegistry;
 import org.apache.kafka.connect.errors.ConnectException;
 import com.yugabyte.geometric.PGbox;
 import com.yugabyte.geometric.PGcircle;
@@ -30,6 +26,11 @@ import com.yugabyte.util.PGInterval;
 import com.yugabyte.util.PGtokenizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
+import io.debezium.connector.yb.postgresql.PostgresType;
+import io.debezium.connector.yb.postgresql.PostgresValueConverter;
+import io.debezium.connector.yb.postgresql.TypeRegistry;
 
 /**
  * @author Chris Cranford
@@ -189,7 +190,7 @@ public abstract class AbstractColumnValue<T> implements ReplicationMessage.Colum
     }
 
     @Override
-    public Object asArray(String columnName, PostgresType type, String fullType, PostgresStreamingChangeEventSource.PgConnectionSupplier connection) {
+    public Object asArray(String columnName, PostgresType type, String fullType, PgConnectionSupplier connection) {
         try {
             final String dataString = asString();
             return new PgArray(connection.get(), type.getOid(), dataString);
@@ -202,7 +203,7 @@ public abstract class AbstractColumnValue<T> implements ReplicationMessage.Colum
 
     @Override
     public Object asDefault(TypeRegistry typeRegistry, int columnType, String columnName, String fullType, boolean includeUnknownDatatypes,
-                            PostgresStreamingChangeEventSource.PgConnectionSupplier connection) {
+                            PgConnectionSupplier connection) {
         if (includeUnknownDatatypes) {
             // this includes things like PostGIS geoemetries or other custom types
             // leave up to the downstream message recipient to deal with

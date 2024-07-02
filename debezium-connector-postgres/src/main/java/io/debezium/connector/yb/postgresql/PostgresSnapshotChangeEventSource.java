@@ -14,16 +14,17 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import io.debezium.connector.yb.postgresql.spi.Snapshotter;
 import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.debezium.connector.yb.postgresql.PostgresOffsetContext.Loader;
 import io.debezium.connector.yb.postgresql.connection.Lsn;
 import io.debezium.connector.yb.postgresql.connection.PostgresConnection;
 import io.debezium.connector.yb.postgresql.snapshot.AlwaysSnapshotter;
 import io.debezium.connector.yb.postgresql.spi.SlotCreationResult;
 import io.debezium.connector.yb.postgresql.spi.SlotState;
+import io.debezium.connector.yb.postgresql.spi.Snapshotter;
 import io.debezium.jdbc.MainConnectionProvidingConnectionFactory;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.notification.NotificationService;
@@ -306,6 +307,6 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
 
     @Override
     protected PostgresOffsetContext copyOffset(RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext) {
-        return new PostgresOffsetContext.Loader(connectorConfig).load(snapshotContext.offset.getOffset());
+        return new Loader(connectorConfig).load(snapshotContext.offset.getOffset());
     }
 }

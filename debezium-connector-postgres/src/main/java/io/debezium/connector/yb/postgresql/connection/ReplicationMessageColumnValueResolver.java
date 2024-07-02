@@ -5,11 +5,11 @@
  */
 package io.debezium.connector.yb.postgresql.connection;
 
-import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource;
-import io.debezium.connector.yb.postgresql.PostgresType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.debezium.connector.yb.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
+import io.debezium.connector.yb.postgresql.PostgresType;
 import io.debezium.connector.yb.postgresql.TypeRegistry;
 import io.debezium.connector.yb.postgresql.connection.ReplicationMessage.ColumnValue;
 
@@ -32,7 +32,7 @@ public class ReplicationMessageColumnValueResolver {
      * @param typeRegistry the postgres type registry
      * @return
      */
-    public static Object resolveValue(String columnName, PostgresType type, String fullType, ColumnValue value, final PostgresStreamingChangeEventSource.PgConnectionSupplier connection,
+    public static Object resolveValue(String columnName, PostgresType type, String fullType, ColumnValue value, final PgConnectionSupplier connection,
                                       boolean includeUnknownDatatypes, TypeRegistry typeRegistry) {
         if (value.isNull()) {
             // nulls are null
