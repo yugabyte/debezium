@@ -537,8 +537,15 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
 
-    public static final Field HOSTNAME = RelationalDatabaseConnectorConfig.HOSTNAME
-            .withValidation(PostgresConnectorConfig::validateYBHostname);
+    public static final Field HOSTNAME = Field.create(DATABASE_CONFIG_PREFIX + JdbcConfiguration.HOSTNAME)
+            .withDisplayName("Hostname")
+            .withType(Type.STRING)
+            .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 2))
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.HIGH)
+            .required()
+            .withValidation(PostgresConnectorConfig::validateYBHostname)
+            .withDescription("Resolvable hostname or IP address of the database server.");
 
     public static final Field PLUGIN_NAME = Field.create("plugin.name")
             .withDisplayName("Plugin")
@@ -1296,6 +1303,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     protected static int validateYBHostname(Configuration config, Field field, Field.ValidationOutput problems) {
         // YB Note: Not validating the hostname against any pattern.
+        LOGGER.info("Using YB custom validator to bypass hostname validation");
         return 0;
     }
 
