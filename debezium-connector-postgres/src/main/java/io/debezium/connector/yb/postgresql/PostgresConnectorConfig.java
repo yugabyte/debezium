@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import io.debezium.connector.yb.postgresql.connection.MessageDecoderContext;
 import io.debezium.connector.yb.postgresql.connection.PostgresConnection;
@@ -536,6 +537,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
 
+    public static final Field HOSTNAME = RelationalDatabaseConnectorConfig.HOSTNAME
+            .withValidation(PostgresConnectorConfig::validateYBHostname);
 
     public static final Field PLUGIN_NAME = Field.create("plugin.name")
             .withDisplayName("Plugin")
@@ -1291,7 +1294,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         });
     }
 
-
+    protected static int validateYBHostname(Configuration config, Field field, Field.ValidationOutput problems) {
+        // YB Note: Not validating the hostname against any pattern.
+        return 0;
+    }
 
 
 }
