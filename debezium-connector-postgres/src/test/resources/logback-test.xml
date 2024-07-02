@@ -35,7 +35,7 @@
     </logger>
     <!-- Needed for PostgresConnectorIT.shouldClearDatabaseWarnings() -->
     <logger
-        name="io.debezium.connector.yb.postgresql.connection.PostgresReplicationConnection"
+        name="io.debezium.connector.postgresql.connection.PostgresReplicationConnection"
         level="debug" additivity="false">
         <appender-ref ref="CONSOLE" />
     </logger>
