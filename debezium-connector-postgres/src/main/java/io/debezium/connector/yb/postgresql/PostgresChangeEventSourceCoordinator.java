@@ -81,7 +81,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
         LOGGER.debug("Snapshot result {}", snapshotResult);
 
         if (context.isRunning() && snapshotResult.isCompletedOrSkipped()) {
-            if(YugabyteDBServer.isEnabled() && !isSnapshotSkipped(snapshotResult)) {
+            if(YugabyteDBServer.isEnabled() && !snapshotResult.isSkipped()) {
                 LOGGER.info("Will wait for snapshot completion before transitioning to streaming");
                 waitForSnapshotCompletion = true;
                 while (waitForSnapshotCompletion) {
@@ -97,10 +97,6 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
             previousLogContext.set(taskContext.configureLoggingContext("streaming", partition));
             streamEvents(context, partition, snapshotResult.getOffset());
         }
-    }
-
-    protected boolean isSnapshotSkipped(SnapshotResult<PostgresOffsetContext> snapshotResult) {
-        return snapshotResult.getStatus() == SnapshotResult.SnapshotResultStatus.SKIPPED;
     }
 
     @Override
