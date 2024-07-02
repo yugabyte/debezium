@@ -17,14 +17,14 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import io.debezium.connector.postgresql.Module;
-import io.debezium.connector.postgresql.PostgresConnector;
+import io.debezium.connector.postgresql.YBPostgresConnector;
 import io.debezium.testing.testcontainers.testhelper.RestExtensionTestInfrastructure;
 
-public class DebeziumPostgresConnectorResourceNoDatabaseIT {
+public class DebeziumYBPostgresConnectorResourceNoDatabaseIT {
 
     @BeforeClass
     public static void checkCondition() {
-        Assume.assumeThat("Skipping DebeziumPostgresConnectorResourceIT tests when assembly profile is not active!",
+        Assume.assumeThat("Skipping DebeziumYBPostgresConnectorResourceIT tests when assembly profile is not active!",
                 System.getProperty("isAssemblyProfileActive", "false"),
                 is("true"));
     }
@@ -65,7 +65,7 @@ public class DebeziumPostgresConnectorResourceNoDatabaseIT {
                 .body("properties.isEmpty()", is(false))
                 .body("x-connector-id", is("postgres"))
                 .body("x-version", is(Module.version()))
-                .body("x-className", is(PostgresConnector.class.getName()))
+                .body("x-className", is(YBPostgresConnector.class.getName()))
                 .body("properties", hasKey("topic.prefix"))
                 .body("properties", hasKey("plugin.name"))
                 .body("properties", hasKey("slot.name"))

@@ -12,10 +12,10 @@ import org.junit.Test;
 import io.debezium.config.ConfigDefinitionMetadataTest;
 import io.debezium.config.Configuration;
 
-public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest {
+public class YBPostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest {
 
-    public PostgresConnectorConfigDefTest() {
-        super(new PostgresConnector());
+    public YBPostgresConnectorConfigDefTest() {
+        super(new YBPostgresConnector());
     }
 
     @Test

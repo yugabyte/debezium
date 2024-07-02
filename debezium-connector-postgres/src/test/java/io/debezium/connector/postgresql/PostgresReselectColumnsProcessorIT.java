@@ -30,7 +30,7 @@ import io.debezium.processors.reselect.ReselectColumnsPostProcessor;
  *
  * @author Chris Cranford
  */
-public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcessorTest<PostgresConnector> {
+public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcessorTest<YBPostgresConnector> {
 
     public static final String CREATE_STMT = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
             "CREATE SCHEMA s1; ";
@@ -53,8 +53,8 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
     }
 
     @Override
-    protected Class<PostgresConnector> getConnectorClass() {
-        return PostgresConnector.class;
+    protected Class<YBPostgresConnector> getConnectorClass() {
+        return YBPostgresConnector.class;
     }
 
     @Override
@@ -120,7 +120,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1\\.dbz4321_toast")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YBPostgresConnector.class, config);
         waitForStreamingStarted();
 
         final String text = RandomStringUtils.randomAlphabetic(10000);
