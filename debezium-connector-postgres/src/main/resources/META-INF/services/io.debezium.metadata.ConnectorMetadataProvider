@@ -1,1 +1,1 @@
-io.debezium.connector.postgresql.metadata.PostgresConnectorMetadataProvider
+io.debezium.connector.yb.postgresql.metadata.PostgresConnectorMetadataProvider

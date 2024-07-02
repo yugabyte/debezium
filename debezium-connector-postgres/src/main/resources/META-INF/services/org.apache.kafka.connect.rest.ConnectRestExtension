@@ -1,1 +1,1 @@
-io.debezium.connector.postgresql.rest.DebeziumPostgresConnectRestExtension
+io.debezium.connector.yb.postgresql.rest.DebeziumPostgresConnectRestExtension

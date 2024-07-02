@@ -1,1 +1,1 @@
-io.debezium.connector.postgresql.spi.CustomActionProvider
+io.debezium.connector.yb.postgresql.spi.CustomActionProvider
