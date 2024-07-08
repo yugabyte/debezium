@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.debezium</groupId>
         <artifactId>debezium-quarkus-outbox-common-parent</artifactId>
-        <version>dz.2.5.2.yb.2024.1-SNAPSHOT</version>
+        <version>2.5.2.Final</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
