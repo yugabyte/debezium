@@ -1,1 +1,1 @@
-io.debezium.connector.postgresql.YBPostgresConnector
+io.debezium.connector.postgresql.YugabyteDBConnector

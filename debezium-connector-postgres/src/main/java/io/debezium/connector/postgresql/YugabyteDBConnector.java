@@ -36,12 +36,12 @@ import io.debezium.relational.TableId;
  *
  * @author Horia Chiorean
  */
-public class YBPostgresConnector extends RelationalBaseSourceConnector {
+public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(YBPostgresConnector.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBConnector.class);
     private Map<String, String> props;
 
-    public YBPostgresConnector() {
+    public YugabyteDBConnector() {
     }
 
     @Override

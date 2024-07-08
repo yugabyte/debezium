@@ -165,7 +165,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             // such that the connection times out. We must enable keep
             // alive to ensure that it doesn't time out
             ReplicationStream stream = this.replicationStream.get();
-            stream.startKeepAlive(Threads.newSingleThreadExecutor(YBPostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
+            stream.startKeepAlive(Threads.newSingleThreadExecutor(YugabyteDBConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
 
             initSchema();
 
@@ -200,7 +200,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
                     replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
                     stream = this.replicationStream.get();
-                    stream.startKeepAlive(Threads.newSingleThreadExecutor(YBPostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
+                    stream.startKeepAlive(Threads.newSingleThreadExecutor(YugabyteDBConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
                 }
             } else {
                 LOGGER.info("Connector config provide.transaction.metadata is set to true. Therefore, skip records filtering in order to ship entire transactions.");
@@ -288,13 +288,17 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         // Tx BEGIN/END event
         if (message.isTransactionalMessage()) {
-            LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
+            if(message.getOperation() == Operation.BEGIN) {
+                LOGGER.debug("Processing BEGIN with end LSN {} and txnid {}", lsn, message.getTransactionId());
+            } else {
+                LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
+            }
 
             OptionalLong currentTxnid = message.getTransactionId();
             if (lastTxnidForWhichCommitSeen.isPresent() && currentTxnid.isPresent()) {
-                long delta = currentTxnid.getAsLong() - lastTxnidForWhichCommitSeen.getAsLong();
-                if (delta > 1) {
-                    LOGGER.warn("Skipped {} transactions between {} and {}, possible data loss ?", delta, lastTxnidForWhichCommitSeen, currentTxnid);
+                long delta = currentTxnid.getAsLong() - lastTxnidForWhichCommitSeen.getAsLong() - 1;
+                if (delta > 0) {
+                    LOGGER.debug("Skipped {} transactions between {} and {}", delta, lastTxnidForWhichCommitSeen, currentTxnid);
                 }
             }
             lastTxnidForWhichCommitSeen = currentTxnid;

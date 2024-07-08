@@ -10,6 +10,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.Matchers.hasKey;
 
+import io.debezium.connector.postgresql.YugabyteDBConnector;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -17,14 +18,13 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import io.debezium.connector.postgresql.Module;
-import io.debezium.connector.postgresql.YBPostgresConnector;
 import io.debezium.testing.testcontainers.testhelper.RestExtensionTestInfrastructure;
 
-public class DebeziumYBPostgresConnectorResourceNoDatabaseIT {
+public class DebeziumYugabyteDBConnectorResourceNoDatabaseIT {
 
     @BeforeClass
     public static void checkCondition() {
-        Assume.assumeThat("Skipping DebeziumYBPostgresConnectorResourceIT tests when assembly profile is not active!",
+        Assume.assumeThat("Skipping DebeziumYugabyteDBConnectorResourceIT tests when assembly profile is not active!",
                 System.getProperty("isAssemblyProfileActive", "false"),
                 is("true"));
     }
@@ -65,7 +65,7 @@ public class DebeziumYBPostgresConnectorResourceNoDatabaseIT {
                 .body("properties.isEmpty()", is(false))
                 .body("x-connector-id", is("postgres"))
                 .body("x-version", is(Module.version()))
-                .body("x-className", is(YBPostgresConnector.class.getName()))
+                .body("x-className", is(YugabyteDBConnector.class.getName()))
                 .body("properties", hasKey("topic.prefix"))
                 .body("properties", hasKey("plugin.name"))
                 .body("properties", hasKey("slot.name"))
