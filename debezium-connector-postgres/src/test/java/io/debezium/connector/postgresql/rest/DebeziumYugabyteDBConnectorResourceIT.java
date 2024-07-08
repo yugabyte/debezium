@@ -14,6 +14,7 @@ import static org.hamcrest.CoreMatchers.is;
 import java.util.Locale;
 import java.util.Map;
 
+import io.debezium.connector.postgresql.YugabyteDBConnector;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -21,18 +22,17 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import io.debezium.connector.postgresql.Module;
-import io.debezium.connector.postgresql.YBPostgresConnector;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.testing.testcontainers.Connector;
 import io.debezium.testing.testcontainers.ConnectorConfiguration;
 import io.debezium.testing.testcontainers.testhelper.RestExtensionTestInfrastructure;
 import io.restassured.http.ContentType;
 
-public class DebeziumYBPostgresConnectorResourceIT {
+public class DebeziumYugabyteDBConnectorResourceIT {
 
     @BeforeClass
     public static void checkCondition() {
-        Assume.assumeThat("Skipping DebeziumYBPostgresConnectorResourceIT tests when assembly profile is not active!",
+        Assume.assumeThat("Skipping DebeziumYugabyteDBConnectorResourceIT tests when assembly profile is not active!",
                 System.getProperty("isAssemblyProfileActive", "false"),
                 is("true"));
     }
@@ -84,7 +84,7 @@ public class DebeziumYBPostgresConnectorResourceIT {
     public void testInvalidConnection() {
         given()
                 .port(RestExtensionTestInfrastructure.getDebeziumContainer().getFirstMappedPort())
-                .when().contentType(ContentType.JSON).accept(ContentType.JSON).body("{\"connector.class\": \"" + YBPostgresConnector.class.getName() + "\"}")
+                .when().contentType(ContentType.JSON).accept(ContentType.JSON).body("{\"connector.class\": \"" + YugabyteDBConnector.class.getName() + "\"}")
                 .put(DebeziumPostgresConnectorResource.BASE_PATH + DebeziumPostgresConnectorResource.VALIDATE_CONNECTION_ENDPOINT)
                 .then().log().all()
                 .statusCode(200)

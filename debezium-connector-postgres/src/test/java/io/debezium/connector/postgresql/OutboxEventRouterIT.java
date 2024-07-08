@@ -19,11 +19,11 @@ import io.debezium.jdbc.JdbcConnection;
 import io.debezium.transforms.outbox.AbstractEventRouterTest;
 
 /**
- * Integration test for {@link io.debezium.transforms.outbox.EventRouter} with {@link YBPostgresConnector}
+ * Integration test for {@link io.debezium.transforms.outbox.EventRouter} with {@link YugabyteDBConnector}
  *
  * @author Renato Mefi (gh@mefi.in)
  */
-public class OutboxEventRouterIT extends AbstractEventRouterTest<YBPostgresConnector> {
+public class OutboxEventRouterIT extends AbstractEventRouterTest<YugabyteDBConnector> {
 
     private static final String SETUP_OUTBOX_SCHEMA = "DROP SCHEMA IF EXISTS outboxsmtit CASCADE;" +
             "CREATE SCHEMA outboxsmtit;";
@@ -47,8 +47,8 @@ public class OutboxEventRouterIT extends AbstractEventRouterTest<YBPostgresConne
     }
 
     @Override
-    protected Class<YBPostgresConnector> getConnectorClass() {
-        return YBPostgresConnector.class;
+    protected Class<YugabyteDBConnector> getConnectorClass() {
+        return YugabyteDBConnector.class;
     }
 
     @Override

@@ -33,7 +33,7 @@
         additivity="false">
         <appender-ref ref="CONSOLE" />
     </logger>
-    <!-- Needed for YBPostgresConnectorIT.shouldClearDatabaseWarnings() -->
+    <!-- Needed for YugabyteDBConnectorIT.shouldClearDatabaseWarnings() -->
     <logger
         name="io.debezium.connector.postgresql.connection.PostgresReplicationConnection"
         level="debug" additivity="false">
