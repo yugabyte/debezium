@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import io.debezium.heartbeat.Heartbeat;
 import io.debezium.junit.logging.LogInterceptor;
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
