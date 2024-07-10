@@ -1264,7 +1264,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                                      HeartbeatErrorHandler errorHandler) {
         if (YugabyteDBServer.isEnabled()) {
             // We do not need any heartbeat when snapshot is never required.
-            if (snapshotMode.equals(SnapshotMode.NEVER)) {
+            if (snapshotMode.equals(SnapshotMode.NEVER) || getHeartbeatInterval().isZero()) {
                 return Heartbeat.DEFAULT_NOOP_HEARTBEAT;
             }
 
