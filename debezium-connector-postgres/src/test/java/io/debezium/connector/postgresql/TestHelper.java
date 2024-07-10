@@ -279,6 +279,10 @@ public final class TestHelper {
         return defaultJdbcConfig("127.0.0.1", 5433);
     }
 
+    public static String getDefaultHeartbeatTopic() {
+        return Heartbeat.HEARTBEAT_TOPICS_PREFIX.defaultValueAsString() + "." + TEST_SERVER;
+    }
+
     public static Configuration.Builder defaultConfig() {
         JdbcConfiguration jdbcConfiguration = defaultJdbcConfig();
         Configuration.Builder builder = Configuration.create();
@@ -449,9 +453,16 @@ public final class TestHelper {
 
     protected static void waitFor(Duration duration) throws InterruptedException {
         Awaitility.await()
-          .pollDelay(duration)
-          .atMost(duration.plusSeconds(1))
-          .until(() -> true);
+                .pollDelay(duration)
+                .atMost(duration.plusSeconds(1))
+                .until(() -> true);
+    }
+
+    protected static void waitForLogMessage(LogInterceptor logInterceptor, String message) {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofSeconds(1))
+                .until(() -> logInterceptor.containsMessage(message));
     }
 
     private static List<String> getOpenIdleTransactions(PostgresConnection connection) throws SQLException {
