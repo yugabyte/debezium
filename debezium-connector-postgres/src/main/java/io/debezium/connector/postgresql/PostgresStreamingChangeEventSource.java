@@ -176,7 +176,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             this.lastCompletelyProcessedLsn = replicationStream.get().startLsn();
 
             // Against YB, filtering of records based on Wal position is only enabled when connector config provide.transaction.metadata is set to false.
-            if(!YugabyteDBServer.isEnabled() || (YugabyteDBServer.isEnabled() && !connectorConfig.shouldProvideTransactionMetadata())) {
+            if (!YugabyteDBServer.isEnabled() || (YugabyteDBServer.isEnabled() && !connectorConfig.shouldProvideTransactionMetadata())) {
                 if (walPosition.searchingEnabled()) {
                     searchWalPosition(context, partition, this.effectiveOffset, stream, walPosition);
                     try {
@@ -286,13 +286,17 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         // Tx BEGIN/END event
         if (message.isTransactionalMessage()) {
-            LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
+            if(message.getOperation() == Operation.BEGIN) {
+                LOGGER.debug("Processing BEGIN with end LSN {} and txnid {}", lsn, message.getTransactionId());
+            } else {
+                LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
+            }
 
             OptionalLong currentTxnid = message.getTransactionId();
             if (lastTxnidForWhichCommitSeen.isPresent() && currentTxnid.isPresent()) {
-                long delta = currentTxnid.getAsLong() - lastTxnidForWhichCommitSeen.getAsLong();
-                if (delta > 1) {
-                    LOGGER.warn("Skipped {} transactions between {} and {}, possible data loss ?", delta, lastTxnidForWhichCommitSeen, currentTxnid);
+                long delta = currentTxnid.getAsLong() - lastTxnidForWhichCommitSeen.getAsLong() - 1;
+                if (delta > 0) {
+                    LOGGER.debug("Skipped {} empty transactions between {} and {}", delta, lastTxnidForWhichCommitSeen, currentTxnid);
                 }
             }
             lastTxnidForWhichCommitSeen = currentTxnid;
