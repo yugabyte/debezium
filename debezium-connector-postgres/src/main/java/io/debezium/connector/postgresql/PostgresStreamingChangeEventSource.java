@@ -102,6 +102,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         this.snapshotter = snapshotter;
         this.replicationConnection = (PostgresReplicationConnection) replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
+
     }
 
     @Override
