@@ -286,13 +286,17 @@ public final class TestHelper {
     }
 
     public static Configuration.Builder defaultConfig() {
+        return defaultConfig("YBOUTPUT");
+    }
+
+    public static Configuration.Builder defaultConfig(String pluginName) {
         JdbcConfiguration jdbcConfiguration = defaultJdbcConfig();
         Configuration.Builder builder = Configuration.create();
         jdbcConfiguration.forEach((field, value) -> builder.with(PostgresConnectorConfig.DATABASE_CONFIG_PREFIX + field, value));
         builder.with(CommonConnectorConfig.TOPIC_PREFIX, TEST_SERVER)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, true)
                 .with(PostgresConnectorConfig.STATUS_UPDATE_INTERVAL_MS, 100)
-                .with(PostgresConnectorConfig.PLUGIN_NAME, "YBOUTPUT")
+                .with(PostgresConnectorConfig.PLUGIN_NAME, pluginName)
                 .with(PostgresConnectorConfig.SSL_MODE, SecureConnectionMode.DISABLED)
                 .with(PostgresConnectorConfig.MAX_RETRIES, 2)
                 .with(PostgresConnectorConfig.RETRY_DELAY_MS, 2000);
