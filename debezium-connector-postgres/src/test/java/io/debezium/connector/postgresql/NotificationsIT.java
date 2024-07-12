@@ -14,7 +14,7 @@ import org.junit.Before;
 import io.debezium.config.Configuration;
 import io.debezium.pipeline.notification.AbstractNotificationsIT;
 
-public class NotificationsIT extends AbstractNotificationsIT<YugabyteDBConnector> {
+public class NotificationsIT extends AbstractNotificationsIT<PostgresConnector> {
 
     @Before
     public void before() throws SQLException {
@@ -31,8 +31,8 @@ public class NotificationsIT extends AbstractNotificationsIT<YugabyteDBConnector
     }
 
     @Override
-    protected Class<YugabyteDBConnector> connectorClass() {
-        return YugabyteDBConnector.class;
+    protected Class<PostgresConnector> connectorClass() {
+        return PostgresConnector.class;
     }
 
     @Override

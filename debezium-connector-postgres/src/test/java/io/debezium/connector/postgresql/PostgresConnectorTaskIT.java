@@ -22,7 +22,7 @@ import io.debezium.spi.topic.TopicNamingStrategy;
 /**
  * Integration test for {@link PostgresConnectorTask} class.
  */
-public class YugabyteDBConnectorTaskIT {
+public class PostgresConnectorTaskIT {
 
     @Test
     @FixFor("DBZ-519")

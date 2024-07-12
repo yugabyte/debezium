@@ -21,7 +21,7 @@ import io.debezium.function.Predicates;
 import io.debezium.relational.TableId;
 
 /**
- * Class that records Replica Identity information for the {@link YugabyteDBConnector}
+ * Class that records Replica Identity information for the {@link PostgresConnector}
  * @author Ben White, Miguel Sotomayor
  */
 @Immutable
