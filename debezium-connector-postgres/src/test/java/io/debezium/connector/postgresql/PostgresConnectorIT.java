@@ -541,9 +541,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // YB Note: Creating a table before deploying the connector since dynamic table addition is
         // not supported yet.
         TestHelper.execute(
-                "CREATE SCHEMA IF NOT EXISTS default_change;",
-                "DROP TABLE IF EXISTS default_change.test_table;",
-                "CREATE TABLE default_change.test_table (pk SERIAL, i INT DEFAULT 1, text TEXT DEFAULT 'foo', PRIMARY KEY(pk));");
+          "CREATE SCHEMA IF NOT EXISTS default_change;",
+          "DROP TABLE IF EXISTS default_change.test_table;",
+          "CREATE TABLE default_change.test_table (pk SERIAL, i INT DEFAULT 1, text TEXT DEFAULT 'foo', PRIMARY KEY(pk));");
 
         TestHelper.execute("INSERT INTO default_change.test_table(i, text) VALUES (DEFAULT, DEFAULT);");
 
@@ -1072,9 +1072,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(SETUP_TABLES_STMT);
         TestHelper.execute("ALTER TABLE s1.a REPLICA IDENTITY FULL;");
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
-                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
-                .build();
+                                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+                                 .build();
         start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
@@ -2905,9 +2905,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.createDefaultReplicationSlot();
 
         final Configuration.Builder configBuilder = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
-                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+              .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+              .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+              .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
 
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
@@ -2957,11 +2957,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.createDefaultReplicationSlot();
 
         final Configuration.Builder configBuilder = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
-                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a")
-                .with(PostgresConnectorConfig.SKIP_MESSAGES_WITHOUT_CHANGE, true)
-                .with(PostgresConnectorConfig.COLUMN_INCLUDE_LIST, "s2.a.pk,s2.a.aa");
+                                                      .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                                                      .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                                                      .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a")
+                                                      .with(PostgresConnectorConfig.SKIP_MESSAGES_WITHOUT_CHANGE, true)
+                                                      .with(PostgresConnectorConfig.COLUMN_INCLUDE_LIST, "s2.a.pk,s2.a.aa");
 
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
@@ -2990,8 +2990,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             assertValueField(actualRecords.allRecordsInOrder().get(1), "before/pk/value", 1);
             assertValueField(actualRecords.allRecordsInOrder().get(1), "before/aa/value", 1);
             assertFieldAbsentInBeforeImage(actualRecords.allRecordsInOrder().get(1), "bb");
-        }
-        else {
+        } else {
             assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(3);
 
             assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
@@ -3156,11 +3155,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.createDefaultReplicationSlot();
 
         final Configuration.Builder configBuilder = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.HOSTNAME, "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433")
-                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
-                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false)
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
-                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+              .with(PostgresConnectorConfig.HOSTNAME, "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433")
+              .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+              .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false)
+              .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+              .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
 
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
