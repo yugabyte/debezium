@@ -109,7 +109,8 @@ import static org.junit.Assert.assertNotNull;
 /**
  * Integration test for the {@link RecordsStreamProducer} class. This also tests indirectly the PG plugin functionality for
  * different use cases. This class is a copy of {@link RecordsStreamProducerIT} with source database
- * being YugabyteDB.
+ * being YugabyteDB. This rewrite of the test class is needed since we use the plugin `yboutput` which essentially
+ * causes a change in the structure of the record so we had to change the way records were asserted.
  *
  * @author Vaibhav Kushwaha (hchiorea@redhat.com)
  */
@@ -958,7 +959,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         });
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-842")
     public void shouldNotPropagateUnchangedToastedData() throws Exception {
@@ -1040,7 +1041,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-4941")
     public void shouldHandleToastedArrayColumn() throws Exception {
@@ -1083,7 +1084,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-6122")
     public void shouldHandleToastedArrayColumnCharacterVarying() throws Exception {
@@ -1126,7 +1127,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-6122")
     public void shouldHandleToastedDateArrayColumn() throws Exception {
@@ -1171,7 +1172,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-6122")
     public void shouldHandleToastedByteArrayColumn() throws Exception {
@@ -1220,7 +1221,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 .isEqualTo(SchemaBuilder.array(Schema.OPTIONAL_BYTES_SCHEMA).optional().build());
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-5936")
     public void shouldHandleToastedIntegerArrayColumn() throws Exception {
@@ -1262,7 +1263,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-5936")
     public void shouldHandleToastedBigIntArrayColumn() throws Exception {
@@ -1304,7 +1305,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-5936")
     public void shouldHandleToastedJsonArrayColumn() throws Exception {
@@ -1351,6 +1352,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
+    @Ignore("hstore not supported yet")
     @Test
     @FixFor("DBZ-6379")
     public void shouldHandleToastedHstoreInHstoreMapMode() throws Exception {
@@ -1392,7 +1394,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-6720")
     public void shouldHandleToastedUuidArrayColumn() throws Exception {
@@ -1441,7 +1443,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-7193")
     public void shouldHandleToastedArrayColumnForReplicaIdentityFullTable() throws Exception {
@@ -1492,7 +1494,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 updatedRecord, Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-7193")
     public void shouldHandleToastedArrayColumnCharacterVaryingForReplicaIdentityFullTable() throws Exception {
@@ -1543,7 +1545,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 updatedRecord, Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-7193")
     public void shouldHandleToastedDateArrayColumnForReplicaIdentityFullTable() throws Exception {
@@ -1601,7 +1603,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 updatedRecord, Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-7193")
     public void shouldHandleToastedByteArrayColumnForReplicaIdentityFullTable() throws Exception {
@@ -1658,7 +1660,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 updatedRecord, Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-7193")
     public void shouldHandleToastedIntegerArrayColumnForReplicaIdentityFullTable() throws Exception {
@@ -1711,7 +1713,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 updatedRecord, Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-7193")
     public void shouldHandleToastedBigIntArrayColumnForReplicaIdentityFullTable() throws Exception {
@@ -1764,7 +1766,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 updatedRecord, Envelope.FieldName.AFTER);
     }
 
-    @Ignore("Altering column not allowed while in replication")
+    @Ignore("Altering column not allowed while in replication, see https://github.com/yugabyte/yugabyte-db/issues/16625")
     @Test
     @FixFor("DBZ-7193")
     public void shouldHandleToastedUuidArrayColumnForReplicaIdentityFullTable() throws Exception {
