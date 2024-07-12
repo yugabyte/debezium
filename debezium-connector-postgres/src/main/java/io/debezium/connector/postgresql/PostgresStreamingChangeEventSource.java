@@ -298,7 +298,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             if (lastTxnidForWhichCommitSeen.isPresent() && currentTxnid.isPresent()) {
                 long delta = currentTxnid.getAsLong() - lastTxnidForWhichCommitSeen.getAsLong() - 1;
                 if (delta > 0) {
-                    LOGGER.debug("Skipped {} transactions between {} and {}", delta, lastTxnidForWhichCommitSeen, currentTxnid);
+                    LOGGER.debug("Skipped {} empty transactions between {} and {}", delta, lastTxnidForWhichCommitSeen, currentTxnid);
                 }
             }
             lastTxnidForWhichCommitSeen = currentTxnid;

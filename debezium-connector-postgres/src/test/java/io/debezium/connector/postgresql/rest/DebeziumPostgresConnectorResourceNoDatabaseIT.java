@@ -20,7 +20,7 @@ import org.junit.Test;
 import io.debezium.connector.postgresql.Module;
 import io.debezium.testing.testcontainers.testhelper.RestExtensionTestInfrastructure;
 
-public class DebeziumYugabyteDBConnectorResourceNoDatabaseIT {
+public class DebeziumPostgresConnectorResourceNoDatabaseIT {
 
     @BeforeClass
     public static void checkCondition() {

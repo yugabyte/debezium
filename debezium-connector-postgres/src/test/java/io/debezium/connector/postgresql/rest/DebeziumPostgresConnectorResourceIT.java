@@ -28,7 +28,7 @@ import io.debezium.testing.testcontainers.ConnectorConfiguration;
 import io.debezium.testing.testcontainers.testhelper.RestExtensionTestInfrastructure;
 import io.restassured.http.ContentType;
 
-public class DebeziumYugabyteDBConnectorResourceIT {
+public class DebeziumPostgresConnectorResourceIT {
 
     @BeforeClass
     public static void checkCondition() {
