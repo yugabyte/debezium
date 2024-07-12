@@ -16,7 +16,7 @@ import io.debezium.connector.postgresql.spi.Snapshotter;
 import io.debezium.relational.TableId;
 
 /**
- * This is a small class used in YugabyteDBConnectorIT to test a custom snapshot
+ * This is a small class used in PostgresConnectorIT to test a custom snapshot
  *
  * It is tightly coupled to the test there, but needs to be placed here in order
  * to allow for class loading to work

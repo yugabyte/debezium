@@ -14,7 +14,6 @@ import static org.hamcrest.CoreMatchers.is;
 import java.util.Locale;
 import java.util.Map;
 
-import io.debezium.connector.postgresql.YugabyteDBConnector;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -22,6 +21,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import io.debezium.connector.postgresql.Module;
+import io.debezium.connector.postgresql.YugabyteDBConnector;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.testing.testcontainers.Connector;
 import io.debezium.testing.testcontainers.ConnectorConfiguration;
@@ -32,7 +32,7 @@ public class DebeziumPostgresConnectorResourceIT {
 
     @BeforeClass
     public static void checkCondition() {
-        Assume.assumeThat("Skipping DebeziumYugabyteDBConnectorResourceIT tests when assembly profile is not active!",
+        Assume.assumeThat("Skipping DebeziumPostgresConnectorResourceIT tests when assembly profile is not active!",
                 System.getProperty("isAssemblyProfileActive", "false"),
                 is("true"));
     }

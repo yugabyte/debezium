@@ -111,8 +111,8 @@ import org.slf4j.LoggerFactory;
  *
  * @author Horia Chiorean (hchiorea@redhat.com)
  */
-public class YugabyteDBConnectorIT extends AbstractConnectorTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBConnectorIT.class);
+public class PostgresConnectorIT extends AbstractConnectorTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresConnectorIT.class);
 
     /*
      * Specific tests that need to extend the initial DDL set should do it in a form of
@@ -3288,7 +3288,7 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
     @FixFor("DBZ-2885")
     @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "Publication configuration only valid for PGOUTPUT decoder")
     public void shouldThrowWhenTableFiltersIsEmpty() throws Exception {
-        final LogInterceptor logInterceptor = new LogInterceptor(YugabyteDBConnectorIT.class);
+        final LogInterceptor logInterceptor = new LogInterceptor(PostgresConnectorIT.class);
 
         TestHelper.dropAllSchemas();
         TestHelper.dropPublication("cdc");
@@ -3709,7 +3709,7 @@ public class YugabyteDBConnectorIT extends AbstractConnectorTest {
     @FixFor("DBZ-5739")
     @SkipWhenDatabaseVersion(check = LESS_THAN, major = 11, reason = "This needs pg_replication_slot_advance which is supported only on Postgres 11+")
     public void shouldStopConnectorOnSlotRecreation() throws InterruptedException {
-        final LogInterceptor logInterceptor = new LogInterceptor(YugabyteDBConnectorIT.class);
+        final LogInterceptor logInterceptor = new LogInterceptor(PostgresConnectorIT.class);
 
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
