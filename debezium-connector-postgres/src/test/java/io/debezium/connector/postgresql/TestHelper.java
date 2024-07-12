@@ -380,7 +380,7 @@ public final class TestHelper {
     }
 
     protected static void dropPublication(String publicationName) {
-        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
+        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) || decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.YBOUTPUT)) {
             try {
                 execute("DROP PUBLICATION " + publicationName);
             }
@@ -391,7 +391,7 @@ public final class TestHelper {
     }
 
     protected static void createPublicationForAllTables(String publicationName) {
-        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
+        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) || decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.YBOUTPUT)) {
             execute("CREATE PUBLICATION " + publicationName + " FOR ALL TABLES");
         }
     }
@@ -401,7 +401,7 @@ public final class TestHelper {
     }
 
     protected static boolean publicationExists(String publicationName) {
-        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
+        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) || decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.YBOUTPUT)) {
             try (PostgresConnection connection = create()) {
                 String query = String.format("SELECT pubname FROM pg_catalog.pg_publication WHERE pubname = '%s'", publicationName);
                 try {

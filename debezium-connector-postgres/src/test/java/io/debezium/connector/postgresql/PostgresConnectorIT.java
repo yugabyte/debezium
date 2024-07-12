@@ -340,6 +340,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
+
+        waitForStreamingRunning();
+
         // now stop the connector
         stopConnector();
         assertNoRecordsToConsume();
@@ -3490,6 +3493,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         assertRecordsFromSnapshot(2, 1, 1);
         assertRecordsAfterInsert(2, 2, 2);
+
+        TestHelper.execute("REVOKE CREATE ON DATABASE yugabyte FROM ybpgconn");
     }
 
     private CompletableFuture<Void> batchInsertRecords(long recordsCount, int batchSize) {
