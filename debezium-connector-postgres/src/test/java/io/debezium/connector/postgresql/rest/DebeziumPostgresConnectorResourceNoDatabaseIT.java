@@ -10,7 +10,6 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.Matchers.hasKey;
 
-import io.debezium.connector.postgresql.PostgresConnector;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -18,6 +17,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import io.debezium.connector.postgresql.Module;
+import io.debezium.connector.postgresql.PostgresConnector;
 import io.debezium.testing.testcontainers.testhelper.RestExtensionTestInfrastructure;
 
 public class DebeziumPostgresConnectorResourceNoDatabaseIT {

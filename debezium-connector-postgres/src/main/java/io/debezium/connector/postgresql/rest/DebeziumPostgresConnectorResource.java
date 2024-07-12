@@ -16,11 +16,11 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 
-import io.debezium.connector.postgresql.PostgresConnector;
 import org.apache.kafka.connect.health.ConnectClusterState;
 
 import io.debezium.config.Configuration;
 import io.debezium.connector.postgresql.Module;
+import io.debezium.connector.postgresql.PostgresConnector;
 import io.debezium.rest.ConnectionValidationResource;
 import io.debezium.rest.FilterValidationResource;
 import io.debezium.rest.MetricsResource;

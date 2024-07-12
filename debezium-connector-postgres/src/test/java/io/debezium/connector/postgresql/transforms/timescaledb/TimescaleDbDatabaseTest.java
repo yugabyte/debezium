@@ -9,7 +9,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.sql.SQLException;
 
-import io.debezium.connector.postgresql.PostgresConnector;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -20,6 +19,7 @@ import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.lifecycle.Startables;
 
 import io.debezium.config.Configuration;
+import io.debezium.connector.postgresql.PostgresConnector;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresConnectorConfig.SnapshotMode;
 import io.debezium.connector.postgresql.TestHelper;
