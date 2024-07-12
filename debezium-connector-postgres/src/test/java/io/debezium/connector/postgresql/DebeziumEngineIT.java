@@ -82,7 +82,7 @@ public class DebeziumEngineIT {
         final Properties props = new Properties();
         props.putAll(TestHelper.defaultConfig().build().asMap());
         props.setProperty("name", "debezium-engine");
-        props.setProperty("connector.class", "io.debezium.connector.postgresql.PostgresConnector");
+        props.setProperty("connector.class", "io.debezium.connector.postgresql.YugabyteDBConnector");
         props.setProperty(StandaloneConfig.OFFSET_STORAGE_FILE_FILENAME_CONFIG,
                 OFFSET_STORE_PATH.toAbsolutePath().toString());
         props.setProperty("offset.flush.interval.ms", "0");
@@ -133,7 +133,7 @@ public class DebeziumEngineIT {
         final Properties props = new Properties();
         props.putAll(TestHelper.defaultConfig().build().asMap());
         props.setProperty("name", "debezium-engine");
-        props.setProperty("connector.class", "io.debezium.connector.postgresql.PostgresConnector");
+        props.setProperty("connector.class", "io.debezium.connector.postgresql.YugabyteDBConnector");
         props.setProperty(StandaloneConfig.OFFSET_STORAGE_FILE_FILENAME_CONFIG,
                 OFFSET_STORE_PATH.toAbsolutePath().toString());
         props.setProperty("offset.flush.interval.ms", "0");
@@ -173,7 +173,7 @@ public class DebeziumEngineIT {
         final Properties props = new Properties();
         props.putAll(TestHelper.defaultConfig().build().asMap());
         props.setProperty("name", "debezium-engine");
-        props.setProperty("connector.class", "io.debezium.connector.postgresql.PostgresConnector");
+        props.setProperty("connector.class", "io.debezium.connector.postgresql.YugabyteDBConnector");
         props.setProperty(StandaloneConfig.OFFSET_STORAGE_FILE_FILENAME_CONFIG,
                 OFFSET_STORE_PATH.toAbsolutePath().toString());
         props.setProperty("offset.flush.interval.ms", "0");
@@ -252,7 +252,7 @@ public class DebeziumEngineIT {
         final Properties props = new Properties();
         props.putAll(TestHelper.defaultConfig().build().asMap());
         props.setProperty("name", "debezium-engine");
-        props.setProperty("connector.class", "io.debezium.connector.postgresql.PostgresConnector");
+        props.setProperty("connector.class", "io.debezium.connector.postgresql.YugabyteDBConnector");
         props.setProperty(StandaloneConfig.OFFSET_STORAGE_FILE_FILENAME_CONFIG,
                 OFFSET_STORE_PATH.toAbsolutePath().toString());
         props.setProperty("offset.flush.interval.ms", "3000");
