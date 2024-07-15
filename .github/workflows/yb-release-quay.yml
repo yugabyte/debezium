@@ -1,4 +1,4 @@
-name: YugabyteDB PG parity sanity
+name: Publish YugabyteDBConnector image to Quay
 
 on:
   workflow_dispatch:
