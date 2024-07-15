@@ -36,6 +36,6 @@ jobs:
           username: ${{ secrets.QUAY_BOT_USERNAME }}
           password: ${{ secrets.QUAY_BOT_TOKEN }}
       - name: Build docker image
-        run: docker build . -t ${{ inputs.version }} --platform linux/amd64
+        run: docker build . -t quay.io/yugabyte/ybdb-debezium:${{ inputs.version }} --platform linux/amd64
       - name: Push image to Quay
         run: docker push ${{ inputs.version }}
