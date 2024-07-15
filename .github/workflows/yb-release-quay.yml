@@ -56,8 +56,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./debezium-connector-postgresql/target/debezium-connector-postgres-*jar-with-dependencies.jar
-          asset_name: debezium-connector-postgresql-${{ inputs.version }}-jar-with-dependencies.jar
+          asset_path: ./debezium-connector-postgres/target/debezium-connector-postgres-*jar-with-dependencies.jar
+          asset_name: debezium-connector-postgres-${{ inputs.version }}-jar-with-dependencies.jar
           asset_content_type: application/java-archive
     #   Commenting the code to upload a light jar for the time being.
     #   - name: Upload fat jar to GitHub release
