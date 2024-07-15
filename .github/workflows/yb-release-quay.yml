@@ -38,4 +38,4 @@ jobs:
       - name: Build docker image
         run: docker build . -t quay.io/yugabyte/ybdb-debezium:${{ inputs.version }} --platform linux/amd64
       - name: Push image to Quay
-        run: docker push ${{ inputs.version }}
+        run: docker push quay.io/yugabyte/ybdb-debezium:${{ inputs.version }}
