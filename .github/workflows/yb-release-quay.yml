@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       isSnapshotBuild:
-        description: "Whether this release be treated as a snapshot build"
+        description: "Consider this build as a snapshot build"
         required: true
         type: boolean
         default: true
