@@ -13,9 +13,11 @@ on:
         type: boolean
         default: true
 
+permissions: write-all
+
 jobs:
   build:
-    name: "Build PG connector"
+    name: "Publish YugabyteDBConnector"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Action
