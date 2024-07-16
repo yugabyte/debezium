@@ -39,8 +39,8 @@ jobs:
           password: ${{ secrets.QUAY_BOT_TOKEN }}
       - name: Build docker image
         run: docker build . -t quay.io/yugabyte/ybdb-debezium:${{ inputs.version }} --platform linux/amd64
-    #   - name: Push image to Quay
-    #     run: docker push quay.io/yugabyte/ybdb-debezium:${{ inputs.version }}
+      - name: Push image to Quay
+        run: docker push quay.io/yugabyte/ybdb-debezium:${{ inputs.version }}
       - name: Create GitHub release
         id: create_release
         uses: actions/create-release@v1
