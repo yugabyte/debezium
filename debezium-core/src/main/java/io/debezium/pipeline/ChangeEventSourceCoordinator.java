@@ -245,7 +245,7 @@ public class ChangeEventSourceCoordinator<P extends Partition, O extends OffsetC
             streamingSource = null;
             commitOffsetLock.unlock();
         }
-        eventDispatcher.setEventListener(snapshotMetrics);
+        // eventDispatcher.setEventListener(snapshotMetrics);
 
         SnapshotResult<O> snapshotResult = snapshotSource.execute(context, partition, previousOffset, snapshottingTask);
         LOGGER.info("Snapshot ended with {}", snapshotResult);
