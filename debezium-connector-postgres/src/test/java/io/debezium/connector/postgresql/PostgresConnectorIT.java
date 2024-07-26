@@ -3045,6 +3045,31 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
+    public void shouldOnlyMarkColumnsAsRequiredWithReplicaIdentityIsChange() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.execute("CREATE TABLE s1.test_table (id INT PRIMARY KEY, name TEXT NOT NULL, age INT);");
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+          .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+          .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.test_table");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+
+        TestHelper.execute("INSERT INTO s1.test_table VALUES (1, 'Vaibhav', 25);");
+        TestHelper.execute("UPDATE s1.test_table SET age = 30 WHERE id = 1;");
+
+        SourceRecords actualRecords = consumeRecordsByTopic(2);
+        List<SourceRecord> records = actualRecords.allRecordsInOrder();
+        assertThat(records.size()).isEqualTo(2);
+
+        YBVerifyRecord.isValidInsert(records.get(0), "id", 1);
+        YBVerifyRecord.isValidUpdate(records.get(1), "id", 1);
+    }
+
+    @Test
     @FixFor("DBZ-5811")
     public void shouldNotAckLsnOnSource() throws Exception {
         TestHelper.dropDefaultReplicationSlot();
