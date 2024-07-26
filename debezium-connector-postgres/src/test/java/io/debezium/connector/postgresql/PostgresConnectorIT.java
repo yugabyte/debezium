@@ -3045,10 +3045,30 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
-    public void shouldOnlyMarkColumnsAsRequiredWithReplicaIdentityIsChange() throws Exception {
+    public void streamColumnsWithNotNullConstraintsForReplicaIdentityChange() throws Exception {
+        testStreamColumnsWithNotNullConstraints(ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
+    }
+
+    @Test
+    public void streamColumnsWithNotNullConstraintsForReplicaIdentityFull() throws Exception {
+        testStreamColumnsWithNotNullConstraints(ReplicaIdentityInfo.ReplicaIdentity.FULL);
+    }
+
+    @Test
+    public void streamColumnsWithNotNullConstraintsForReplicaIdentityDefault() throws Exception {
+        testStreamColumnsWithNotNullConstraints(ReplicaIdentityInfo.ReplicaIdentity.DEFAULT);
+    }
+
+    public void testStreamColumnsWithNotNullConstraints(
+      ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) throws Exception {
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.execute(CREATE_TABLES_STMT);
         TestHelper.execute("CREATE TABLE s1.test_table (id INT PRIMARY KEY, name TEXT NOT NULL, age INT);");
+
+        if (replicaIdentity != ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+            final String replicaIdentityName = replicaIdentity.name();
+            TestHelper.execute("ALTER TABLE s1.test_table REPLICA IDENTITY " + replicaIdentityName + ";");
+        }
 
         final Configuration.Builder configBuilder = TestHelper.defaultConfig()
           .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
@@ -3067,6 +3087,14 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         YBVerifyRecord.isValidInsert(records.get(0), "id", 1);
         YBVerifyRecord.isValidUpdate(records.get(1), "id", 1);
+
+        // Also verify that the update record does/doesn't contain the non-updated column depending
+        // on replica identity.
+        if (replicaIdentity.equals(ReplicaIdentityInfo.ReplicaIdentity.CHANGE)) {
+            assertValueField(records.get(1), "after/name", null);
+        } else {
+            assertValueField(records.get(1), "after/name/value", "Vaibhav");
+        }
     }
 
     @Test
