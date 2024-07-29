@@ -58,7 +58,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./debezium-connector-postgres/target/debezium-connector-postgres-dz.2.5.2.yb.2024.1-SNAPSHOT-jar-with-dependencies.jar
+          asset_path: ./debezium-connector-postgres/target/debezium-connector-yugabytedb-dz.2.5.2.yb.2024.1-SNAPSHOT-jar-with-dependencies.jar
           asset_name: debezium-connector-postgres-${{ inputs.version }}-jar-with-dependencies.jar
           asset_content_type: application/java-archive
     #   Commenting the code to upload a light jar for the time being.
