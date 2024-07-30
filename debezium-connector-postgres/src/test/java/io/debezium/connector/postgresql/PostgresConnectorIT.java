@@ -2934,6 +2934,52 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
+    public void testTableWithCompositePrimaryKey() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.execute("CREATE TABLE s1.test_composite_pk (id INT, text_col TEXT, first_name VARCHAR(60), age INT, PRIMARY KEY(id, text_col));");
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+          .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+          .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.test_composite_pk");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+
+        TestHelper.execute("INSERT INTO s1.test_composite_pk VALUES (1, 'ffff-ffff', 'Vaibhav', 25);");
+        TestHelper.execute("UPDATE s1.test_composite_pk SET first_name='Vaibhav K' WHERE id = 1 AND text_col='ffff-ffff';");
+        TestHelper.execute("DELETE FROM s1.test_composite_pk;");
+
+        SourceRecords actualRecords = consumeRecordsByTopic(4 /* 1 + 1 + 1 + tombstone */);
+        List<SourceRecord> records = actualRecords.allRecordsInOrder();
+
+        assertThat(records.size()).isEqualTo(4);
+
+        // Assert insert record.
+        assertValueField(records.get(0), "after/id/value", 1);
+        assertValueField(records.get(0), "after/text_col/value", "ffff-ffff");
+        assertValueField(records.get(0), "after/first_name/value", "Vaibhav");
+        assertValueField(records.get(0), "after/age/value", 25);
+
+        // Assert update record.
+        assertValueField(records.get(1), "after/id/value", 1);
+        assertValueField(records.get(1), "after/text_col/value", "ffff-ffff");
+        assertValueField(records.get(1), "after/first_name/value", "Vaibhav K");
+        assertValueField(records.get(1), "after/age", null);
+
+        // Assert delete record.
+        assertValueField(records.get(2), "before/id/value", 1);
+        assertValueField(records.get(2), "before/text_col/value", "ffff-ffff");
+        assertValueField(records.get(2), "before/first_name/value", null);
+        assertValueField(records.get(2), "before/age/value", null);
+        assertValueField(records.get(2), "after", null);
+
+        // Validate tombstone record.
+        assertTombstone(records.get(3));
+    }
+
+    @Test
     public void shouldNotSkipMessagesWithoutChangeWithReplicaIdentityChange() throws Exception {
         testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
     }
