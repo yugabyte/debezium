@@ -293,6 +293,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
                   result.put(fields[i], null);
                 }
               } else {
+                value = converter.convert(value);
                 result.put(fields[i], value);
               }
             }
