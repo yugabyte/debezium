@@ -13,13 +13,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
-import io.debezium.data.Envelope;
-import io.debezium.heartbeat.Heartbeat;
-import io.debezium.heartbeat.HeartbeatConnectionProvider;
-import io.debezium.heartbeat.HeartbeatErrorHandler;
-import io.debezium.jdbc.JdbcConnection;
-import io.debezium.schema.SchemaNameAdjuster;
-import io.debezium.spi.topic.TopicNamingStrategy;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
@@ -47,11 +40,18 @@ import io.debezium.connector.postgresql.snapshot.InitialOnlySnapshotter;
 import io.debezium.connector.postgresql.snapshot.InitialSnapshotter;
 import io.debezium.connector.postgresql.snapshot.NeverSnapshotter;
 import io.debezium.connector.postgresql.spi.Snapshotter;
+import io.debezium.data.Envelope;
+import io.debezium.heartbeat.Heartbeat;
+import io.debezium.heartbeat.HeartbeatConnectionProvider;
+import io.debezium.heartbeat.HeartbeatErrorHandler;
 import io.debezium.jdbc.JdbcConfiguration;
+import io.debezium.jdbc.JdbcConnection;
 import io.debezium.relational.ColumnFilterMode;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.TableId;
 import io.debezium.relational.Tables.TableFilter;
+import io.debezium.schema.SchemaNameAdjuster;
+import io.debezium.spi.topic.TopicNamingStrategy;
 import io.debezium.util.Strings;
 
 /**
@@ -295,11 +295,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         ALLOW("allow"),
 
         /**
-        * Establish a secure connection first.
-        * Establish an unencrypted connection next if a secure connection cannot be established
-        *
-        * see the {@code sslmode} Postgres JDBC driver option
-        */
+         * Establish a secure connection first.
+         * Establish an unencrypted connection next if a secure connection cannot be established
+         *
+         * see the {@code sslmode} Postgres JDBC driver option
+         */
         PREFER("prefer"),
 
         /**
@@ -608,7 +608,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withDefault(true)
             .withImportance(Importance.LOW)
             .withDescription("Whether or not to take a consistent snapshot of the tables." +
-                           "Disabling this option may result in duplication of some already snapshot data in the streaming phase.");
+                    "Disabling this option may result in duplication of some already snapshot data in the streaming phase.");
 
     public enum AutoCreateMode implements EnumeratedValue {
         /**
@@ -1217,10 +1217,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
      */
     public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName) {
         return hostName.contains(":")
-                 ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
-                    PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
-                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, com.yugabyte.Driver.class.getName(),
-                    PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
+                ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                        PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
+                : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                        PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
     }
 
     protected static int validateReplicaAutoSetField(Configuration config, Field field, Field.ValidationOutput problems) {
@@ -1281,7 +1281,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
             return new YBHeartbeatImpl(getHeartbeatInterval(), topicNamingStrategy.heartbeatTopic(),
                     getLogicalName(), schemaNameAdjuster);
-        } else {
+        }
+        else {
             return super.createHeartbeat(topicNamingStrategy, schemaNameAdjuster, connectionProvider, errorHandler);
         }
     }
@@ -1313,13 +1314,13 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             }
 
             if (!YB_HOSTNAME_PATTERN.asPredicate().test(hostName)) {
-                problems.accept(field, hostName, hostName + " has invalid format (only the underscore, hyphen, dot, comma, colon and alphanumeric characters are allowed)");
+                problems.accept(field, hostName,
+                        hostName + " has invalid format (only the underscore, hyphen, dot, comma, colon and alphanumeric characters are allowed)");
                 ++problemCount;
             }
         }
 
         return problemCount;
     }
-
 
 }

@@ -1,10 +1,14 @@
+/*
+ * Copyright Debezium Authors.
+ *
+ * Licensed under the Apache Software License version 2.0, available at http://www.apache.org/licenses/LICENSE-2.0
+ */
+
 package io.debezium.connector.postgresql;
 
-import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import io.debezium.data.Envelope;
 import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.relational.RelationalChangeRecordEmitter;
-import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.util.Clock;
 
 /**
@@ -14,39 +18,40 @@ import io.debezium.util.Clock;
  * @author Vaibhav Kushwaha (vkushwaha@yugabyte.com)
  */
 public class YBSnapshotChangeRecordEmitter<P extends PostgresPartition> extends RelationalChangeRecordEmitter<P> {
-  private final Object[] row;
-  private final PostgresConnectorConfig connectorConfig;
+    private final Object[] row;
+    private final PostgresConnectorConfig connectorConfig;
 
-  public YBSnapshotChangeRecordEmitter(P partition, OffsetContext offset, Object[] row, Clock clock,
-                                       PostgresConnectorConfig connectorConfig) {
-    super(partition, offset, clock, connectorConfig);
+    public YBSnapshotChangeRecordEmitter(P partition, OffsetContext offset, Object[] row, Clock clock,
+                                         PostgresConnectorConfig connectorConfig) {
+        super(partition, offset, clock, connectorConfig);
 
-    this.row = row;
-    this.connectorConfig = connectorConfig;
-  }
-
-  @Override
-  public Envelope.Operation getOperation() {
-    return Envelope.Operation.READ;
-  }
-
-  @Override
-  protected Object[] getOldColumnValues() {
-    throw new UnsupportedOperationException("Can't get old row values for READ record");
-  }
-
-  @Override
-  protected Object[] getNewColumnValues() {
-    Object[] values = new Object[row.length];
-
-    for (int position = 0; position < values.length; ++position) {
-      if (connectorConfig.plugin().isYBOutput()) {
-        values[position] = new Object[]{row[position], Boolean.TRUE};
-      } else {
-        values[position] = row[position];
-      }
+        this.row = row;
+        this.connectorConfig = connectorConfig;
     }
 
-    return values;
-  }
+    @Override
+    public Envelope.Operation getOperation() {
+        return Envelope.Operation.READ;
+    }
+
+    @Override
+    protected Object[] getOldColumnValues() {
+        throw new UnsupportedOperationException("Can't get old row values for READ record");
+    }
+
+    @Override
+    protected Object[] getNewColumnValues() {
+        Object[] values = new Object[row.length];
+
+        for (int position = 0; position < values.length; ++position) {
+            if (connectorConfig.plugin().isYBOutput()) {
+                values[position] = new Object[]{ row[position], Boolean.TRUE };
+            }
+            else {
+                values[position] = row[position];
+            }
+        }
+
+        return values;
+    }
 }

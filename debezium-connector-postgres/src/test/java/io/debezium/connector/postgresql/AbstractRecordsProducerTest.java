@@ -54,9 +54,10 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
 import org.junit.Rule;
 import org.junit.rules.TestRule;
-import com.yugabyte.jdbc.PgStatement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.jdbc.PgStatement;
 
 import io.debezium.connector.SnapshotRecord;
 import io.debezium.connector.postgresql.data.Ltree;

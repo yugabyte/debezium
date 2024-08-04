@@ -14,7 +14,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,6 +29,7 @@ import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.notification.NotificationService;
 import io.debezium.pipeline.source.SnapshottingTask;
 import io.debezium.pipeline.source.spi.SnapshotProgressListener;
+import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import io.debezium.relational.RelationalSnapshotChangeEventSource;
 import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
@@ -92,14 +92,15 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
 
     @Override
     protected ChangeRecordEmitter<PostgresPartition> getChangeRecordEmitter(
-      PostgresPartition partition, PostgresOffsetContext offset, TableId tableId, Object[] row,
-      Instant timestamp) {
+                                                                            PostgresPartition partition, PostgresOffsetContext offset, TableId tableId, Object[] row,
+                                                                            Instant timestamp) {
         if (YugabyteDBServer.isEnabled() && connectorConfig.plugin().isYBOutput()) {
             offset.event(tableId, timestamp);
 
             return new YBSnapshotChangeRecordEmitter<>(partition, offset, row, getClock(),
-              connectorConfig);
-        } else {
+                    connectorConfig);
+        }
+        else {
             return super.getChangeRecordEmitter(partition, offset, tableId, row, timestamp);
         }
     }
@@ -110,9 +111,9 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         if (YugabyteDBServer.isEnabled()) {
             // In case of YB, the consistent snapshot is performed as follows -
             // 1) If connector created the slot, then the snapshotName returned as part of the CREATE_REPLICATION_SLOT
-            //    command will have the hybrid time as of which the snapshot query is to be run
+            // command will have the hybrid time as of which the snapshot query is to be run
             // 2) If slot already exists, then the snapshot query will be run as of the hybrid time corresponding to the
-            //    restart_lsn. This information is available in the pg_replication_slots view
+            // restart_lsn. This information is available in the pg_replication_slots view
             // In either case, the setSnapshotTransactionIsolationLevel function needs to be called so that the preparatory
             // commands can be run on the snapshot connection so that the snapshot query can be run as of the appropriate
             // hybrid time
@@ -290,7 +291,8 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             String transactionStatement = snapshotter.snapshotTransactionIsolationLevelStatement(slotCreatedInfo, isOnDemand);
             LOGGER.info("Opening transaction with statement {}", transactionStatement);
             jdbcConnection.executeWithoutCommitting(transactionStatement);
-        } else {
+        }
+        else {
             LOGGER.info("Skipping setting snapshot time, snapshot data will not be consistent");
         }
     }

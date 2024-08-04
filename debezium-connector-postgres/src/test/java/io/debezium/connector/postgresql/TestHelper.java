@@ -26,13 +26,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import io.debezium.heartbeat.Heartbeat;
-import io.debezium.junit.logging.LogInterceptor;
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
-import com.yugabyte.jdbc.PgConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.jdbc.PgConnection;
 
 import io.debezium.config.CommonConnectorConfig;
 import io.debezium.config.Configuration;
@@ -42,7 +41,9 @@ import io.debezium.connector.postgresql.connection.PostgresConnection.PostgresVa
 import io.debezium.connector.postgresql.connection.PostgresDefaultValueConverter;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.connector.postgresql.spi.SlotState;
+import io.debezium.heartbeat.Heartbeat;
 import io.debezium.jdbc.JdbcConfiguration;
+import io.debezium.junit.logging.LogInterceptor;
 import io.debezium.schema.SchemaTopicNamingStrategy;
 import io.debezium.spi.topic.TopicNamingStrategy;
 import io.debezium.util.Throwables;

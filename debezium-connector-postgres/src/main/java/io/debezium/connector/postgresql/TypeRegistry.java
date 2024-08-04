@@ -19,11 +19,12 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.yugabyte.core.BaseConnection;
 import com.yugabyte.core.TypeInfo;
 import com.yugabyte.jdbc.PgDatabaseMetaData;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
 import io.debezium.annotation.Immutable;
@@ -273,9 +274,9 @@ public class TypeRegistry {
     }
 
     /**
-    *
-    * @return OID for array of {@code HSTORE} type of this PostgreSQL instance
-    */
+     *
+     * @return OID for array of {@code HSTORE} type of this PostgreSQL instance
+     */
     public int hstoreArrayOid() {
         return hstoreArrayOid;
     }

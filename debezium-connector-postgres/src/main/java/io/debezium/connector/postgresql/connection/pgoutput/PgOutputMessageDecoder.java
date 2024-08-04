@@ -26,22 +26,23 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
-import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
-import io.debezium.connector.postgresql.YugabyteDBServer;
-import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
 
 import io.debezium.connector.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.postgresql.PostgresType;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.UnchangedToastedReplicationMessageColumn;
+import io.debezium.connector.postgresql.YugabyteDBServer;
 import io.debezium.connector.postgresql.connection.AbstractMessageDecoder;
 import io.debezium.connector.postgresql.connection.AbstractReplicationMessageColumn;
 import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.MessageDecoderContext;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Column;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.NoopMessage;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Operation;
@@ -369,7 +370,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         Table table = resolveRelationFromMetadata(new PgOutputRelationMetaData(relationId, schemaName, tableName, columns, primaryKeyColumns));
         if (YugabyteDBServer.isEnabled()) {
             decoderContext.getSchema().applySchemaChangesForTableWithReplicaIdentity(relationId, table, replicaIdentityId);
-        } else {
+        }
+        else {
             decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
         }
     }
@@ -379,8 +381,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
      * @return true if the replica identity is change, false otherwise.
      */
     private boolean isReplicaIdentityChange(int replicaIdentityId) {
-        return ReplicaIdentityInfo.ReplicaIdentity.CHANGE
-                 == ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId));
+        return ReplicaIdentityInfo.ReplicaIdentity.CHANGE == ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId));
     }
 
     private List<io.debezium.relational.Column> getTableColumnsFromDatabase(PostgresConnection connection, DatabaseMetaData databaseMetadata, TableId tableId)

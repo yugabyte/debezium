@@ -12,9 +12,10 @@ import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import com.yugabyte.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.core.BaseConnection;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
@@ -143,8 +144,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             // twice - the wal position locator is searching for a wal position
             if (YugabyteDBServer.isEnabled()) {
                 LOGGER.info("PID for replication connection: {} on node {}",
-                  replicationConnection.getBackendPid(),
-                  replicationConnection.getConnectedNodeIp());
+                        replicationConnection.getBackendPid(),
+                        replicationConnection.getConnectedNodeIp());
             }
 
             if (hasStartLsnStoredInContext) {
@@ -185,7 +186,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                         if (!isInPreSnapshotCatchUpStreaming(this.effectiveOffset)) {
                             connection.commit();
                         }
-                    } catch (Exception e) {
+                    }
+                    catch (Exception e) {
                         LOGGER.info("Commit failed while preparing for reconnect", e);
                     }
                     walPosition.enableFiltering();
@@ -202,7 +204,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     stream = this.replicationStream.get();
                     stream.startKeepAlive(Threads.newSingleThreadExecutor(YugabyteDBConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
                 }
-            } else {
+            }
+            else {
                 LOGGER.info("Connector config provide.transaction.metadata is set to true. Therefore, skip records filtering in order to ship entire transactions.");
             }
 
@@ -288,9 +291,10 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         // Tx BEGIN/END event
         if (message.isTransactionalMessage()) {
-            if(message.getOperation() == Operation.BEGIN) {
+            if (message.getOperation() == Operation.BEGIN) {
                 LOGGER.debug("Processing BEGIN with end LSN {} and txnid {}", lsn, message.getTransactionId());
-            } else {
+            }
+            else {
                 LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
             }
 
