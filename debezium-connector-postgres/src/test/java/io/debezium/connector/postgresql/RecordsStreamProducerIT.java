@@ -61,6 +61,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
+
 import com.yugabyte.util.PSQLException;
 
 import io.debezium.config.CommonConnectorConfig;

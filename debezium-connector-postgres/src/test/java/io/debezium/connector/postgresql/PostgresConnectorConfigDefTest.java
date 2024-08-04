@@ -70,7 +70,7 @@ public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest
                 .with(PostgresConnectorConfig.HOSTNAME, "*invalidCharacter");
 
         int problemCount = PostgresConnectorConfig.validateYBHostname(
-          configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
+                configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
 
         assertThat((problemCount == 1)).isTrue();
     }
@@ -81,7 +81,7 @@ public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest
                 .with(PostgresConnectorConfig.HOSTNAME, "127.0.0.1,127.0.0.2,127.0.0.3");
 
         int problemCount = PostgresConnectorConfig.validateYBHostname(
-          configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
+                configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
 
         assertThat((problemCount == 1)).isTrue();
     }
@@ -92,7 +92,7 @@ public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest
                 .with(PostgresConnectorConfig.HOSTNAME, "127.0.0.1,127.0.0.2,127.0.0.3+");
 
         int problemCount = PostgresConnectorConfig.validateYBHostname(
-          configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
+                configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
 
         assertThat((problemCount == 2)).isTrue();
     }
@@ -102,7 +102,7 @@ public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest
                 .with(PostgresConnectorConfig.HOSTNAME, multiNode ? "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433" : "127.0.0.1");
 
         int problemCount = PostgresConnectorConfig.validateYBHostname(
-          configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
+                configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
 
         assertThat((problemCount == 0)).isTrue();
     }

@@ -247,7 +247,7 @@ public class PostgresSchema extends RelationalDatabaseSchema {
         applySchemaChangesForTable(relationId, table);
 
         tableIdToReplicaIdentity.put(table.id(),
-          ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId)));
+                ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId)));
 
         LOGGER.info("Replica identity being stored for table {} is {}", table.id(), getReplicaIdentity(table.id()));
     }

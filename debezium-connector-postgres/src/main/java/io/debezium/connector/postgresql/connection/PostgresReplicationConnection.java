@@ -28,14 +28,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.yugabyte.core.BaseConnection;
 import com.yugabyte.core.ServerVersion;
 import com.yugabyte.replication.PGReplicationStream;
 import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
 import com.yugabyte.util.PSQLException;
 import com.yugabyte.util.PSQLState;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
@@ -549,7 +550,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             if (rs.next()) {
                 return rs.getString("backend_pid");
             }
-        } catch (SQLException sqle) {
+        }
+        catch (SQLException sqle) {
             LOGGER.warn("Unable to get the backend PID", sqle);
         }
 
@@ -563,7 +565,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             if (rs.next()) {
                 return rs.getString("connected_to_host");
             }
-        } catch (SQLException sqle) {
+        }
+        catch (SQLException sqle) {
             LOGGER.warn("Unable to get the connected host node", sqle);
         }
 

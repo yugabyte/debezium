@@ -33,7 +33,7 @@ public @interface SkipWhenDecoderPluginNameIsNot {
         },
         PGOUTPUT {
             @Override
-            boolean isNotEqualTo(String pluginName) {;
+            boolean isNotEqualTo(String pluginName) {
                 // YB Note: Making a change here so that the tests verifying the pgoutput
                 return !pluginName.equals("yboutput") || !pluginName.equals("pgoutput");
             }

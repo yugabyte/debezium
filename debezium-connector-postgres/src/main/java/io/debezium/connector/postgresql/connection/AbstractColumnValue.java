@@ -14,6 +14,9 @@ import java.time.OffsetTime;
 import java.time.ZoneOffset;
 
 import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.yugabyte.geometric.PGbox;
 import com.yugabyte.geometric.PGcircle;
 import com.yugabyte.geometric.PGline;
@@ -24,8 +27,6 @@ import com.yugabyte.geometric.PGpolygon;
 import com.yugabyte.jdbc.PgArray;
 import com.yugabyte.util.PGInterval;
 import com.yugabyte.util.PGtokenizer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import io.debezium.connector.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.postgresql.PostgresType;

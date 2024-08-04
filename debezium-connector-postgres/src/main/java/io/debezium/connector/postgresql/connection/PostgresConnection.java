@@ -22,14 +22,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
 import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.yugabyte.core.BaseConnection;
-import com.yugabyte.jdbc.PgConnection;
 import com.yugabyte.jdbc.TimestampUtils;
 import com.yugabyte.replication.LogSequenceNumber;
 import com.yugabyte.util.PGmoney;
 import com.yugabyte.util.PSQLState;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
 import io.debezium.annotation.VisibleForTesting;
@@ -175,7 +175,8 @@ public class PostgresConnection extends JdbcConnection {
         String hostName = jdbcConfig.getHostname();
         if (hostName.contains(":")) {
             return connectionString(MULTI_HOST_URL_PATTERN);
-        } else {
+        }
+        else {
             return connectionString(URL_PATTERN);
         }
     }

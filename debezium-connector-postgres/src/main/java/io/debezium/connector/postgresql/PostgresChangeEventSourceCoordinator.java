@@ -10,18 +10,14 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.debezium.connector.common.CdcSourceTaskContext;
-import io.debezium.connector.postgresql.spi.OffsetState;
-import io.debezium.pipeline.spi.SnapshotResult;
-import io.debezium.util.Clock;
-import io.debezium.util.LoggingContext;
-import io.debezium.util.Metronome;
 import org.apache.kafka.connect.source.SourceConnector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
 import io.debezium.config.CommonConnectorConfig;
+import io.debezium.connector.common.CdcSourceTaskContext;
+import io.debezium.connector.postgresql.spi.OffsetState;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.connector.postgresql.spi.Snapshotter;
 import io.debezium.pipeline.ChangeEventSourceCoordinator;
@@ -34,7 +30,11 @@ import io.debezium.pipeline.source.spi.ChangeEventSource;
 import io.debezium.pipeline.source.spi.ChangeEventSource.ChangeEventSourceContext;
 import io.debezium.pipeline.source.spi.SnapshotChangeEventSource;
 import io.debezium.pipeline.spi.Offsets;
+import io.debezium.pipeline.spi.SnapshotResult;
 import io.debezium.schema.DatabaseSchema;
+import io.debezium.util.Clock;
+import io.debezium.util.LoggingContext;
+import io.debezium.util.Metronome;
 
 /**
  * Coordinates one or more {@link ChangeEventSource}s and executes them in order. Extends the base
@@ -67,7 +67,8 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
     }
 
     @Override
-    protected void executeChangeEventSources(CdcSourceTaskContext taskContext, SnapshotChangeEventSource<PostgresPartition, PostgresOffsetContext> snapshotSource, Offsets<PostgresPartition, PostgresOffsetContext> previousOffsets,
+    protected void executeChangeEventSources(CdcSourceTaskContext taskContext, SnapshotChangeEventSource<PostgresPartition, PostgresOffsetContext> snapshotSource,
+                                             Offsets<PostgresPartition, PostgresOffsetContext> previousOffsets,
                                              AtomicReference<LoggingContext.PreviousContext> previousLogContext, ChangeEventSourceContext context)
             throws InterruptedException {
         final PostgresPartition partition = previousOffsets.getTheOnlyPartition();
@@ -81,7 +82,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
         LOGGER.debug("Snapshot result {}", snapshotResult);
 
         if (context.isRunning() && snapshotResult.isCompletedOrSkipped()) {
-            if(YugabyteDBServer.isEnabled() && !isSnapshotSkipped(snapshotResult)) {
+            if (YugabyteDBServer.isEnabled() && !isSnapshotSkipped(snapshotResult)) {
                 LOGGER.info("Will wait for snapshot completion before transitioning to streaming");
                 waitForSnapshotCompletion = true;
                 while (waitForSnapshotCompletion) {
@@ -139,7 +140,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
         if (YugabyteDBServer.isEnabled() && waitForSnapshotCompletion) {
             LOGGER.debug("Checking the offset value for snapshot completion");
             OffsetState offsetState = new PostgresOffsetContext.Loader((PostgresConnectorConfig) connectorConfig).load(offset).asOffsetState();
-            if(!offsetState.snapshotInEffect()) {
+            if (!offsetState.snapshotInEffect()) {
                 LOGGER.info("Offset conveys that snapshot has completed");
                 waitForSnapshotCompletion = false;
             }

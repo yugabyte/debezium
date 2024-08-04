@@ -9,7 +9,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.sql.SQLException;
 
-import io.debezium.connector.postgresql.YugabyteDBConnector;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -23,6 +22,7 @@ import io.debezium.config.Configuration;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresConnectorConfig.SnapshotMode;
 import io.debezium.connector.postgresql.TestHelper;
+import io.debezium.connector.postgresql.YugabyteDBConnector;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.embedded.AbstractConnectorTest;
 import io.debezium.testing.testcontainers.ImageNames;
