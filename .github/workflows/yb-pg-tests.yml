@@ -39,6 +39,14 @@ jobs:
           --tserver_flags="allowed_preview_flags_csv={cdcsdk_enable_dynamic_table_support},cdcsdk_enable_dynamic_table_support=true,ysql_cdc_active_replication_slot_window_ms=0,ysql_sequence_cache_method=server,cdcsdk_publication_list_refresh_interval_secs=3"
       - name: Checkout Action
         uses: actions/checkout@v4
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
       
       - name: Set up Java 17
         uses: actions/setup-java@v4
