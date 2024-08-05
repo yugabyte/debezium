@@ -195,7 +195,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
             if (connectorConfig.plugin().isYBOutput()) {
               value = converter.convert(((Object[]) value)[0]);
             } else {
-              value = converter.convert(value);
+              throw new DebeziumException("Class not supposed to be used with the plugin " + connectorConfig.plugin().getPostgresPluginName() + ", check configuration");
             }
             try {
               // YB Note: YugabyteDB specific code to incorporate the plugin name yboutput
@@ -207,7 +207,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
                   result.put(fields[i], cell);
                 }
               } else {
-                result.put(fields[i], value);
+                throw new DebeziumException("Class not supposed to be used with the plugin " + connectorConfig.plugin().getPostgresPluginName() + ", check configuration");
               }
             }
             catch (DataException e) {
@@ -293,8 +293,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
                   result.put(fields[i], null);
                 }
               } else {
-                value = converter.convert(value);
-                result.put(fields[i], value);
+                throw new DebeziumException("Class not supposed to be used with the plugin " + connectorConfig.plugin().getPostgresPluginName() + ", check configuration");
               }
             }
             catch (DataException | IllegalArgumentException e) {
@@ -433,7 +432,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
         Schema optionalCellSchema = cellSchema(fieldNamer.fieldNameFor(column), fieldBuilder.build(), column.isOptional());
         builder.field(fieldNamer.fieldNameFor(column), optionalCellSchema);
       } else {
-        builder.field(fieldNamer.fieldNameFor(column), fieldBuilder.build());
+        throw new DebeziumException("Class not supposed to be used with the plugin " + connectorConfig.plugin().getPostgresPluginName() + ", check configuration");
       }
 
       if (LOGGER.isDebugEnabled()) {
