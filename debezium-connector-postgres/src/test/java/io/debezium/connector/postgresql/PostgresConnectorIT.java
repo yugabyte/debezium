@@ -2993,6 +2993,35 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
+    public void foreignKeyOnTheTableShouldNotCauseIssues() throws Exception {
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.execute("CREATE TABLE s1.department (dept_id INT PRIMARY KEY, dept_name TEXT);");
+        TestHelper.execute("CREATE TABLE s1.users (id SERIAL PRIMARY KEY, name TEXT, dept_id INT, FOREIGN KEY (dept_id) REFERENCES s1.department(dept_id));");
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, "slot_for_fk")
+                .with(PostgresConnectorConfig.PUBLICATION_NAME, "publication_for_fk")
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.users");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+
+        TestHelper.execute("INSERT INTO s1.department VALUES (11, 'Industrial equipments');");
+        TestHelper.execute("INSERT INTO s1.users VALUES (1, 'Vaibhav', 11);");
+
+        SourceRecords records = consumeRecordsByTopic(1);
+        assertThat(records.allRecordsInOrder().size()).isEqualTo(1);
+
+        SourceRecord record = records.allRecordsInOrder().get(0);
+        YBVerifyRecord.isValidInsert(record, "id", 1);
+        assertValueField(record, "after/id/value", 1);
+        assertValueField(record, "after/name/value", "Vaibhav");
+        assertValueField(record, "after/dept_id/value", 11);
+    }
+
+    @Test
     public void shouldNotSkipMessagesWithoutChangeWithReplicaIdentityChange() throws Exception {
         testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
     }
