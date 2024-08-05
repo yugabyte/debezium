@@ -59,68 +59,70 @@ jobs:
 
       - name: Run SourceInfoTest
         id: sourceinfotest
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=SourceInfoTest
 
       - name: Run ReplicaIdentityTestMapperTest
         id: replicaidentitytestmappertest
-        if: ${{ failure() && steps.sourceinfotest.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=ReplicaIdentityTestMapperTest
 
       - name: Run PostgresSkipMessagesWithoutChangeConfigIT
         id: postgresskipmessageswithoutchangeconfigit
-        if: ${{ failure() && steps.replicaidentitytestmappertest.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresSkipMessagesWithoutChangeConfigIT
 
       - name: Run PostgresOffsetContextTest
         id: postgresoffsetcontexttest
-        if: ${{ failure() && steps.postgresskipmessageswithoutchangeconfigit.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresOffsetContextTest
 
       - name: Run PostgresMoneyIT
         id: postgresmoneyit
-        if: ${{ failure() && steps.postgresoffsetcontexttest.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresMoneyIT
 
       - name: Run PostgresConnectorConfigDefTest
         id: postgresconnectorconfigdeftest
-        if: ${{ failure() && steps.postgresmoneyit.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresConnectorConfigDefTest
 
       - name: Run PostgresErrorHandlerTest
         id: postgreserrorhandlertest
-        if: ${{ failure() && steps.postgreserrorhandlertest.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresErrorHandlerTest
 
       - name: Run FieldTest
         id: fieldtest
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=FieldTest
 
       - name: Run PostgresPartitionTest
         id: postgrespartitiontest
-        if: ${{ failure() && steps.fieldtest.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresPartitionTest
 
       - name: Run DebeziumEngineIT
         id: debeziumengineit
-        if: ${{ failure() && steps.postgrespartitiontest.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=DebeziumEngineIT
 
       - name: Run TransactionMetadataIT
         id: transactionmetadatait
-        if: ${{ failure() && steps.debeziumengineit.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=TransactionMetadataIT
       
       - name: Run YugabyteReplicaIdentityIT
         id: yugabytereplicaidentityit
-        if: ${{ failure() && steps.transactionmetadatait.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=YugabyteReplicaIdentityIT
 
       - name: Run YBRecordsStreamProducerIT
         id: ybrecordsstreamproducerit
-        if: ${{ failure() && steps.yugabytereplicaidentityit.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=YBRecordsStreamProducerIT
 
       - name: Run PostgresConnectorIT
         id: postgresconnectorit
-        if: ${{ failure() && steps.ybrecordsstreamproducerit.conclusion == 'failure' }}
+        if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresConnectorIT
