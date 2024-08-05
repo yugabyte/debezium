@@ -55,7 +55,7 @@ jobs:
           java-version: 17
       
       - name: Download dependencies
-        run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -am
+        run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -pl debezium-bom -am
       
       - name: Run YugabyteReplicaIdentityIT
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=YugabyteReplicaIdentityIT
