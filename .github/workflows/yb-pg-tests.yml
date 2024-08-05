@@ -55,7 +55,7 @@ jobs:
           java-version: 17
       
       - name: Download dependencies
-        run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -pl debezium-bom -pl support -am
+        run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -pl debezium-bom -pl support/ide-configs -am
 
       - name: Run SourceInfoTest
         id: sourceinfotest
