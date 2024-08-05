@@ -82,6 +82,11 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
     super(valueConverterProvider, defaultValueConverter, connectorConfig.schemaNameAdjuster(),
       connectorConfig.customConverterRegistry(), connectorConfig.getSourceInfoStructMaker().schema(),
       connectorConfig.getFieldNamer(), multiPartitionMode);
+
+    if (!connectorConfig.plugin().isYBOutput()) {
+      throw new DebeziumException("Class not supposed to be used with the plugin " + connectorConfig.plugin().getPostgresPluginName() + ", check configuration");
+    }
+
     this.schemaNameAdjuster = connectorConfig.schemaNameAdjuster();
     this.valueConverterProvider = valueConverterProvider;
     this.defaultValueConverter = Optional.ofNullable(defaultValueConverter)
@@ -195,7 +200,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
             if (connectorConfig.plugin().isYBOutput()) {
               value = converter.convert(((Object[]) value)[0]);
             } else {
-              throw new DebeziumException("Class not supposed to be used with the plugin " + connectorConfig.plugin().getPostgresPluginName() + ", check configuration");
+              value = converter.convert(value);
             }
             try {
               // YB Note: YugabyteDB specific code to incorporate the plugin name yboutput
@@ -207,7 +212,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
                   result.put(fields[i], cell);
                 }
               } else {
-                throw new DebeziumException("Class not supposed to be used with the plugin " + connectorConfig.plugin().getPostgresPluginName() + ", check configuration");
+                result.put(fields[i], value);
               }
             }
             catch (DataException e) {
@@ -293,7 +298,8 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
                   result.put(fields[i], null);
                 }
               } else {
-                throw new DebeziumException("Class not supposed to be used with the plugin " + connectorConfig.plugin().getPostgresPluginName() + ", check configuration");
+                value = converter.convert(value);
+                result.put(fields[i], value);
               }
             }
             catch (DataException | IllegalArgumentException e) {
@@ -432,7 +438,7 @@ public class PGTableSchemaBuilder extends TableSchemaBuilder {
         Schema optionalCellSchema = cellSchema(fieldNamer.fieldNameFor(column), fieldBuilder.build(), column.isOptional());
         builder.field(fieldNamer.fieldNameFor(column), optionalCellSchema);
       } else {
-        throw new DebeziumException("Class not supposed to be used with the plugin " + connectorConfig.plugin().getPostgresPluginName() + ", check configuration");
+        builder.field(fieldNamer.fieldNameFor(column), fieldBuilder.build());
       }
 
       if (LOGGER.isDebugEnabled()) {
