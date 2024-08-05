@@ -1,4 +1,4 @@
-name: Testing
+name: YugabyteDB connector tests
 
 on:
   push:
@@ -48,3 +48,6 @@ jobs:
       
       - name: Download dependencies
         run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -am
+      
+      - name: Run YugabyteReplicaIdentityIT
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=YugabyteReplicaIdentityIT
