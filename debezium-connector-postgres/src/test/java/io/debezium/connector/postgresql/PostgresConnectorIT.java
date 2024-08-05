@@ -2980,6 +2980,19 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
+    public void shouldNotWorkWithReplicaIdentityChangeAndPgOutput() throws Exception {
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.PLUGIN_NAME, LogicalDecoder.PGOUTPUT)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+
+        start(YugabyteDBConnector.class, configBuilder.build(), (success, message, error) -> {
+            assertFalse(success);
+        });
+    }
+
+    @Test
     public void shouldNotSkipMessagesWithoutChangeWithReplicaIdentityChange() throws Exception {
         testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
     }
