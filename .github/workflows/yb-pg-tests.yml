@@ -55,7 +55,46 @@ jobs:
           java-version: 17
       
       - name: Download dependencies
-        run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -pl debezium-bom -am
+        run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -pl debezium-bom -pl debezium-ide-configs -am
+
+      - name: Run SourceInfoTest
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=SourceInfoTest
+
+      - name: Run ReplicaIdentityTestMapperTest
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=ReplicaIdentityTestMapperTest
+
+      - name: Run PostgresSkipMessagesWithoutChangeConfigIT
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresSkipMessagesWithoutChangeConfigIT
+
+      - name: Run PostgresOffsetContextTest
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresOffsetContextTest
+
+      - name: Run PostgresMoneyITPostgresErrorHandlerTest
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresMoneyIT
+
+      - name: Run PostgresConnectorConfigDefTest
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresConnectorConfigDefTest
+
+      - name: Run PostgresErrorHandlerTest
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresErrorHandlerTest
+
+      - name: Run FieldTest
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=FieldTest
+
+      - name: Run PostgresPartitionTest
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresPartitionTest
+
+      - name: Run DebeziumEngineIT
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=DebeziumEngineIT
+
+      - name: Run TransactionMetadataIT
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=TransactionMetadataIT
       
       - name: Run YugabyteReplicaIdentityIT
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=YugabyteReplicaIdentityIT
+
+      - name: Run YBRecordsStreamProducerIT
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=YBRecordsStreamProducerIT
+
+      - name: Run PostgresConnectorIT
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -pl debezium-connector-postgres -Dtest=PostgresConnectorIT
