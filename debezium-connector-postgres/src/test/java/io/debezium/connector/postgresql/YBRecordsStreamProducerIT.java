@@ -672,8 +672,11 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         if (logicalDecoder == PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) {
             LOGGER.info("Changing replica identity of the table to default");
             TestHelper.execute("ALTER TABLE all_types REPLICA IDENTITY DEFAULT;");
+<<<<<<< HEAD
             TestHelper.execute("ALTER TABLE test_table REPLICA IDENTITY DEFAULT;");
             TestHelper.execute("ALTER TABLE table_with_interval REPLICA IDENTITY DEFAULT;");
+=======
+>>>>>>> ybdb-debezium-2.5.2
             TestHelper.waitFor(Duration.ofSeconds(10));
         }
 
@@ -1572,7 +1575,6 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
     }
 
-    @Ignore("hstore not supported yet")
     @Test
     @FixFor("DBZ-6379")
     public void shouldHandleToastedHstoreInHstoreMapMode() throws Exception {
@@ -1596,6 +1598,8 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 Envelope.FieldName.AFTER);
         statement = "UPDATE test_toast_table SET text = 'text';";
 
+        LOGGER.info("VKVK test verified till here");
+
         consumer.expects(1);
         executeAndWait(statement);
         consumer.process(record -> {
@@ -1604,12 +1608,10 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 assertEquals(Arrays.asList("id", "text", "col"), tbl.retrieveColumnNames());
             });
         });
-        colValue.clear();
-        colValue.put(DecoderDifferences.optionalToastedValuePlaceholder(), DecoderDifferences.optionalToastedValuePlaceholder());
+
+        // YB Note: Value for 'col' will not be present since replica identity is CHANGE.
         assertRecordSchemaAndValues(Arrays.asList(
-                new SchemaAndValueField("text", SchemaBuilder.OPTIONAL_STRING_SCHEMA, "text"),
-                new SchemaAndValueField("col", SchemaBuilder.map(SchemaBuilder.STRING_SCHEMA,
-                        SchemaBuilder.OPTIONAL_STRING_SCHEMA).optional().build(), colValue)),
+                new SchemaAndValueField("text", SchemaBuilder.OPTIONAL_STRING_SCHEMA, "text")),
                 consumer.remove(),
                 Envelope.FieldName.AFTER);
     }
