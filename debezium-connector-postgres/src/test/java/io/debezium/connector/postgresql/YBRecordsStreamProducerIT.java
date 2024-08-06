@@ -673,8 +673,8 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         SourceRecord record = consumer.remove();
 
         assertValueField(record, getResolvedColumnName("after/bigintcol", logicalDecoder), 123456);
-        assertValueField(record, getResolvedColumnName("after/bitcol", logicalDecoder), new byte[]{27});
-        assertValueField(record, getResolvedColumnName("after/varbitcol", logicalDecoder), new byte[]{21});
+        assertValueField(record, getResolvedColumnName("after/bitcol", logicalDecoder), new byte[]{ 27 });
+        assertValueField(record, getResolvedColumnName("after/varbitcol", logicalDecoder), new byte[]{ 21 });
         assertValueField(record, getResolvedColumnName("after/booleanval", logicalDecoder), false);
         assertValueField(record, getResolvedColumnName("after/byteaval", logicalDecoder), ByteBuffer.wrap(HexConverter.convertFromHex("01")));
         assertValueField(record, getResolvedColumnName("after/ch", logicalDecoder), "five5");
@@ -708,9 +708,11 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     private String getResolvedColumnName(String columnName, PostgresConnectorConfig.LogicalDecoder logicalDecoder) {
         if (logicalDecoder == PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) {
             return columnName;
-        } else if (logicalDecoder == PostgresConnectorConfig.LogicalDecoder.YBOUTPUT) {
+        }
+        else if (logicalDecoder == PostgresConnectorConfig.LogicalDecoder.YBOUTPUT) {
             return columnName + "/value";
-        } else {
+        }
+        else {
             throw new RuntimeException("Logical decoder name value incorrect, check configuration");
         }
     }
