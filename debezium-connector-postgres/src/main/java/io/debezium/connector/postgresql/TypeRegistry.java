@@ -19,11 +19,12 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.core.BaseConnection;
-import org.postgresql.core.TypeInfo;
-import org.postgresql.jdbc.PgDatabaseMetaData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.core.BaseConnection;
+import com.yugabyte.core.TypeInfo;
+import com.yugabyte.jdbc.PgDatabaseMetaData;
 
 import io.debezium.DebeziumException;
 import io.debezium.annotation.Immutable;
@@ -273,9 +274,9 @@ public class TypeRegistry {
     }
 
     /**
-    *
-    * @return OID for array of {@code HSTORE} type of this PostgreSQL instance
-    */
+     *
+     * @return OID for array of {@code HSTORE} type of this PostgreSQL instance
+     */
     public int hstoreArrayOid() {
         return hstoreArrayOid;
     }
@@ -431,7 +432,7 @@ public class TypeRegistry {
     private static class SqlTypeMapper {
 
         /**
-         * Based on org.postgresql.jdbc.TypeInfoCache.getSQLType(String). To emulate the original statement's behavior
+         * Based on com.yugabyte.jdbc.TypeInfoCache.getSQLType(String). To emulate the original statement's behavior
          * (which works for single types only), PG's DISTINCT ON extension is used to just return the first entry should a
          * type exist in multiple schemas.
          */

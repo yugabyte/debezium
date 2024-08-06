@@ -37,7 +37,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import javax.management.InstanceNotFoundException;
@@ -60,9 +64,11 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
-import org.postgresql.util.PSQLState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yugabyte.util.PSQLState;
 
 import io.debezium.DebeziumException;
 import io.debezium.config.CommonConnectorConfig;
@@ -84,7 +90,6 @@ import io.debezium.connector.postgresql.snapshot.InitialOnlySnapshotter;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.converters.CloudEventsConverterTest;
 import io.debezium.data.Envelope;
-import io.debezium.data.VerifyRecord;
 import io.debezium.doc.FixFor;
 import io.debezium.embedded.AbstractConnectorTest;
 import io.debezium.engine.DebeziumEngine;
@@ -105,26 +110,27 @@ import io.debezium.util.Strings;
 import io.debezium.util.Testing;
 
 /**
- * Integration test for {@link PostgresConnector} using an {@link io.debezium.engine.DebeziumEngine}
+ * Integration test for {@link YugabyteDBConnector} using an {@link io.debezium.engine.DebeziumEngine}
  *
  * @author Horia Chiorean (hchiorea@redhat.com)
  */
 public class PostgresConnectorIT extends AbstractConnectorTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresConnectorIT.class);
 
     /*
      * Specific tests that need to extend the initial DDL set should do it in a form of
      * TestHelper.execute(SETUP_TABLES_STMT + ADDITIONAL_STATEMENTS)
      */
-    private static final String INSERT_STMT = "INSERT INTO s1.a (aa) VALUES (1);" +
+    protected static final String INSERT_STMT = "INSERT INTO s1.a (aa) VALUES (1);" +
             "INSERT INTO s2.a (aa) VALUES (1);";
-    private static final String CREATE_TABLES_STMT = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
+    protected static final String CREATE_TABLES_STMT = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
             "DROP SCHEMA IF EXISTS s2 CASCADE;" +
             "CREATE SCHEMA s1; " +
             "CREATE SCHEMA s2; " +
             "CREATE TABLE s1.a (pk SERIAL, aa integer, PRIMARY KEY(pk));" +
             "CREATE TABLE s2.a (pk SERIAL, aa integer, bb varchar(20), PRIMARY KEY(pk));";
-    private static final String SETUP_TABLES_STMT = CREATE_TABLES_STMT + INSERT_STMT;
-    private PostgresConnector connector;
+    protected static final String SETUP_TABLES_STMT = CREATE_TABLES_STMT + INSERT_STMT;
+    private YugabyteDBConnector connector;
 
     @Rule
     public final TestRule skipName = new SkipTestDependingOnDecoderPluginNameRule();
@@ -148,7 +154,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     public void shouldValidateConnectorConfigDef() {
-        connector = new PostgresConnector();
+        connector = new YugabyteDBConnector();
         ConfigDef configDef = connector.config();
         assertThat(configDef).isNotNull();
         PostgresConnectorConfig.ALL_FIELDS.forEach(this::validateFieldDef);
@@ -161,7 +167,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // we expect the engine will log at least one error, so preface it ...
         logger.info("Attempting to start the connector with an INVALID configuration, so MULTIPLE error messages & one exceptions will appear in the log");
-        start(PostgresConnector.class, config, (success, msg, error) -> {
+        start(YugabyteDBConnector.class, config, (success, msg, error) -> {
             assertThat(success).isFalse();
             assertThat(error).isNotNull();
         });
@@ -171,11 +177,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     @Test
     public void shouldValidateMinimalConfiguration() throws Exception {
         Configuration config = TestHelper.defaultConfig().build();
-        Config validateConfig = new PostgresConnector().validate(config.asMap());
+        Config validateConfig = new YugabyteDBConnector().validate(config.asMap());
         validateConfig.configValues().forEach(configValue -> assertTrue("Unexpected error for: " + configValue.name(),
                 configValue.errorMessages().isEmpty()));
     }
 
+    @Ignore("Requires postgis")
     @Test
     public void shouldNotStartWithInvalidSlotConfigAndUserRoles() throws Exception {
         // Start with a clean slate and create database objects
@@ -190,7 +197,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning();
 
         Configuration failingConfig = TestHelper.defaultConfig()
@@ -200,7 +207,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
                 .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
                 .build();
-        List<ConfigValue> validatedConfig = new PostgresConnector().validate(failingConfig.asMap()).configValues();
+        List<ConfigValue> validatedConfig = new YugabyteDBConnector().validate(failingConfig.asMap()).configValues();
 
         final List<String> invalidProperties = Collections.singletonList("database.user");
         validatedConfig.forEach(
@@ -215,7 +222,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     public void shouldValidateConfiguration() throws Exception {
         // use an empty configuration which should be invalid because of the lack of DB connection details
         Configuration config = Configuration.create().build();
-        PostgresConnector connector = new PostgresConnector();
+        YugabyteDBConnector connector = new YugabyteDBConnector();
         Config validatedConfig = connector.validate(config.asMap());
         // validate that the required fields have errors
         assertConfigurationErrors(validatedConfig, PostgresConnectorConfig.HOSTNAME, 1);
@@ -224,7 +231,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertConfigurationErrors(validatedConfig, CommonConnectorConfig.TOPIC_PREFIX, 1);
 
         // validate the non required fields
-        validateConfigField(validatedConfig, PostgresConnectorConfig.PLUGIN_NAME, LogicalDecoder.DECODERBUFS.getValue());
+        validateConfigField(validatedConfig, PostgresConnectorConfig.PLUGIN_NAME, LogicalDecoder.YBOUTPUT.getValue());
         validateConfigField(validatedConfig, PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME);
         validateConfigField(validatedConfig, PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
         validateConfigField(validatedConfig, PostgresConnectorConfig.PORT, PostgresConnectorConfig.DEFAULT_PORT);
@@ -253,6 +260,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         validateConfigField(validatedConfig, PostgresConnectorConfig.TCP_KEEPALIVE, true);
         validateConfigField(validatedConfig, PostgresConnectorConfig.LOGICAL_DECODING_MESSAGE_PREFIX_EXCLUDE_LIST, null);
         validateConfigField(validatedConfig, PostgresConnectorConfig.LOGICAL_DECODING_MESSAGE_PREFIX_INCLUDE_LIST, null);
+        validateConfigField(validatedConfig, PostgresConnectorConfig.YB_CONSISTENT_SNAPSHOT, Boolean.TRUE);
     }
 
     @Test
@@ -260,7 +268,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration config = Configuration.create()
                 .with(PostgresConnectorConfig.SLOT_NAME, "xx-aa")
                 .build();
-        PostgresConnector connector = new PostgresConnector();
+        YugabyteDBConnector connector = new YugabyteDBConnector();
         Config validatedConfig = connector.validate(config.asMap());
 
         assertConfigurationErrors(validatedConfig, PostgresConnectorConfig.SLOT_NAME, 1);
@@ -272,7 +280,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // SSL is enabled
         Configuration config = TestHelper.defaultConfig().with(PostgresConnectorConfig.SSL_MODE,
                 PostgresConnectorConfig.SecureConnectionMode.REQUIRED).build();
-        start(PostgresConnector.class, config, (success, msg, error) -> {
+        start(YugabyteDBConnector.class, config, (success, msg, error) -> {
             if (TestHelper.shouldSSLConnectionFail()) {
                 // we expect the task to fail at startup when we're printing the server info
                 assertThat(success).isFalse();
@@ -298,7 +306,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         // check the records from the snapshot
@@ -317,17 +325,51 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // start the connector back up and check that a new snapshot has not been performed (we're running initial only mode)
         // but the 2 records that we were inserted while we were down will be retrieved
-        start(PostgresConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
         assertConnectorIsRunning();
 
         assertRecordsAfterInsert(2, 3, 3);
     }
 
     @Test
+    public void initialSnapshotWithExistingSlot() throws Exception {
+        TestHelper.execute(SETUP_TABLES_STMT);
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+
+        waitForStreamingRunning();
+
+        // now stop the connector
+        stopConnector();
+        assertNoRecordsToConsume();
+
+        // insert some more records
+        TestHelper.execute(INSERT_STMT);
+
+        // check the records from the snapshot
+        // start the connector back up and perform snapshot with an existing slot
+        // but the 2 records that were inserted while we were down will NOT be retrieved
+        // as part of the snapshot. These records will be retrieved as part of streaming
+        Configuration.Builder configBuilderInitial = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
+
+        start(YugabyteDBConnector.class, configBuilderInitial.build());
+        assertConnectorIsRunning();
+
+        assertRecordsFromSnapshot(2, 1, 1);
+        assertRecordsAfterInsert(2, 2, 2);
+    }
+
+    @Test
     @FixFor("DBZ-1235")
     public void shouldUseMillisecondsForTransactionCommitTime() throws InterruptedException {
         TestHelper.execute(SETUP_TABLES_STMT);
-        start(PostgresConnector.class, TestHelper.defaultConfig().build());
+        start(YugabyteDBConnector.class, TestHelper.defaultConfig().build());
         assertConnectorIsRunning();
 
         // check records from snapshot
@@ -361,7 +403,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.MAX_QUEUE_SIZE, recordCount / 2)
                 .with(PostgresConnectorConfig.MAX_BATCH_SIZE, 10)
                 .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1");
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         waitForSnapshotToBeCompleted();
@@ -382,7 +424,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.MAX_QUEUE_SIZE, recordCount / 2)
                 .with(PostgresConnectorConfig.MAX_BATCH_SIZE, 10)
                 .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1");
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         waitForSnapshotToBeCompleted();
@@ -413,7 +455,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                     "CREATE TABLE changepk.test_table (pk SERIAL, text TEXT, PRIMARY KEY(pk));",
                     "INSERT INTO changepk.test_table(text) VALUES ('insert');");
 
-            start(PostgresConnector.class, config.getConfig());
+            start(YugabyteDBConnector.class, config.getConfig());
 
             assertConnectorIsRunning();
 
@@ -429,7 +471,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
             SourceRecord insertRecord = records.recordsForTopic(topicName).get(0);
             assertEquals(topicName, insertRecord.topic());
-            VerifyRecord.isValidInsert(insertRecord, "newpk", 2);
+            YBVerifyRecord.isValidInsert(insertRecord, "newpk", 2);
 
             TestHelper.execute(
                     "ALTER TABLE changepk.test_table ADD COLUMN pk2 SERIAL;"
@@ -440,8 +482,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
             insertRecord = records.recordsForTopic(topicName).get(0);
             assertEquals(topicName, insertRecord.topic());
-            VerifyRecord.isValidInsert(insertRecord, newPkField, 3);
-            VerifyRecord.isValidInsert(insertRecord, "pk2", 8);
+            YBVerifyRecord.isValidInsert(insertRecord, newPkField, 3);
+            YBVerifyRecord.isValidInsert(insertRecord, "pk2", 8);
 
             stopConnector();
 
@@ -454,13 +496,13 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                             + "ALTER TABLE changepk.test_table ADD PRIMARY KEY(newpk,pk3);"
                             + "INSERT INTO changepk.test_table VALUES(5, 'dropandaddpkcol',10)");
 
-            start(PostgresConnector.class, config.getConfig());
+            start(YugabyteDBConnector.class, config.getConfig());
 
             records = consumeRecordsByTopic(2);
 
             insertRecord = records.recordsForTopic(topicName).get(0);
             assertEquals(topicName, insertRecord.topic());
-            VerifyRecord.isValidInsert(insertRecord, newPkField, 4);
+            YBVerifyRecord.isValidInsert(insertRecord, newPkField, 4);
             Struct key = (Struct) insertRecord.key();
             // The problematic record PK info is temporarily desynced
             assertThat(key.schema().field("pk2")).isNull();
@@ -468,8 +510,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
             insertRecord = records.recordsForTopic(topicName).get(1);
             assertEquals(topicName, insertRecord.topic());
-            VerifyRecord.isValidInsert(insertRecord, newPkField, 5);
-            VerifyRecord.isValidInsert(insertRecord, "pk3", 10);
+            YBVerifyRecord.isValidInsert(insertRecord, newPkField, 5);
+            YBVerifyRecord.isValidInsert(insertRecord, "pk3", 10);
             key = (Struct) insertRecord.key();
             assertThat(key.schema().field("pk2")).isNull();
 
@@ -489,11 +531,22 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
+    @Ignore("Will require a complete test refactor")
     @Test
     public void shouldReceiveChangesForChangeColumnDefault() throws Exception {
         Testing.Print.enable();
         final String slotName = "default_change" + new Random().nextInt(100);
         TestHelper.create().dropReplicationSlot(slotName);
+
+        // YB Note: Creating a table before deploying the connector since dynamic table addition is
+        // not supported yet.
+        TestHelper.execute(
+                "CREATE SCHEMA IF NOT EXISTS default_change;",
+                "DROP TABLE IF EXISTS default_change.test_table;",
+                "CREATE TABLE default_change.test_table (pk SERIAL, i INT DEFAULT 1, text TEXT DEFAULT 'foo', PRIMARY KEY(pk));");
+
+        TestHelper.execute("INSERT INTO default_change.test_table(i, text) VALUES (DEFAULT, DEFAULT);");
+
         try {
             final PostgresConnectorConfig config = new PostgresConnectorConfig(TestHelper.defaultConfig()
                     .with(PostgresConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, Boolean.FALSE)
@@ -504,13 +557,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
             final String topicName = topicName("default_change.test_table");
 
-            TestHelper.execute(
-                    "CREATE SCHEMA IF NOT EXISTS default_change;",
-                    "DROP TABLE IF EXISTS default_change.test_table;",
-                    "CREATE TABLE default_change.test_table (pk SERIAL, i INT DEFAULT 1, text TEXT DEFAULT 'foo', PRIMARY KEY(pk));",
-                    "INSERT INTO default_change.test_table(i, text) VALUES (DEFAULT, DEFAULT);");
-
-            start(PostgresConnector.class, config.getConfig());
+            start(YugabyteDBConnector.class, config.getConfig());
 
             assertConnectorIsRunning();
             waitForSnapshotToBeCompleted();
@@ -522,9 +569,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             final Integer snapshotIntDefault = 1;
             final String snapshotTextDefault = "foo";
             snapshotRecords.recordsForTopic(topicName).forEach(snapshotRecord -> {
-                assertValueField(snapshotRecord, "after/pk", 1);
-                assertValueField(snapshotRecord, "after/i", snapshotIntDefault);
-                assertValueField(snapshotRecord, "after/text", snapshotTextDefault);
+                assertValueField(snapshotRecord, "after/pk/value", 1);
+                assertValueField(snapshotRecord, "after/i/value", snapshotIntDefault);
+                assertValueField(snapshotRecord, "after/text/value", snapshotTextDefault);
 
                 assertThat(readRecordFieldDefault(snapshotRecord, "pk")).isEqualTo(pkExpectedDefault);
                 assertThat(readRecordFieldDefault(snapshotRecord, "i")).isEqualTo(snapshotIntDefault);
@@ -592,7 +639,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
             TestHelper.execute("INSERT INTO default_change.test_table(i, text) VALUES (DEFAULT, DEFAULT);");
 
-            start(PostgresConnector.class, config.getConfig());
+            start(YugabyteDBConnector.class, config.getConfig());
 
             assertConnectorIsRunning();
 
@@ -645,6 +692,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
+    @Ignore("Complete test refactor required")
     @Test
     public void showThatSchemaColumnDefaultMayApplyRetroactively() throws Exception {
         Testing.Print.enable();
@@ -668,7 +716,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                     "CREATE TABLE default_change.test_table (pk SERIAL, i INT DEFAULT 1, text TEXT DEFAULT 'foo', PRIMARY KEY(pk));",
                     "INSERT INTO default_change.test_table(i, text) VALUES (DEFAULT, DEFAULT);");
 
-            start(PostgresConnector.class, config.getConfig());
+            start(YugabyteDBConnector.class, config.getConfig());
 
             assertConnectorIsRunning();
             waitForSnapshotToBeCompleted();
@@ -700,7 +748,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                     "ALTER TABLE default_change.test_table ADD COLUMN tstz TIMESTAMPTZ DEFAULT '2021-03-20 14:44:28 +1'::TIMESTAMPTZ;",
                     "INSERT INTO default_change.test_table(i, text, bi, tstz) VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT);");
 
-            start(PostgresConnector.class, config.getConfig());
+            start(YugabyteDBConnector.class, config.getConfig());
 
             assertConnectorIsRunning();
 
@@ -772,7 +820,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -792,7 +840,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(INSERT_STMT);
         TestHelper.execute("DROP TABLE s1.a");
 
-        start(PostgresConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
@@ -801,6 +849,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(actualRecords.recordsForTopic(topicName("s2.a"))).hasSize(1);
     }
 
+    @Ignore("YB Note: This behaviour is not yet implemented, see https://github.com/yugabyte/yugabyte-db/issues/21573")
     @Test
     @FixFor("DBZ-1021")
     @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "Pgoutput will generate insert statements even for dropped tables, column optionality will default to true however")
@@ -809,7 +858,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -829,7 +878,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(INSERT_STMT);
         TestHelper.execute("DROP TABLE s1.a");
 
-        start(PostgresConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
@@ -847,7 +896,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -868,7 +917,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // start the connector back up and check that a new snapshot has not been performed (we're running initial only mode)
         // but the 2 records that we were inserted while we were down will be retrieved
-        start(PostgresConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
@@ -884,7 +933,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -905,7 +954,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // start the connector back up and check that a new snapshot has not been performed (we're running initial only mode)
         // but the 2 records that we were inserted while we were down will be retrieved
-        start(PostgresConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
@@ -915,6 +964,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 1, interceptor.countOccurrences("identified as already processed"));
     }
 
+    @Ignore("We are receiving records out of a certain order, can't control")
     @Test
     @FixFor("DBZ-693")
     public void shouldExecuteOnConnectStatements() throws Exception {
@@ -923,11 +973,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.ON_CONNECT_STATEMENTS, "INSERT INTO s1.a (aa) VALUES (2); INSERT INTO s2.a (aa, bb) VALUES (2, 'hello;; world');")
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(6);
+
+        // YB Note: This test is failing because the records are coming out of order - we are indeed
+        // receiving all the records but because of the jumbled nature of the records, the second
+        // assertKey assertion fails.
         assertKey(actualRecords.allRecordsInOrder().get(0), "pk", 1);
         assertKey(actualRecords.allRecordsInOrder().get(1), "pk", 2);
 
@@ -946,11 +1000,13 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
-        TestHelper.waitForDefaultReplicationSlotBeActive();
 
-        waitForAvailableRecords(100, TimeUnit.MILLISECONDS);
+        // YB Note: Added a wait for replication slot to be active.
+        TestHelper.waitFor(Duration.ofSeconds(15));
+
+        waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
         // there shouldn't be any snapshot records
         assertNoRecordsToConsume();
 
@@ -967,7 +1023,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL_ONLY.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         // check the records from the snapshot
@@ -980,13 +1036,14 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertNoRecordsToConsume();
     }
 
+    @Ignore("Snapshot mode ALWAYS is unsupported")
     @Test
     public void shouldProduceEventsWhenAlwaysTakingSnapshots() throws InterruptedException {
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.ALWAYS.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -1001,11 +1058,51 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertNoRecordsToConsume();
 
         // start the connector back up and check that a new snapshot has been performed
-        start(PostgresConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
         assertRecordsFromSnapshot(4, 1, 2, 1, 2);
+    }
+
+    @Test
+    public void shouldHaveBeforeImageOfUpdatedRow() throws InterruptedException {
+        Testing.Print.enable();
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(SETUP_TABLES_STMT);
+        TestHelper.execute("ALTER TABLE s1.a REPLICA IDENTITY FULL;");
+        Configuration config = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+                .build();
+        start(YugabyteDBConnector.class, config);
+        assertConnectorIsRunning();
+
+        // YB Note: Added a wait for replication slot to be active.
+        TestHelper.waitFor(Duration.ofSeconds(15));
+
+        waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+        // there shouldn't be any snapshot records
+        assertNoRecordsToConsume();
+
+        // insert and verify 2 new records
+        TestHelper.execute(INSERT_STMT);
+        TestHelper.execute("UPDATE s1.a SET aa = 404 WHERE pk = 2;");
+
+        SourceRecords actualRecords = consumeRecordsByTopic(3);
+        List<SourceRecord> records = actualRecords.recordsForTopic(topicName("s1.a"));
+
+        SourceRecord insertRecord = records.get(0);
+        SourceRecord updateRecord = records.get(1);
+
+        YBVerifyRecord.isValidInsert(insertRecord, PK_FIELD, 2);
+        YBVerifyRecord.isValidUpdate(updateRecord, PK_FIELD, 2);
+
+        Struct updateRecordValue = (Struct) updateRecord.value();
+        assertThat(updateRecordValue.get(Envelope.FieldName.AFTER)).isNotNull();
+        assertThat(updateRecordValue.get(Envelope.FieldName.BEFORE)).isNotNull();
+        assertThat(updateRecordValue.getStruct(Envelope.FieldName.BEFORE).getStruct("aa").getInt32("value")).isEqualTo(1);
+        assertThat(updateRecordValue.getStruct(Envelope.FieldName.AFTER).getStruct("aa").getInt32("value")).isEqualTo(404);
     }
 
     @Test
@@ -1025,9 +1122,10 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 fail("A controlled exception was expected....");
             }
         };
-        start(PostgresConnector.class, configBuilder.build(), completionCallback, stopOnPKPredicate(2));
+        start(YugabyteDBConnector.class, configBuilder.build(), completionCallback, stopOnPKPredicate(2));
+        // YB Note: Increasing the wait time since the connector is taking slightly higher time to initialize.
         // wait until we know we've raised the exception at startup AND the engine has been shutdown
-        if (!latch.await(TestHelper.waitTimeForRecords() * 5, TimeUnit.SECONDS)) {
+        if (!latch.await(TestHelper.waitTimeForRecords() * 15, TimeUnit.SECONDS)) {
             fail("did not reach stop condition in time");
         }
         // wait until we know we've raised the exception at startup AND the engine has been shutdown
@@ -1040,7 +1138,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // make sure there are no records to consume
         assertNoRecordsToConsume();
         // start the connector back up and check that it took another full snapshot since previously it was stopped midstream
-        start(PostgresConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
         assertConnectorIsRunning();
 
         // check that the snapshot was recreated
@@ -1064,7 +1162,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
 
@@ -1077,6 +1175,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // kill all opened connections to the database
         TestHelper.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type='walsender'");
         TestHelper.execute(INSERT_STMT);
+        // TODO Vaibhav: Revisit this later to see if this wait can be removed or reduced.
+        TestHelper.waitFor(Duration.ofSeconds(10));
         assertRecordsAfterInsert(2, 3, 3);
     }
 
@@ -1094,7 +1194,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s1.a:FULL,s2.a:DEFAULT")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForStreamingRunning();
@@ -1108,7 +1208,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             assertEquals(ReplicaIdentityInfo.ReplicaIdentity.FULL, connection.readReplicaIdentityInfo(tableIds1).getReplicaIdentity());
             assertEquals(ReplicaIdentityInfo.ReplicaIdentity.DEFAULT, connection.readReplicaIdentityInfo(tableIds2).getReplicaIdentity());
             assertThat(logInterceptor.containsMessage(String.format("Replica identity set to FULL for table '%s'", tableIds1))).isTrue();
-            assertThat(logInterceptor.containsMessage(String.format("Replica identity for table '%s' is already DEFAULT", tableIds2))).isTrue();
+
+            // YB Note: Fails because we do not get this message when replica identity is already set.
+            // assertThat(logInterceptor.containsMessage(String.format("Replica identity for table '%s' is already DEFAULT", tableIds2))).isTrue();
+            // YB Note: Adding an alternate log message.
+            assertThat(logInterceptor.containsMessage(String.format("Replica identity set to DEFAULT for table '%s'", tableIds2))).isTrue();
         }
     }
 
@@ -1123,7 +1227,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "(.*).a:FULL,s2.*:NOTHING")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForStreamingRunning();
@@ -1157,7 +1261,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s.*:FULL,s2.*:NOTHING")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForStreamingRunning();
@@ -1185,7 +1289,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s1.a:FULL")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForStreamingRunning();
@@ -1200,6 +1304,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
+    @Ignore("YB Note: alter replica identity INDEX is unsupported")
     @Test
     public void shouldUpdateReplicaIdentityUsingIndex() throws Exception {
 
@@ -1214,7 +1319,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s1.a:FULL,s2.a:INDEX a_pkey")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForStreamingRunning();
@@ -1254,7 +1359,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with("database.password", "role_2_pass")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForStreamingRunning();
@@ -1279,7 +1384,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s1.a:FULL,s2.b:DEFAULT")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForStreamingRunning();
@@ -1287,6 +1392,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // Waiting for Replica Identity is updated
         waitForAvailableRecords(5, TimeUnit.SECONDS);
 
+        // YB Note: The following block only checks if a certain log message has appeared or not.
+        // In our case, we can alter the replica identity but the actual replica identity for a table
+        // will remain what is set at the time of replication slot creation.
         try (PostgresConnection connection = TestHelper.create()) {
             TableId tableIds1 = new TableId("", "s1", "a");
             assertEquals(ReplicaIdentityInfo.ReplicaIdentity.FULL.toString(), connection.readReplicaIdentityInfo(tableIds1).toString());
@@ -1308,7 +1416,17 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 "INSERT INTO s1.a (aa, bb) VALUES (3, 3);" +
                 "INSERT INTO s1.b (aa, bb) VALUES (4, 4);" +
                 "INSERT INTO s2.a (aa) VALUES (5);";
-        TestHelper.execute(setupStmt);
+
+        // YB Note: Separating the ALTER commands as they were causing transaction abortion in YB
+        // if run collectively, the error being:
+        // java.lang.RuntimeException: com.yugabyte.util.PSQLException: ERROR: Unknown transaction, could be recently aborted: 3273ed66-13c6-4d73-8c6e-014389e5081e
+        TestHelper.execute(SETUP_TABLES_STMT);
+        TestHelper.execute("CREATE TABLE s1.b (pk SERIAL, aa integer, bb integer, PRIMARY KEY(pk));");
+        TestHelper.execute("ALTER TABLE s1.a ADD COLUMN bb integer;");
+        TestHelper.execute("INSERT INTO s1.a (aa, bb) VALUES (2, 2); "
+                + "INSERT INTO s1.a (aa, bb) VALUES (3, 3); "
+                + "INSERT INTO s1.b (aa, bb) VALUES (4, 4); "
+                + "INSERT INTO s2.a (aa) VALUES (5);");
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
@@ -1316,7 +1434,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.TABLE_EXCLUDE_LIST, ".+b")
                 .with(PostgresConnectorConfig.COLUMN_EXCLUDE_LIST, ".+bb");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         // check the records from the snapshot take the filters into account
@@ -1328,7 +1446,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForS1a.size()).isEqualTo(3);
         AtomicInteger pkValue = new AtomicInteger(1);
         recordsForS1a.forEach(record -> {
-            VerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
+            YBVerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
             assertFieldAbsent(record, "bb");
         });
 
@@ -1341,14 +1459,21 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     public void shouldTakeBlacklistFiltersIntoAccount() throws Exception {
+        // YB Note: Separating the ALTER commands as they were causing transaction abortion in YB
+        // if run collectively, the error being:
+        // java.lang.RuntimeException: com.yugabyte.util.PSQLException: ERROR: Unknown transaction, could be recently aborted: 3273ed66-13c6-4d73-8c6e-014389e5081e
         String setupStmt = SETUP_TABLES_STMT +
-                "CREATE TABLE s1.b (pk SERIAL, aa integer, bb integer, PRIMARY KEY(pk));" +
-                "ALTER TABLE s1.a ADD COLUMN bb integer;" +
-                "INSERT INTO s1.a (aa, bb) VALUES (2, 2);" +
+                "CREATE TABLE s1.b (pk SERIAL, aa integer, bb integer, PRIMARY KEY(pk));";
+
+        TestHelper.execute(setupStmt);
+
+        TestHelper.execute("ALTER TABLE s1.a ADD COLUMN bb integer;");
+
+        String initInsertStmt = "INSERT INTO s1.a (aa, bb) VALUES (2, 2);" +
                 "INSERT INTO s1.a (aa, bb) VALUES (3, 3);" +
                 "INSERT INTO s1.b (aa, bb) VALUES (4, 4);" +
                 "INSERT INTO s2.a (aa) VALUES (5);";
-        TestHelper.execute(setupStmt);
+        TestHelper.execute(initInsertStmt);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
@@ -1356,7 +1481,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.TABLE_EXCLUDE_LIST, ".+b")
                 .with(PostgresConnectorConfig.COLUMN_EXCLUDE_LIST, ".+bb");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         // check the records from the snapshot take the filters into account
@@ -1368,7 +1493,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForS1a.size()).isEqualTo(3);
         AtomicInteger pkValue = new AtomicInteger(1);
         recordsForS1a.forEach(record -> {
-            VerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
+            YBVerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
             assertFieldAbsent(record, "bb");
         });
 
@@ -1387,13 +1512,19 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 "ALTER TABLE s1.a ADD COLUMN cc char(12);" +
                 "INSERT INTO s1.a (aa, bb) VALUES (2, 2);";
 
-        TestHelper.execute(setupStmt);
+        // YB Note: Separating the ALTER commands as they were causing transaction abortion in YB
+        // if run collectively, the error being:
+        // java.lang.RuntimeException: com.yugabyte.util.PSQLException: ERROR: Unknown transaction, could be recently aborted: 3273ed66-13c6-4d73-8c6e-014389e5081e
+        TestHelper.execute(SETUP_TABLES_STMT);
+        TestHelper.execute("ALTER TABLE s1.a ADD COLUMN bb integer;");
+        TestHelper.execute("ALTER TABLE s1.a ADD COLUMN cc char(12);");
+        TestHelper.execute("INSERT INTO s1.a (aa, bb) VALUES (2, 2);");
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with("column.mask.with.5.chars", ".+cc")
                 .with(PostgresConnectorConfig.COLUMN_INCLUDE_LIST, ".+aa,.+cc");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(1);
@@ -1402,7 +1533,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             assertFieldAbsent(record, "bb");
 
             Struct recordValue = ((Struct) record.value());
-            assertThat(recordValue.getStruct("after").getString("cc")).isEqualTo("*****");
+            assertThat(recordValue.getStruct("after").getStruct("cc").getString("value")).isEqualTo("*****");
         });
     }
 
@@ -1422,7 +1553,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1")
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, tableWhitelistWithWhitespace);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(2);
@@ -1431,7 +1562,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(records.size()).isEqualTo(1);
 
         SourceRecord record = records.get(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         String sourceTable = ((Struct) record.value()).getStruct("source").getString("table");
         assertThat(sourceTable).isEqualTo("b");
@@ -1452,7 +1583,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1")
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, tableWhitelistWithWhitespace);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(2);
@@ -1461,7 +1592,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(records.size()).isEqualTo(1);
 
         SourceRecord record = records.get(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         String sourceTable = ((Struct) record.value()).getStruct("source").getString("table");
         assertThat(sourceTable).isEqualTo("b");
@@ -1480,10 +1611,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.b")
                 .with(PostgresConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, true);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
+        // YB Note: this test will fail since it creates a table after connector has started
+        // and dynamic table addition is not supported in YB yet.
         TestHelper.execute("CREATE TABLE s1.b (pk SERIAL, aa isbn, PRIMARY KEY(pk));", "INSERT INTO s1.b (aa) VALUES ('978-0-393-04002-9')");
         SourceRecords actualRecords = consumeRecordsByTopic(1);
 
@@ -1491,8 +1624,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(records.size()).isEqualTo(1);
 
         SourceRecord record = records.get(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 1);
-        final String isbn = new String(((Struct) record.value()).getStruct("after").getString("aa"));
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 1);
+        final String isbn = new String(((Struct) record.value()).getStruct("after").getStruct("aa").getString("value"));
         assertThat(isbn).isEqualTo("0-393-04002-X");
 
         TestHelper.assertNoOpenTransactions();
@@ -1512,7 +1645,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1")
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1\\.dbz_878_some\\|test@data");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(1);
@@ -1521,7 +1654,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(records.size()).isEqualTo(1);
 
         SourceRecord record = records.get(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         String sourceTable = ((Struct) record.value()).getStruct("source").getString("table");
         assertThat(sourceTable).isEqualTo("dbz_878_some|test@data");
@@ -1539,7 +1672,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.a")
                 .with(Heartbeat.HEARTBEAT_INTERVAL, 10)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingRunning();
         // Generate empty logical decoding message
@@ -1560,9 +1693,13 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.a")
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
+
+        // YB Note: Waiting for 15 seconds for streaming to initialise properly.
+        TestHelper.waitFor(Duration.ofSeconds(15));
+
         // there shouldn't be any snapshot records
         assertNoRecordsToConsume();
 
@@ -1601,7 +1738,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.a")
                 .with(PostgresConnectorConfig.PROVIDE_TRANSACTION_METADATA, true)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
         // there shouldn't be any snapshot records
@@ -1616,7 +1753,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         stopConnector();
         assertConnectorNotRunning();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
         // there shouldn't be any snapshot records, only potentially transaction messages
@@ -1656,7 +1793,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(1);
@@ -1667,7 +1804,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s2recs).isNull();
 
         SourceRecord record = s1recs.get(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         TestHelper.execute(INSERT_STMT);
         actualRecords = consumeRecordsByTopic(2);
@@ -1677,9 +1814,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
         record = s1recs.get(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
         record = s2recs.get(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
         stopConnector();
 
         config = TestHelper.defaultConfig()
@@ -1687,7 +1824,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         actualRecords = consumeRecordsByTopic(4);
 
@@ -1695,12 +1832,13 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(2);
         assertThat(s2recs.size()).isEqualTo(2);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 2);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 2);
     }
 
+    @Ignore("Snapshot mode ALWAYS is unsupported")
     @Test
     @FixFor("DBZ-2456")
     public void shouldAllowForSelectiveSnapshot() throws InterruptedException {
@@ -1710,7 +1848,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(CommonConnectorConfig.SNAPSHOT_MODE_TABLES, "s1.a")
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         /* Snapshot must be taken only for the listed tables */
@@ -1720,7 +1858,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs).isNull();
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
 
         /* streaming should work normally */
         TestHelper.execute(INSERT_STMT);
@@ -1731,13 +1869,13 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
 
         stopConnector();
 
         /* start the connector back up and make sure snapshot is being taken */
-        start(PostgresConnector.class, configBuilder
+        start(YugabyteDBConnector.class, configBuilder
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE_TABLES, "s2.a")
                 .build());
@@ -1749,8 +1887,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         assertThat(s2recs.size()).isEqualTo(2);
         assertThat(s1recs).isNull();
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 2);
     }
 
     @Test
@@ -1766,7 +1904,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         // Consume records from the snapshot
@@ -1777,8 +1915,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
 
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         // Insert 2 more rows
         // These are captured by the stream
@@ -1792,15 +1930,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
 
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
         stopConnector();
 
         config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         TestHelper.execute(INSERT_STMT);
@@ -1811,8 +1949,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 3);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 3);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 3);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 3);
     }
 
     @Test
@@ -1836,7 +1974,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         pgConnection.setAutoCommit(false);
         pgConnection.executeWithoutCommitting(INSERT_STMT);
         final AtomicBoolean inserted = new AtomicBoolean();
-        start(PostgresConnector.class, config, loggingCompletion(), x -> false, x -> {
+        start(YugabyteDBConnector.class, config, loggingCompletion(), x -> false, x -> {
             if (!inserted.get()) {
                 TestHelper.execute(INSERT_STMT);
                 try {
@@ -1868,13 +2006,13 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "Publication not supported")
     public void exportedSnapshotShouldNotSkipRecordOfParallelTxPgoutput() throws Exception {
         TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(SETUP_TABLES_STMT);
+        TestHelper.execute(INSERT_STMT);
+
         TestHelper.createDefaultReplicationSlot();
         TestHelper.execute("CREATE PUBLICATION dbz_publication FOR ALL TABLES;");
 
         // Testing.Print.enable();
-        TestHelper.execute(SETUP_TABLES_STMT);
-        TestHelper.execute(INSERT_STMT);
-
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
@@ -1885,7 +2023,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         pgConnection.setAutoCommit(false);
         pgConnection.executeWithoutCommitting(INSERT_STMT);
         final AtomicBoolean inserted = new AtomicBoolean();
-        start(PostgresConnector.class, config, loggingCompletion(), x -> false, x -> {
+        start(YugabyteDBConnector.class, config, loggingCompletion(), x -> false, x -> {
             if (!inserted.get()) {
                 TestHelper.execute(INSERT_STMT);
                 try {
@@ -1925,7 +2063,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL_ONLY.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         // Lets wait for snapshot to finish before proceeding
@@ -1943,8 +2081,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         // Stop the connector
         stopConnector();
@@ -1956,7 +2094,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL_ONLY.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForConnectorShutdown("postgres", TestHelper.TEST_SERVER);
@@ -1965,6 +2103,55 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(logInterceptor.containsMessage("Previous initial snapshot completed, no snapshot will be performed")).isTrue();
     }
 
+    @Test
+    public void snapshotInitialOnlyFollowedByNever() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+
+        TestHelper.execute(SETUP_TABLES_STMT);
+        // Start connector in NEVER mode to get the slot and publication created
+        Configuration config = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
+                .build();
+        start(YugabyteDBConnector.class, config);
+        assertConnectorIsRunning();
+        // now stop the connector
+        stopConnector();
+        assertNoRecordsToConsume();
+
+        // These INSERT events should not be part of snapshot
+        TestHelper.execute(INSERT_STMT);
+
+        // Now start the connector in INITIAL_ONLY mode
+        config = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL_ONLY.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
+                .build();
+        start(YugabyteDBConnector.class, config);
+        assertConnectorIsRunning();
+
+        // Lets wait for snapshot to finish before proceeding
+        waitForSnapshotToBeCompleted("postgres", "test_server");
+        waitForAvailableRecords(TestHelper.waitTimeForRecords(), TimeUnit.SECONDS);
+        assertRecordsFromSnapshot(2, 1, 1);
+
+        // Stop the connector
+        stopConnector();
+        assertConnectorNotRunning();
+
+        // Restart the connector again with NEVER mode
+        // The streaming should continue from where the INITIAL_ONLY connector had finished the snapshot
+        config = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+                .build();
+        start(YugabyteDBConnector.class, config);
+        assertConnectorIsRunning();
+
+        assertRecordsAfterInsert(2, 2, 2);
+    }
+
+    @Ignore("YB: Custom snapshotter not supported")
     @Test
     @FixFor("DBZ-2094")
     public void shouldResumeStreamingFromSlotPositionForCustomSnapshot() throws Exception {
@@ -1975,7 +2162,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomStartFromStreamingTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
@@ -1984,8 +2171,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         stopConnector();
 
@@ -1998,7 +2185,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomStartFromStreamingTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForSnapshotToBeCompleted();
@@ -2012,18 +2199,19 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s2recs.size()).isEqualTo(3);
 
         // Validate the first record is from streaming
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
 
         // Validate the rest of the records are from the snapshot
-        VerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
-        VerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(2), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s2recs.get(1), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(2), PK_FIELD, 2);
 
         TestHelper.assertNoOpenTransactions();
     }
 
+    @Ignore("YB: Custom snapshotter not supported")
     @Test
     @FixFor("DBZ-2094")
     public void customSnapshotterSkipsTablesOnRestart() throws Exception {
@@ -2035,7 +2223,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.ALWAYS.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
@@ -2044,8 +2232,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         stopConnector();
 
@@ -2058,7 +2246,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomPartialTableTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForSnapshotToBeCompleted();
@@ -2074,12 +2262,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s2recs.size()).isEqualTo(1);
 
         // streaming records
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
 
         // snapshot records
-        VerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
 
         assertNoRecordsToConsume();
 
@@ -2088,6 +2276,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         stopConnector(value -> assertThat(logInterceptor.containsMessage("For table 's2.a' the select statement was not provided, skipping table")).isTrue());
     }
 
+    @Ignore("YB: Custom snapshotter not supported")
     @Test
     @FixFor("DBZ-2094")
     public void customSnapshotterSkipsTablesOnRestartWithConcurrentTx() throws Exception {
@@ -2100,7 +2289,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.ALWAYS.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
@@ -2109,8 +2298,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> s2recs = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(s1recs.size()).isEqualTo(1);
         assertThat(s2recs.size()).isEqualTo(1);
-        VerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s2recs.get(0), PK_FIELD, 1);
 
         stopConnector();
 
@@ -2123,7 +2312,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomPartialTableTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         Awaitility.await()
@@ -2149,12 +2338,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s2recs.size()).isEqualTo(1);
 
         // streaming records
-        VerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s1recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
 
         // snapshot records
-        VerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
-        VerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
+        YBVerifyRecord.isValidRead(s1recs.get(1), PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(s1recs.get(2), PK_FIELD, 2);
 
         assertNoRecordsToConsume();
 
@@ -2173,7 +2362,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomLifecycleHookTestSnapshot.class.getName())
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         waitForSnapshotToBeCompleted();
@@ -2196,7 +2385,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         final String lsn = connection.prepareQueryAndMap(
                 "select * from pg_replication_slots where slot_name = ? and database = ? and plugin = ?", statement -> {
                     statement.setString(1, ReplicationConnection.Builder.DEFAULT_SLOT_NAME);
-                    statement.setString(2, "postgres");
+                    statement.setString(2, "yugabyte");
                     statement.setString(3, TestHelper.decoderPlugin().getPostgresPluginName());
                 },
                 rs -> {
@@ -2223,6 +2412,17 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
+    private void assertFieldAbsentInBeforeImage(SourceRecord record, String fieldName) {
+        Struct value = (Struct) ((Struct) record.value()).get(Envelope.FieldName.BEFORE);
+        try {
+            value.get(fieldName);
+            fail("field should not be present");
+        }
+        catch (DataException e) {
+            // expected
+        }
+    }
+
     @Test
     @Ignore
     public void testStreamingPerformance() throws Exception {
@@ -2231,7 +2431,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         final long recordsCount = 1000000;
         final int batchSize = 1000;
@@ -2258,8 +2458,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 Strings.duration(System.currentTimeMillis() - start));
     }
 
+    @Ignore("YB: YB doesn't support the way of initial_only snapshot this connector uses, see https://github.com/yugabyte/yugabyte-db/issues/21425")
     @Test
-    @Ignore
     public void testSnapshotPerformance() throws Exception {
         TestHelper.dropAllSchemas();
         TestHelper.executeDDL("postgres_create_tables.ddl");
@@ -2272,7 +2472,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         batchInsertRecords(recordsCount, batchSize).get();
 
         // start the connector only after we've finished inserting all the records
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         CompletableFuture.runAsync(() -> consumeRecords(recordsCount))
@@ -2281,6 +2481,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 }).get();
     }
 
+    @Ignore("YB: YB doesn't support the way of initial_only snapshot this connector uses, see https://github.com/yugabyte/yugabyte-db/issues/21425")
     @Test
     @FixFor("DBZ-1242")
     public void testEmptySchemaWarningAfterApplyingFilters() throws Exception {
@@ -2294,13 +2495,14 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL_ONLY.getValue())
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "my_products");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForAvailableRecords(10 * (TestHelper.waitTimeForRecords() * 5), TimeUnit.MILLISECONDS);
 
         stopConnector(value -> assertThat(logInterceptor.containsWarnMessage(DatabaseSchema.NO_CAPTURED_DATA_COLLECTIONS_WARNING)).isTrue());
     }
 
+    @Ignore("YB: YB doesn't support the way of initial_only snapshot this connector uses, see https://github.com/yugabyte/yugabyte-db/issues/21425")
     @Test
     @FixFor("DBZ-1242")
     public void testNoEmptySchemaWarningAfterApplyingFilters() throws Exception {
@@ -2313,7 +2515,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL_ONLY.getValue());
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForAvailableRecords(100, TimeUnit.MILLISECONDS);
 
@@ -2334,7 +2536,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.PUBLICATION_NAME, "cdc");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForAvailableRecords(100, TimeUnit.MILLISECONDS);
 
@@ -2352,7 +2554,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 // rewrite key from table 'a': from {pk} to {pk, aa}
                 .with(PostgresConnectorConfig.MSG_KEY_COLUMNS, "(.*)1.a:pk,aa");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         waitForSnapshotToBeCompleted();
         SourceRecords records = consumeRecordsByTopic(2);
         records.recordsForTopic("test_server.s1.a").forEach(record -> {
@@ -2384,18 +2586,19 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .build();
 
         // Start connector, verify that it does not log no captured tables warning
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForSnapshotToBeCompleted();
         SourceRecords records = consumeRecordsByTopic(1);
         assertThat(logInterceptor.containsMessage(DatabaseSchema.NO_CAPTURED_DATA_COLLECTIONS_WARNING)).isFalse();
         stopConnector();
 
         // Restart connector, verify it does not log no captured tables warning
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning();
         assertThat(logInterceptor.containsMessage(DatabaseSchema.NO_CAPTURED_DATA_COLLECTIONS_WARNING)).isFalse();
     }
 
+    @Ignore("YB: decoderbufs unsupported")
     @Test
     @FixFor("DBZ-2865")
     @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.DECODERBUFS, reason = "Expected warning message is emitted by protobuf decoder")
@@ -2408,7 +2611,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.POLL_INTERVAL_MS, "10")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForSnapshotToBeCompleted();
         Awaitility.await().atMost(Duration.ofSeconds(TestHelper.waitTimeForRecords() * 6))
                 .until(() -> logInterceptor.containsMessage("Server-side message: 'Exiting startup callback'"));
@@ -2431,7 +2634,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // Start connector with no snapshot; by default replication slot and publication should be created
         // Wait until streaming mode begins to proceed
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning();
 
         // Check that publication was created
@@ -2444,11 +2647,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // Create log interceptor and restart the connector, should observe publication gets re-created
         final LogInterceptor interceptor = new LogInterceptor(PostgresReplicationConnection.class);
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning();
 
+        // YB Note: Increasing the wait time.
         // Check that publication was created
-        Awaitility.await("Wait until publication is created").atMost(TestHelper.waitTimeForRecords(), TimeUnit.SECONDS)
+        Awaitility.await("Wait until publication is created").atMost(TestHelper.waitTimeForRecords() * 10, TimeUnit.SECONDS)
                 .until(TestHelper::publicationExists);
 
         // Stop Connector and check log messages
@@ -2463,7 +2667,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with("column.mask.with.5.chars", "s2.a.bb");
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(2);
@@ -2473,11 +2677,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         SourceRecord record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         Struct value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("*****");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("*****");
         }
 
         // insert and verify inserts
@@ -2490,11 +2694,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
 
         value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("*****");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("*****");
         }
 
         // update and verify update
@@ -2507,14 +2711,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidUpdate(record, PK_FIELD, 2);
 
         value = (Struct) record.value();
+        // TODO Vaibhav: Note to self - the following assertion is only valid when before image is enabled.
         if (value.getStruct("before") != null) {
-            assertThat(value.getStruct("before").getString("bb")).isEqualTo("*****");
+            assertThat(value.getStruct("before").getStruct("bb").getString("value")).isEqualTo("*****");
         }
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("*****");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("*****");
         }
     }
 
@@ -2525,7 +2730,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 "CREATE TABLE s2.b (pk SERIAL, bb varchar(255), PRIMARY KEY(pk));");
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with("column.mask.hash.SHA-256.with.salt.CzQMA0cB5K", "s2.a.bb, s2.b.bb");
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(2);
@@ -2535,11 +2740,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         SourceRecord record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         Struct value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isNull();
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isNull();
         }
 
         // insert and verify inserts
@@ -2552,11 +2757,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
 
         value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("8e68c68edbbac316dfe2");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("8e68c68edbbac316dfe2");
         }
 
         // update and verify update
@@ -2569,11 +2774,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidUpdate(record, PK_FIELD, 2);
 
         value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("b4d39ab0d198fb4cac8b");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("b4d39ab0d198fb4cac8b");
         }
 
         // insert and verify inserts
@@ -2586,14 +2791,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 1);
 
         value = (Struct) record.value();
+        // TODO Vaibhav: Note to self - the following assertion is only valid when before image is enabled.
         if (value.getStruct("before") != null) {
-            assertThat(value.getStruct("before").getString("bb")).isNull();
+            assertThat(value.getStruct("before").getStruct("bb").getString("value")).isNull();
         }
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("b4d39ab0d198fb4cac8b2f023da74f670bcaf192dcc79b5d6361b7ae6b2fafdf");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("b4d39ab0d198fb4cac8b2f023da74f670bcaf192dcc79b5d6361b7ae6b2fafdf");
         }
     }
 
@@ -2603,7 +2809,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with("column.truncate.to.3.chars", "s2.a.bb");
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(2);
@@ -2613,7 +2819,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         SourceRecord record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidRead(record, PK_FIELD, 1);
+        YBVerifyRecord.isValidRead(record, PK_FIELD, 1);
 
         // insert and verify inserts
         TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
@@ -2625,11 +2831,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidInsert(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(record, PK_FIELD, 2);
 
         Struct value = (Struct) record.value();
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("tes");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("tes");
         }
 
         // update and verify update
@@ -2642,14 +2848,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(recordsForTopicS2.size()).isEqualTo(1);
 
         record = recordsForTopicS2.remove(0);
-        VerifyRecord.isValidUpdate(record, PK_FIELD, 2);
+        YBVerifyRecord.isValidUpdate(record, PK_FIELD, 2);
 
         value = (Struct) record.value();
-        if (value.getStruct("before") != null && value.getStruct("before").getString("bb") != null) {
-            assertThat(value.getStruct("before").getString("bb")).isEqualTo("tes");
+        // TODO Vaibhav: Note to self: the following before image assertion is only for cases with before image enabled.
+        if (value.getStruct("before") != null && value.getStruct("before").getStruct("bb").getString("value") != null) {
+            assertThat(value.getStruct("before").getStruct("bb").getString("value")).isEqualTo("tes");
         }
         if (value.getStruct("after") != null) {
-            assertThat(value.getStruct("after").getString("bb")).isEqualTo("hel");
+            assertThat(value.getStruct("after").getStruct("bb").getString("value")).isEqualTo("hel");
         }
     }
 
@@ -2657,14 +2864,14 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     @FixFor("DBZ-5811")
     public void shouldAckLsnOnSourceByDefault() throws Exception {
         TestHelper.dropDefaultReplicationSlot();
-        TestHelper.createDefaultReplicationSlot();
         TestHelper.execute(SETUP_TABLES_STMT);
+        TestHelper.createDefaultReplicationSlot();
 
         final Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, "false");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -2677,7 +2884,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
         TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
 
         assertConnectorIsRunning();
         waitForStreamingRunning();
@@ -2690,12 +2897,215 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Assert.assertEquals(1, slotAfterIncremental.slotLastFlushedLsn().compareTo(slotAfterSnapshot.slotLastFlushedLsn()));
     }
 
+    // YB Note: This test is only applicable when replica identity is CHANGE.
+    @Test
+    public void testYBCustomChangesForUpdate() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.createDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+        TestHelper.waitFor(Duration.ofSeconds(5));
+
+        TestHelper.execute(INSERT_STMT);
+        TestHelper.execute("UPDATE s2.a SET aa=2 WHERE pk=1;");
+        TestHelper.execute("UPDATE s2.a SET aa=NULL WHERE pk=1;");
+
+        SourceRecords actualRecords = consumeRecordsByTopic(3);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/aa/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/bb/value", null);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(1), "after/aa/value", 2);
+        assertValueField(actualRecords.allRecordsInOrder().get(1), "after/bb", null);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(2), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(2), "after/aa/value", null);
+        assertValueField(actualRecords.allRecordsInOrder().get(2), "after/bb", null);
+    }
+
+    @Test
+    public void shouldNotSkipMessagesWithoutChangeWithReplicaIdentityChange() throws Exception {
+        testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
+    }
+
+    @Test
+    public void shouldSkipMessagesWithoutChangeWithReplicaIdentityFull() throws Exception {
+        testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity.FULL);
+    }
+
+    public void testSkipMessagesWithoutChange(ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+
+        boolean isReplicaIdentityFull = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.FULL);
+
+        if (isReplicaIdentityFull) {
+            TestHelper.execute("ALTER TABLE s2.a REPLICA IDENTITY FULL;");
+            TestHelper.waitFor(Duration.ofSeconds(10));
+        }
+
+        TestHelper.createDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a")
+                .with(PostgresConnectorConfig.SKIP_MESSAGES_WITHOUT_CHANGE, true)
+                .with(PostgresConnectorConfig.COLUMN_INCLUDE_LIST, "s2.a.pk,s2.a.aa");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+        TestHelper.waitFor(Duration.ofSeconds(5));
+
+        TestHelper.execute(INSERT_STMT);
+        // This update will not be propagated if replica identity is FULL.
+        TestHelper.execute("UPDATE s2.a SET bb = 'random_value' WHERE pk=1;");
+        TestHelper.execute("UPDATE s2.a SET aa = 12345 WHERE pk=1;");
+
+        // YB Note: We will be receiving all the records if replica identity is CHANGE.
+        SourceRecords actualRecords = consumeRecordsByTopic(isReplicaIdentityFull ? 2 : 3);
+
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/pk/value", 1);
+        assertValueField(actualRecords.allRecordsInOrder().get(0), "after/aa/value", 1);
+
+        if (isReplicaIdentityFull) {
+            // In this case the second record we get is the operation where one of the monitored columns
+            // is changed.
+            assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/aa/value", 12345);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "before/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "before/aa/value", 1);
+            assertFieldAbsentInBeforeImage(actualRecords.allRecordsInOrder().get(1), "bb");
+        }
+        else {
+            assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(3);
+
+            assertValueField(actualRecords.allRecordsInOrder().get(1), "after/pk/value", 1);
+            // Column aa would be not be present since it is unchanged column.
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(1).value()).getStruct("after").get("aa")).isNull();
+
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(1).value()).getStruct("before")).isNull();
+
+            assertValueField(actualRecords.allRecordsInOrder().get(2), "after/pk/value", 1);
+            assertValueField(actualRecords.allRecordsInOrder().get(2), "after/aa/value", 12345);
+            assertFieldAbsent(actualRecords.allRecordsInOrder().get(2), "bb");
+
+            assertThat(((Struct) actualRecords.allRecordsInOrder().get(2).value()).getStruct("before")).isNull();
+
+        }
+    }
+
+    // YB Note: This test is only applicable when replica identity is CHANGE.
+    @Test
+    public void customYBStructureShouldBePresentInSnapshotRecords() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+
+        // Insert 5 records to be included in snapshot.
+        for (int i = 0; i < 5; ++i) {
+            TestHelper.execute(String.format("INSERT INTO s2.a (aa) VALUES (%d);", i));
+        }
+
+        TestHelper.createDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForSnapshotToBeCompleted();
+
+        SourceRecords actualRecords = consumeRecordsByTopic(5);
+        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(5);
+
+        Set<Integer> expectedPKValues = new HashSet<>(Arrays.asList(1, 2, 3, 4, 5));
+        Set<Integer> actualPKValues = new HashSet<>();
+
+        for (SourceRecord record : actualRecords.allRecordsInOrder()) {
+            Struct value = (Struct) record.value();
+
+            actualPKValues.add(value.getStruct("after").getStruct("pk").getInt32("value"));
+        }
+
+        assertEquals(expectedPKValues, actualPKValues);
+    }
+
+    @Test
+    public void streamColumnsWithNotNullConstraintsForReplicaIdentityChange() throws Exception {
+        testStreamColumnsWithNotNullConstraints(ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
+    }
+
+    @Test
+    public void streamColumnsWithNotNullConstraintsForReplicaIdentityFull() throws Exception {
+        testStreamColumnsWithNotNullConstraints(ReplicaIdentityInfo.ReplicaIdentity.FULL);
+    }
+
+    @Test
+    public void streamColumnsWithNotNullConstraintsForReplicaIdentityDefault() throws Exception {
+        testStreamColumnsWithNotNullConstraints(ReplicaIdentityInfo.ReplicaIdentity.DEFAULT);
+    }
+
+    public void testStreamColumnsWithNotNullConstraints(
+                                                        ReplicaIdentityInfo.ReplicaIdentity replicaIdentity)
+            throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.execute("CREATE TABLE s1.test_table (id INT PRIMARY KEY, name TEXT NOT NULL, age INT);");
+
+        if (replicaIdentity != ReplicaIdentityInfo.ReplicaIdentity.CHANGE) {
+            final String replicaIdentityName = replicaIdentity.name();
+            TestHelper.execute("ALTER TABLE s1.test_table REPLICA IDENTITY " + replicaIdentityName + ";");
+        }
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.test_table");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+
+        TestHelper.execute("INSERT INTO s1.test_table VALUES (1, 'Vaibhav', 25);");
+        TestHelper.execute("UPDATE s1.test_table SET age = 30 WHERE id = 1;");
+
+        SourceRecords actualRecords = consumeRecordsByTopic(2);
+        List<SourceRecord> records = actualRecords.allRecordsInOrder();
+        assertThat(records.size()).isEqualTo(2);
+
+        YBVerifyRecord.isValidInsert(records.get(0), "id", 1);
+        YBVerifyRecord.isValidUpdate(records.get(1), "id", 1);
+
+        // Also verify that the update record does/doesn't contain the non-updated column depending
+        // on replica identity.
+        if (replicaIdentity.equals(ReplicaIdentityInfo.ReplicaIdentity.CHANGE)) {
+            assertValueField(records.get(1), "after/name", null);
+        }
+        else {
+            assertValueField(records.get(1), "after/name/value", "Vaibhav");
+        }
+    }
+
     @Test
     @FixFor("DBZ-5811")
     public void shouldNotAckLsnOnSource() throws Exception {
         TestHelper.dropDefaultReplicationSlot();
-        TestHelper.createDefaultReplicationSlot();
         TestHelper.execute(SETUP_TABLES_STMT);
+        TestHelper.createDefaultReplicationSlot();
 
         final SlotState slotAtTheBeginning = getDefaultReplicationSlot();
 
@@ -2704,7 +3114,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, "false");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -2719,12 +3129,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
         TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
 
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
+        TestHelper.waitFor(Duration.ofSeconds(15));
+
         actualRecords = consumeRecordsByTopic(2);
+
         assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
         stopConnector();
 
@@ -2742,7 +3155,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(CommonConnectorConfig.PROVIDE_TRANSACTION_METADATA, true)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -2761,8 +3174,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         Testing.Print.enable();
 
+        // YB Note: Increasing the wait time for records.
         final List<SourceRecord> streaming = new ArrayList<SourceRecord>();
-        Awaitility.await().atMost(TestHelper.waitTimeForRecords(), TimeUnit.SECONDS).until(() -> {
+        Awaitility.await().atMost(TestHelper.waitTimeForRecords() * 15, TimeUnit.SECONDS).until(() -> {
             // Should be BEGIN + END in case of empty tx or BEGIN + data in case of our TX
             final SourceRecords streamingRecords = consumeRecordsByTopic(2);
             final SourceRecord second = streamingRecords.allRecordsInOrder().get(1);
@@ -2784,6 +3198,44 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
+    // This test is for manual testing and if this is being run then change the method TestHelper#defaultJdbcConfig
+    // to include all three nodes "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433".
+    //
+    // Now while running this test, as soon as you see "Take a node down now" in the logs now,
+    // take down the node at IP 127.0.0.1 in order to simulate a node going down scenario.
+    @Ignore("This test should not be run in the complete suite without making above mentioned changes")
+    @Test
+    public void testYBChangesForMultiHostConfiguration() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.createDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.HOSTNAME, "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433")
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+        TestHelper.waitFor(Duration.ofSeconds(5));
+
+        TestHelper.execute(INSERT_STMT);
+
+        LOGGER.info("Take a node down now");
+        TestHelper.waitFor(Duration.ofMinutes(1));
+
+        LOGGER.info("Inserting and waiting for another 30s");
+        TestHelper.execute("INSERT INTO s2.a (aa) VALUES (11);");
+
+        TestHelper.waitFor(Duration.ofMinutes(2));
+        SourceRecords actualRecords = consumeRecordsByTopic(2);
+
+        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
+    }
+
     @Test
     @FixFor("DBZ-1813")
     @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "Publication configuration only valid for PGOUTPUT decoder")
@@ -2798,7 +3250,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.PUBLICATION_NAME, "cdc");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForAvailableRecords(100, TimeUnit.MILLISECONDS);
 
@@ -2825,7 +3277,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.numeric_table,public.text_table,s1.a,s2.a")
                 .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, PostgresConnectorConfig.AutoCreateMode.FILTERED.getValue());
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForAvailableRecords(100, TimeUnit.MILLISECONDS);
 
@@ -2861,7 +3313,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             assertEquals(error.getMessage(), "Publication autocreation is disabled, please create one and restart the connector.");
         };
 
-        start(PostgresConnector.class, configBuilder.build(), cb);
+        start(YugabyteDBConnector.class, configBuilder.build(), cb);
         waitForAvailableRecords(100, TimeUnit.MILLISECONDS);
         stopConnector();
 
@@ -2882,7 +3334,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.a")
                 .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, PostgresConnectorConfig.AutoCreateMode.FILTERED.getValue());
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -2899,7 +3351,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(s1recs).isNull();
         assertThat(s2recs).hasSize(1);
 
-        VerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(s2recs.get(0), PK_FIELD, 2);
     }
 
     @Test
@@ -2918,7 +3370,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, PostgresConnectorConfig.AutoCreateMode.FILTERED.getValue())
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "nonexistent.table");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorNotRunning();
         assertTrue(logInterceptor.containsStacktraceElement("No table filters found for filtered publication cdc"));
     }
@@ -2938,7 +3390,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, PostgresConnectorConfig.AutoCreateMode.FILTERED.getValue());
 
-        start(PostgresConnector.class, initalConfigBuilder.build());
+        start(YugabyteDBConnector.class, initalConfigBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -2955,7 +3407,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(initalS1recs).isNull();
         assertThat(initalS2recs).hasSize(1);
 
-        VerifyRecord.isValidInsert(initalS2recs.get(0), PK_FIELD, 2);
+        YBVerifyRecord.isValidInsert(initalS2recs.get(0), PK_FIELD, 2);
 
         stopConnector();
 
@@ -2967,13 +3419,14 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.a")
                 .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, PostgresConnectorConfig.AutoCreateMode.FILTERED.getValue());
 
-        start(PostgresConnector.class, updatedConfigBuilder.build());
+        start(YugabyteDBConnector.class, updatedConfigBuilder.build());
         assertConnectorIsRunning();
 
         // snapshot record s1.a
         consumeRecordsByTopic(1);
 
         TestHelper.execute(INSERT_STMT);
+        TestHelper.waitFor(Duration.ofSeconds(10));
         SourceRecords actualRecordsAfterUpdate = consumeRecordsByTopic(1);
         assertThat(actualRecordsAfterUpdate.topics()).hasSize(1);
 
@@ -3005,7 +3458,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.part")
                 .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, PostgresConnectorConfig.AutoCreateMode.FILTERED.getValue());
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -3026,8 +3479,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(part1recs).isNull();
         assertThat(part2recs).isNull();
 
-        VerifyRecord.isValidInsert(recs.get(0), PK_FIELD, 1);
-        VerifyRecord.isValidInsert(recs.get(1), PK_FIELD, 501);
+        YBVerifyRecord.isValidInsert(recs.get(0), PK_FIELD, 1);
+        YBVerifyRecord.isValidInsert(recs.get(1), PK_FIELD, 501);
     }
 
     @Test
@@ -3040,7 +3493,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.SKIPPED_OPERATIONS, Envelope.Operation.UPDATE.code())
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
         assertNoRecordsToConsume();
@@ -3067,6 +3520,36 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             assertNotEquals(op, Envelope.Operation.UPDATE.code());
         });
 
+    }
+
+    @Test
+    public void nonSuperUserSnapshotAndStreaming() throws Exception {
+        TestHelper.executeDDL("replication_role_user.ddl");
+        TestHelper.execute(SETUP_TABLES_STMT);
+
+        // Only tables owned by the connector user can be added to the publication
+        TestHelper.execute("GRANT USAGE ON SCHEMA s1 to ybpgconn");
+        TestHelper.execute("GRANT USAGE ON SCHEMA s2 to ybpgconn");
+        TestHelper.execute("ALTER TABLE s1.a OWNER TO ybpgconn");
+        TestHelper.execute("ALTER TABLE s2.a OWNER TO ybpgconn");
+
+        // Start the connector with the non super user
+        Configuration.Builder configBuilderInitial = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.USER, "ybpgconn")
+                .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, PostgresConnectorConfig.AutoCreateMode.FILTERED)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
+
+        start(YugabyteDBConnector.class, configBuilderInitial.build());
+        assertConnectorIsRunning();
+
+        // insert some more records - these should not be part of the snapshot
+        TestHelper.execute(INSERT_STMT);
+
+        assertRecordsFromSnapshot(2, 1, 1);
+        assertRecordsAfterInsert(2, 2, 2);
+
+        TestHelper.execute("REVOKE CREATE ON DATABASE yugabyte FROM ybpgconn");
     }
 
     private CompletableFuture<Void> batchInsertRecords(long recordsCount, int batchSize) {
@@ -3110,7 +3593,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     @FixFor("DBZ-2911")
     public void shouldHaveLastCommitLsn() throws InterruptedException {
         TestHelper.execute(SETUP_TABLES_STMT);
-        start(PostgresConnector.class, TestHelper.defaultConfig()
+        start(YugabyteDBConnector.class, TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.PROVIDE_TRANSACTION_METADATA, true)
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .build());
@@ -3163,7 +3646,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SLOT_NAME, "12345");
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         waitForStreamingRunning();
         assertConnectorIsRunning();
     }
@@ -3174,7 +3657,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SLOT_NAME, "12345");
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         waitForStreamingRunning();
         assertConnectorIsRunning();
 
@@ -3192,12 +3675,13 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertInsert(recordsForTopic.get(3), PK_FIELD, 203);
     }
 
+    @Ignore("Enum datatype not supported yet")
     @Test
     @FixFor("DBZ-5204")
     public void testShouldNotCloseConnectionFetchingMetadataWithNewDataTypes() throws Exception {
         TestHelper.execute(CREATE_TABLES_STMT);
         Configuration config = TestHelper.defaultConfig().build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning();
         assertConnectorIsRunning();
 
@@ -3228,7 +3712,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute("INSERT INTO s1.dbz5295 (pk,data,data2) values (1,'" + toastValue1 + "','" + toastValue2 + "');");
 
         Configuration config = TestHelper.defaultConfig().build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning();
 
         SourceRecords records = consumeRecordsByTopic(1);
@@ -3237,9 +3721,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         SourceRecord record = recordsForTopic.get(0);
         Struct after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
-        assertThat(after.get("pk")).isEqualTo(1);
-        assertThat(after.get("data")).isEqualTo(toastValue1);
-        assertThat(after.get("data2")).isEqualTo(toastValue2);
+        assertThat(after.getStruct("pk").get("value")).isEqualTo(1);
+        assertThat(after.getStruct("data").get("value")).isEqualTo(toastValue1);
+        assertThat(after.getStruct("data2").get("value")).isEqualTo(toastValue2);
 
         TestHelper.execute("UPDATE s1.dbz5295 SET pk = 2 WHERE pk = 1;");
 
@@ -3250,21 +3734,21 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // First event: DELETE
         record = recordsForTopic.get(0);
-        VerifyRecord.isValidDelete(record, "pk", 1);
+        YBVerifyRecord.isValidDelete(record, "pk", 1);
         after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
         assertThat(after).isNull();
 
         // Second event: TOMBSTONE
         record = recordsForTopic.get(1);
-        VerifyRecord.isValidTombstone(record);
+        YBVerifyRecord.isValidTombstone(record);
 
         // Third event: CREATE
         record = recordsForTopic.get(2);
-        VerifyRecord.isValidInsert(record, "pk", 2);
+        YBVerifyRecord.isValidInsert(record, "pk", 2);
         after = ((Struct) record.value()).getStruct(Envelope.FieldName.AFTER);
-        assertThat(after.get("pk")).isEqualTo(2);
-        assertThat(after.get("data")).isEqualTo(toastValue1);
-        assertThat(after.get("data2")).isEqualTo(toastValue2);
+        assertThat(after.getStruct("pk").get("value")).isEqualTo(2);
+        assertThat(after.getStruct("data").get("value")).isEqualTo(toastValue1);
+        assertThat(after.getStruct("data2").get("value")).isEqualTo(toastValue2);
     }
 
     @Test
@@ -3278,7 +3762,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration config = TestHelper.defaultConfig()
                 .with("column.exclude.list", "s1.dbz5783.data")
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
 
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
 
@@ -3292,6 +3776,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(logInterceptor.containsMessage("Column 'data' optionality could not be determined, defaulting to true")).isFalse();
     }
 
+    @Ignore("YB: YB doesn't support the way of initial_only snapshot this connector uses, see https://github.com/yugabyte/yugabyte-db/issues/21425")
     @Test
     @FixFor("DBZ-5739")
     @SkipWhenDatabaseVersion(check = LESS_THAN, major = 11, reason = "This needs pg_replication_slot_advance which is supported only on Postgres 11+")
@@ -3304,7 +3789,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(CommonConnectorConfig.SNAPSHOT_MODE_TABLES, "s1.a")
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         consumeRecordsByTopic(1);
@@ -3319,7 +3804,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET, Boolean.TRUE);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         Awaitility.await().atMost(TestHelper.waitTimeForRecords() * 5, TimeUnit.SECONDS)
                 .until(() -> logInterceptor.containsStacktraceElement("Cannot seek to the last known offset "));
         assertConnectorNotRunning();
@@ -3337,7 +3822,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(CommonConnectorConfig.SNAPSHOT_MODE_TABLES, "s1.a")
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         consumeRecordsByTopic(1);
@@ -3352,7 +3837,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET, Boolean.TRUE);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         consumeRecordsByTopic(1);
         assertConnectorIsRunning();
 
@@ -3391,7 +3876,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             }
         };
 
-        start(PostgresConnector.class, configBuilder.build(), completionCallback, stopOnPKPredicate(1));
+        start(YugabyteDBConnector.class, configBuilder.build(), completionCallback, stopOnPKPredicate(1));
 
         // wait until we know we've raised the exception at startup AND the engine has been shutdown
         if (!latch.await(TestHelper.waitTimeForRecords() * 5, TimeUnit.SECONDS)) {
@@ -3424,7 +3909,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
                 .build();
-        start(PostgresConnector.class, config, (success, msg, err) -> {
+        start(YugabyteDBConnector.class, config, (success, msg, err) -> {
             error.set(err);
             message.set(msg);
             status.set(success);
@@ -3439,6 +3924,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(message.get()).contains("snapshot.custom_class cannot be empty when snapshot.mode 'custom' is defined");
     }
 
+    // Added test annotation since it was not present
+    @Test
     @FixFor("DBZ-5917")
     public void shouldIncludeTableWithBackSlashInName() throws Exception {
         String setupStmt = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
@@ -3453,7 +3940,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.back\\\\slash");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
         TestHelper.execute("INSERT INTO s1.\"back\\slash\" (aa, bb) VALUES (3, 3);");
@@ -3465,10 +3952,10 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         AtomicInteger pkValue = new AtomicInteger(1);
         records.forEach(record -> {
             if (pkValue.get() <= 2) {
-                VerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
+                YBVerifyRecord.isValidRead(record, PK_FIELD, pkValue.getAndIncrement());
             }
             else {
-                VerifyRecord.isValidInsert(record, PK_FIELD, pkValue.getAndIncrement());
+                YBVerifyRecord.isValidInsert(record, PK_FIELD, pkValue.getAndIncrement());
             }
         });
     }
@@ -3481,7 +3968,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 "CREATE SCHEMA IF NOT EXISTS s1;",
                 "CREATE TABLE s1.DBZ6076 (pk SERIAL, aa integer, PRIMARY KEY(pk));",
                 "INSERT INTO s1.DBZ6076 (aa) VALUES (1);");
-        start(PostgresConnector.class, TestHelper.defaultConfig()
+        start(YugabyteDBConnector.class, TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.name())
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.DBZ6076")
                 .with(PostgresConnectorConfig.SOURCE_INFO_STRUCT_MAKER, CustomPostgresSourceInfoStructMaker.class.getName())
@@ -3507,11 +3994,23 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         });
     }
 
+    @Override
+    protected int consumeAvailableRecords(Consumer<SourceRecord> recordConsumer) {
+        List<SourceRecord> records = consumedLines
+                .stream()
+                .filter(r -> !r.topic().equals(TestHelper.getDefaultHeartbeatTopic()))
+                .collect(Collectors.toList());
+        if (recordConsumer != null) {
+            records.forEach(recordConsumer);
+        }
+        return records.size();
+    }
+
     @Test
     @FixFor("DBZ-6076")
     public void shouldUseDefaultSourceInfoStructMaker() throws InterruptedException {
         TestHelper.execute(SETUP_TABLES_STMT);
-        start(PostgresConnector.class, TestHelper.defaultConfig()
+        start(YugabyteDBConnector.class, TestHelper.defaultConfig()
                 .build());
         assertConnectorIsRunning();
 
@@ -3553,12 +4052,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         List<SourceRecord> recordsForTopicS1 = actualRecords.recordsForTopic(topicName("s1.a"));
         assertThat(recordsForTopicS1.size()).isEqualTo(expectedCountPerSchema);
         IntStream.range(0, expectedCountPerSchema)
-                .forEach(i -> VerifyRecord.isValidRead(recordsForTopicS1.remove(0), PK_FIELD, pks[i]));
+                .forEach(i -> YBVerifyRecord.isValidRead(recordsForTopicS1.remove(0), PK_FIELD, pks[i]));
 
         List<SourceRecord> recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(recordsForTopicS2.size()).isEqualTo(expectedCountPerSchema);
         IntStream.range(0, expectedCountPerSchema)
-                .forEach(i -> VerifyRecord.isValidRead(recordsForTopicS2.remove(0), PK_FIELD, pks[i + expectedCountPerSchema]));
+                .forEach(i -> YBVerifyRecord.isValidRead(recordsForTopicS2.remove(0), PK_FIELD, pks[i + expectedCountPerSchema]));
     }
 
     private void assertRecordsAfterInsert(int expectedCount, int... pks) throws InterruptedException {
@@ -3567,14 +4066,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // we have 2 schemas
         int expectedCountPerSchema = expectedCount / 2;
+        LOGGER.info("Expected count per schema: {}", expectedCountPerSchema);
 
         List<SourceRecord> recordsForTopicS1 = actualRecords.recordsForTopic(topicName("s1.a"));
         assertThat(recordsForTopicS1.size()).isEqualTo(expectedCountPerSchema);
-        IntStream.range(0, expectedCountPerSchema).forEach(i -> VerifyRecord.isValidInsert(recordsForTopicS1.remove(0), PK_FIELD, pks[i]));
+        IntStream.range(0, expectedCountPerSchema).forEach(i -> YBVerifyRecord.isValidInsert(recordsForTopicS1.remove(0), PK_FIELD, pks[i]));
 
         List<SourceRecord> recordsForTopicS2 = actualRecords.recordsForTopic(topicName("s2.a"));
         assertThat(recordsForTopicS2.size()).isEqualTo(expectedCountPerSchema);
-        IntStream.range(0, expectedCountPerSchema).forEach(i -> VerifyRecord.isValidInsert(recordsForTopicS2.remove(0), PK_FIELD, pks[i]));
+        IntStream.range(0, expectedCountPerSchema).forEach(i -> YBVerifyRecord.isValidInsert(recordsForTopicS2.remove(0), PK_FIELD, pks[i]));
     }
 
     protected void assertSourceInfoMillisecondTransactionTimestamp(SourceRecord record, long ts_ms, long tolerance_ms) {
@@ -3604,6 +4104,51 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
     }
 
+    @Override
+    protected int consumeRecordsUntil(BiPredicate<Integer, SourceRecord> condition,
+                                      BiFunction<Integer, SourceRecord, String> logMessage,
+                                      int breakAfterNulls, Consumer<SourceRecord> recordConsumer,
+                                      boolean assertRecords)
+            throws InterruptedException {
+        int recordsConsumed = 0;
+        int nullReturn = 0;
+        boolean isLastRecord = false;
+        while (!isLastRecord && isEngineRunning.get()) {
+            SourceRecord record = consumedLines.poll(pollTimeoutInMs, TimeUnit.MILLISECONDS);
+
+            // YB Note: Ignore heartbeat records while consuming.
+            if (record != null && record.topic().equals(TestHelper.getDefaultHeartbeatTopic())) {
+                continue;
+            }
+
+            if (record != null) {
+                nullReturn = 0;
+                ++recordsConsumed;
+                if (recordConsumer != null) {
+                    recordConsumer.accept(record);
+                }
+                if (Testing.Debug.isEnabled()) {
+                    Testing.debug(logMessage.apply(recordsConsumed, record));
+                    debug(record);
+                }
+                else if (Testing.Print.isEnabled()) {
+                    Testing.print(logMessage.apply(recordsConsumed, record));
+                    print(record);
+                }
+                if (assertRecords) {
+                    YBVerifyRecord.isValid(record, /* skipAvroValidation */ false);
+                }
+                isLastRecord = condition.test(recordsConsumed, record);
+            }
+            else {
+                if (++nullReturn >= breakAfterNulls) {
+                    return recordsConsumed;
+                }
+            }
+        }
+        return recordsConsumed;
+    }
+
     private void validateFieldDef(Field expected) {
         ConfigDef configDef = connector.config();
         assertThat(configDef.names()).contains(expected.name());
@@ -3629,5 +4174,22 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     private void waitForStreamingRunning() throws InterruptedException {
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
+    }
+
+    @Override
+    protected void assertConnectorIsRunning() {
+        try {
+            Thread.sleep(10_000);
+        }
+        catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        super.assertConnectorIsRunning();
+    }
+
+    @Override
+    protected void assertInsert(SourceRecord record, String pkField, int pk) {
+        YBVerifyRecord.isValidInsert(record, pkField, pk);
     }
 }

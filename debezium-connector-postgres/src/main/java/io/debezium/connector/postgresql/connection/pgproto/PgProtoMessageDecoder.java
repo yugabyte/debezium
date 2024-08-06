@@ -12,11 +12,11 @@ import java.util.Set;
 import java.util.function.Function;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.replication.fluent.logical.ChainedLogicalStreamBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
 
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.connection.AbstractMessageDecoder;

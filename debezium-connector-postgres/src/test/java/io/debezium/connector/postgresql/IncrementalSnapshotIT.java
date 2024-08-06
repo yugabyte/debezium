@@ -12,6 +12,7 @@ import static org.assertj.core.api.Assertions.entry;
 
 import java.io.File;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,6 +24,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.debezium.config.CommonConnectorConfig;
 import io.debezium.config.Configuration;
@@ -38,7 +41,9 @@ import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.util.Collect;
 import io.debezium.util.Testing;
 
-public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<PostgresConnector> {
+public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<YugabyteDBConnector> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(IncrementalSnapshotIT.class);
 
     private static final String TOPIC_NAME = "test_server.s1.a";
 
@@ -48,8 +53,8 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
             + "CREATE TABLE s1.a4 (pk1 integer, pk2 integer, pk3 integer, pk4 integer, aa integer, PRIMARY KEY(pk1, pk2, pk3, pk4));"
             + "CREATE TABLE s1.a42 (pk1 integer, pk2 integer, pk3 integer, pk4 integer, aa integer);"
             + "CREATE TABLE s1.anumeric (pk numeric, aa integer, PRIMARY KEY(pk));"
-            + "CREATE TABLE s1.debezium_signal (id varchar(64), type varchar(32), data varchar(2048));"
-            + "ALTER TABLE s1.debezium_signal REPLICA IDENTITY FULL;"
+            + "CREATE TABLE s1.debezium_signal (id varchar(64), type varchar(32), data varchar(2048), sno serial PRIMARY KEY);"
+            // + "ALTER TABLE s1.debezium_signal REPLICA IDENTITY FULL;"
             + "CREATE TYPE enum_type AS ENUM ('UP', 'DOWN', 'LEFT', 'RIGHT', 'STORY');"
             + "CREATE TABLE s1.enumpk (pk enum_type, aa integer, PRIMARY KEY(pk));";
 
@@ -90,7 +95,6 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
         stopConnector();
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.dropPublication();
-
     }
 
     protected Configuration.Builder config() {
@@ -98,7 +102,7 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.SIGNAL_DATA_COLLECTION, "s1.debezium_signal")
-                .with(PostgresConnectorConfig.INCREMENTAL_SNAPSHOT_CHUNK_SIZE, 10)
+                .with(PostgresConnectorConfig.INCREMENTAL_SNAPSHOT_CHUNK_SIZE, 200)
                 .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1")
                 .with(CommonConnectorConfig.SIGNAL_ENABLED_CHANNELS, "source")
                 .with(CommonConnectorConfig.SIGNAL_POLL_INTERVAL_MS, 5)
@@ -121,7 +125,7 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.SIGNAL_DATA_COLLECTION, "s1.debezium_signal")
                 .with(CommonConnectorConfig.SIGNAL_POLL_INTERVAL_MS, 5)
-                .with(PostgresConnectorConfig.INCREMENTAL_SNAPSHOT_CHUNK_SIZE, 10)
+                .with(PostgresConnectorConfig.INCREMENTAL_SNAPSHOT_CHUNK_SIZE, 200)
                 .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1")
                 .with(RelationalDatabaseConnectorConfig.MSG_KEY_COLUMNS, "s1.a42:pk1,pk2,pk3,pk4")
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, tableIncludeList)
@@ -130,8 +134,8 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
     }
 
     @Override
-    protected Class<PostgresConnector> connectorClass() {
-        return PostgresConnector.class;
+    protected Class<YugabyteDBConnector> connectorClass() {
+        return YugabyteDBConnector.class;
     }
 
     @Override
@@ -167,7 +171,9 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
     @Override
     protected void waitForConnectorToStart() {
         super.waitForConnectorToStart();
-        TestHelper.waitForDefaultReplicationSlotBeActive();
+        if (!YugabyteDBServer.isEnabled()) {
+            TestHelper.waitForDefaultReplicationSlotBeActive();
+        }
     }
 
     @Override
@@ -213,10 +219,13 @@ public class IncrementalSnapshotIT extends AbstractIncrementalSnapshotTest<Postg
 
         populate4PkTable();
         startConnector();
+        TestHelper.waitFor(Duration.ofMinutes(1));
 
+        LOGGER.info("Sending signal to table s1.a4");
         sendAdHocSnapshotSignal("s1.a4");
 
         Thread.sleep(5000);
+        LOGGER.info("Inserting more records into the table s1.a4");
         try (JdbcConnection connection = databaseConnection()) {
             connection.setAutoCommit(false);
             for (int i = 0; i < ROW_COUNT; i++) {

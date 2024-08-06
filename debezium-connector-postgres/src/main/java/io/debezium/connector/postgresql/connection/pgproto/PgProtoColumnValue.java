@@ -17,10 +17,11 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 
-import org.postgresql.geometric.PGpoint;
-import org.postgresql.jdbc.PgArray;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.geometric.PGpoint;
+import com.yugabyte.jdbc.PgArray;
 
 import io.debezium.connector.postgresql.PgOid;
 import io.debezium.connector.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;

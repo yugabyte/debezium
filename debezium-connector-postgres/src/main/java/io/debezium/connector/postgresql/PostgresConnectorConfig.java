@@ -11,12 +11,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigValue;
+import org.apache.kafka.connect.data.Struct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,15 +40,22 @@ import io.debezium.connector.postgresql.snapshot.InitialOnlySnapshotter;
 import io.debezium.connector.postgresql.snapshot.InitialSnapshotter;
 import io.debezium.connector.postgresql.snapshot.NeverSnapshotter;
 import io.debezium.connector.postgresql.spi.Snapshotter;
+import io.debezium.data.Envelope;
+import io.debezium.heartbeat.Heartbeat;
+import io.debezium.heartbeat.HeartbeatConnectionProvider;
+import io.debezium.heartbeat.HeartbeatErrorHandler;
 import io.debezium.jdbc.JdbcConfiguration;
+import io.debezium.jdbc.JdbcConnection;
 import io.debezium.relational.ColumnFilterMode;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.TableId;
 import io.debezium.relational.Tables.TableFilter;
+import io.debezium.schema.SchemaNameAdjuster;
+import io.debezium.spi.topic.TopicNamingStrategy;
 import io.debezium.util.Strings;
 
 /**
- * The configuration properties for the {@link PostgresConnector}
+ * The configuration properties for the {@link YugabyteDBConnector}
  *
  * @author Horia Chiorean
  */
@@ -286,11 +295,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         ALLOW("allow"),
 
         /**
-        * Establish a secure connection first.
-        * Establish an unencrypted connection next if a secure connection cannot be established
-        *
-        * see the {@code sslmode} Postgres JDBC driver option
-        */
+         * Establish a secure connection first.
+         * Establish an unencrypted connection next if a secure connection cannot be established
+         *
+         * see the {@code sslmode} Postgres JDBC driver option
+         */
         PREFER("prefer"),
 
         /**
@@ -384,6 +393,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             public boolean supportsLogicalDecodingMessage() {
                 return true;
             }
+
+            @Override
+            public boolean isYBOutput() {
+                return false;
+            }
         },
         DECODERBUFS("decoderbufs") {
             @Override
@@ -405,6 +419,37 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             public boolean supportsLogicalDecodingMessage() {
                 return false;
             }
+
+            @Override
+            public boolean isYBOutput() {
+                return false;
+            }
+        },
+        YBOUTPUT("yboutput") {
+            @Override
+            public MessageDecoder messageDecoder(MessageDecoderContext config, PostgresConnection connection) {
+                return new PgOutputMessageDecoder(config, connection);
+            }
+
+            @Override
+            public String getPostgresPluginName() {
+                return getValue();
+            }
+
+            @Override
+            public boolean supportsTruncate() {
+                return false;
+            }
+
+            @Override
+            public boolean supportsLogicalDecodingMessage() {
+                return true;
+            }
+
+            @Override
+            public boolean isYBOutput() {
+                return true;
+            }
         };
 
         private final String decoderName;
@@ -423,6 +468,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         public String getValue() {
             return decoderName;
         }
+
+        public abstract boolean isYBOutput();
 
         public abstract String getPostgresPluginName();
 
@@ -483,24 +530,35 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     }
 
     protected static final String DATABASE_CONFIG_PREFIX = "database.";
-    protected static final int DEFAULT_PORT = 5_432;
+    protected static final int DEFAULT_PORT = 5_433;
     protected static final int DEFAULT_SNAPSHOT_FETCH_SIZE = 10_240;
     protected static final int DEFAULT_MAX_RETRIES = 6;
+    public static final Pattern YB_HOSTNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9-_.,:]+$");
 
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
 
+    public static final Field HOSTNAME = Field.create(DATABASE_CONFIG_PREFIX + JdbcConfiguration.HOSTNAME)
+            .withDisplayName("Hostname")
+            .withType(Type.STRING)
+            .withGroup(Field.createGroupEntry(Field.Group.CONNECTION, 2))
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.HIGH)
+            .required()
+            .withValidation(PostgresConnectorConfig::validateYBHostname)
+            .withDescription("Resolvable hostname or IP address of the database server.");
+
     public static final Field PLUGIN_NAME = Field.create("plugin.name")
             .withDisplayName("Plugin")
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTION_ADVANCED_REPLICATION, 0))
-            .withEnum(LogicalDecoder.class, LogicalDecoder.DECODERBUFS)
+            .withEnum(LogicalDecoder.class, LogicalDecoder.YBOUTPUT)
             .withWidth(Width.MEDIUM)
             .withImportance(Importance.MEDIUM)
             .withDescription("The name of the Postgres logical decoding plugin installed on the server. " +
-                    "Supported values are '" + LogicalDecoder.DECODERBUFS.getValue()
-                    + "' and '" + LogicalDecoder.PGOUTPUT.getValue()
+                    "Supported values are '" + LogicalDecoder.PGOUTPUT.getValue()
+                    + "' and '" + LogicalDecoder.YBOUTPUT.getValue()
                     + "'. " +
-                    "Defaults to '" + LogicalDecoder.DECODERBUFS.getValue() + "'.");
+                    "Defaults to '" + LogicalDecoder.YBOUTPUT.getValue() + "'.");
 
     public static final Field SLOT_NAME = Field.create("slot.name")
             .withDisplayName("Slot")
@@ -543,6 +601,14 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withDefault(ReplicationConnection.Builder.DEFAULT_PUBLICATION_NAME)
             .withDescription("The name of the Postgres 10+ publication used for streaming changes from a plugin. " +
                     "Defaults to '" + ReplicationConnection.Builder.DEFAULT_PUBLICATION_NAME + "'");
+
+    public static final Field YB_CONSISTENT_SNAPSHOT = Field.create("yb.consistent.snapshot")
+            .withDisplayName("YB Consistent Snapshot")
+            .withType(Type.BOOLEAN)
+            .withDefault(true)
+            .withImportance(Importance.LOW)
+            .withDescription("Whether or not to take a consistent snapshot of the tables." +
+                    "Disabling this option may result in duplication of some already snapshot data in the streaming phase.");
 
     public enum AutoCreateMode implements EnumeratedValue {
         /**
@@ -737,7 +803,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withWidth(Width.LONG)
             .withImportance(Importance.MEDIUM)
             .withDescription(
-                    "A name of class to that creates SSL Sockets. Use org.postgresql.ssl.NonValidatingFactory to disable SSL validation in development environments");
+                    "A name of class to that creates SSL Sockets. Use com.yugabyte.ssl.NonValidatingFactory to disable SSL validation in development environments");
 
     public static final Field SNAPSHOT_MODE = Field.create("snapshot.mode")
             .withDisplayName("Snapshot mode")
@@ -891,7 +957,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDefault(2)
             .withDescription("Number of fractional digits when money type is converted to 'precise' decimal number.");
-
     public static final Field SHOULD_FLUSH_LSN_IN_SOURCE_DB = Field.create("flush.lsn.source")
             .withDisplayName("Boolean to determine if Debezium should flush LSN in the source database")
             .withType(Type.BOOLEAN)
@@ -1011,6 +1076,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return getConfig().validate(ALL_FIELDS);
     }
 
+    public boolean isYbConsistentSnapshotEnabled() {
+        return getConfig().getBoolean(YB_CONSISTENT_SNAPSHOT);
+    }
+
     protected Snapshotter getSnapshotter() {
         return this.snapshotMode.getSnapshotter(getConfig());
     }
@@ -1086,6 +1155,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .connector(
                     SNAPSHOT_MODE,
                     SNAPSHOT_MODE_CLASS,
+                    YB_CONSISTENT_SNAPSHOT,
                     HSTORE_HANDLING_MODE,
                     BINARY_HANDLING_MODE,
                     SCHEMA_NAME_ADJUSTMENT_MODE,
@@ -1140,6 +1210,19 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return 0;
     }
 
+    /**
+     * Method to get the connection factory depending on the provided hostname value.
+     * @param hostName the host(s) for the PostgreSQL/YugabyteDB instance
+     * @return a {@link io.debezium.jdbc.JdbcConnection.ConnectionFactory} instance
+     */
+    public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName) {
+        return hostName.contains(":")
+                ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                        PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
+                : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                        PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
+    }
+
     protected static int validateReplicaAutoSetField(Configuration config, Field field, Field.ValidationOutput problems) {
         String replica_autoset_values = config.getString(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES);
         int problemCount = 0;
@@ -1184,4 +1267,60 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     !t.schema().startsWith(TEMP_TABLE_SCHEMA_PREFIX);
         }
     }
+
+    @Override
+    public Heartbeat createHeartbeat(TopicNamingStrategy topicNamingStrategy,
+                                     SchemaNameAdjuster schemaNameAdjuster,
+                                     HeartbeatConnectionProvider connectionProvider,
+                                     HeartbeatErrorHandler errorHandler) {
+        if (YugabyteDBServer.isEnabled()) {
+            // We do not need any heartbeat when snapshot is never required.
+            if (snapshotMode.equals(SnapshotMode.NEVER)) {
+                return Heartbeat.DEFAULT_NOOP_HEARTBEAT;
+            }
+
+            return new YBHeartbeatImpl(getHeartbeatInterval(), topicNamingStrategy.heartbeatTopic(),
+                    getLogicalName(), schemaNameAdjuster);
+        }
+        else {
+            return super.createHeartbeat(topicNamingStrategy, schemaNameAdjuster, connectionProvider, errorHandler);
+        }
+    }
+
+    @Override
+    public Optional<String[]> parseSignallingMessage(Struct value) {
+        final Struct after = value.getStruct(Envelope.FieldName.AFTER);
+        if (after == null) {
+            LOGGER.warn("After part of signal '{}' is missing", value);
+            return Optional.empty();
+        }
+        List<org.apache.kafka.connect.data.Field> fields = after.schema().fields();
+        return Optional.of(new String[]{
+                after.getString(fields.get(0).name()),
+                after.getString(fields.get(1).name()),
+                after.getString(fields.get(2).name())
+        });
+    }
+
+    protected static int validateYBHostname(Configuration config, Field field, Field.ValidationOutput problems) {
+        String hostName = config.getString(field);
+        int problemCount = 0;
+
+        if (!Strings.isNullOrBlank(hostName)) {
+            if (hostName.contains(",") && !hostName.contains(":")) {
+                // Basic validation for cases when a user has only specified comma separated IPs which is not the correct format.
+                problems.accept(field, hostName, hostName + " has invalid format (specify mutiple hosts in the format ip1:port1,ip2:port2,ip3:port3)");
+                ++problemCount;
+            }
+
+            if (!YB_HOSTNAME_PATTERN.asPredicate().test(hostName)) {
+                problems.accept(field, hostName,
+                        hostName + " has invalid format (only the underscore, hyphen, dot, comma, colon and alphanumeric characters are allowed)");
+                ++problemCount;
+            }
+        }
+
+        return problemCount;
+    }
+
 }

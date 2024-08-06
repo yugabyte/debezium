@@ -3,12 +3,12 @@
     <parent>
         <groupId>io.debezium</groupId>
         <artifactId>debezium-parent</artifactId>
-        <version>2.5.2.Final</version>
+        <version>dz.2.5.2.yb.2024.1-SNAPSHOT</version>
         <relativePath>../debezium-parent/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>debezium-connector-postgres</artifactId>
-    <name>Debezium Connector for PostgreSQL</name>
+    <artifactId>debezium-connector-yugabytedb</artifactId>
+    <name>YugabyteDB Source Connector</name>
     <packaging>jar</packaging>
     <properties>
         <!-- 
@@ -17,15 +17,15 @@
           work on all platforms. We'll set some of these as system properties during integration testing.
       -->
         <version.postgres.server>10</version.postgres.server>
-        <postgres.host>${docker.host.address}</postgres.host>
-        <postgres.port>5432</postgres.port>
-        <postgres.user>postgres</postgres.user>
-        <postgres.password>postgres</postgres.password>
-        <postgres.db.name>postgres</postgres.db.name>
+        <postgres.host>127.0.0.1</postgres.host>
+        <postgres.port>5433</postgres.port>
+        <postgres.user>yugabyte</postgres.user>
+        <postgres.password>yugabyte</postgres.password>
+        <postgres.db.name>yugabyte</postgres.db.name>
         <postgres.encoding>UTF8</postgres.encoding>
         <postgres.system.lang>en_US.utf8</postgres.system.lang>
-        <postgres.image>quay.io/debezium/postgres:${version.postgres.server}</postgres.image>
-        <postgres.config.file>/usr/share/postgresql/postgresql.conf.sample</postgres.config.file>
+<!--        <postgres.image>quay.io/debezium/postgres:${version.postgres.server}</postgres.image>-->
+<!--        <postgres.config.file>/usr/share/postgresql/postgresql.conf.sample</postgres.config.file>-->
         <docker.skip>false</docker.skip>
         <docker.showLogs>true</docker.showLogs>
         <docker.initimage>ln -fs /usr/share/zoneinfo/US/Samoa /etc/localtime &amp;&amp; echo timezone=US/Samoa &gt;&gt; ${postgres.config.file}</docker.initimage>
@@ -50,6 +50,11 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.yugabyte</groupId>
+            <artifactId>jdbc-yugabytedb</artifactId>
+            <version>42.3.5-yb-4</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
@@ -162,6 +167,25 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.6.0</version>
+                <configuration>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>assemble-all</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>com.github.os72</groupId>
                 <artifactId>protoc-jar-maven-plugin</artifactId>
                 <executions>
@@ -201,7 +225,7 @@
                                     <LANG>${postgres.system.lang}</LANG>
                                 </env>
                                 <ports>
-                                    <port>${postgres.port}:5432</port>
+                                    <port>${postgres.port}:5433</port>
                                 </ports>
                                 <log>
                                     <prefix>postgres</prefix>

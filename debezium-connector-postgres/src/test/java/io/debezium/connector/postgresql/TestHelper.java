@@ -28,9 +28,10 @@ import java.util.stream.Collectors;
 
 import org.awaitility.Awaitility;
 import org.awaitility.core.ConditionTimeoutException;
-import org.postgresql.jdbc.PgConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.jdbc.PgConnection;
 
 import io.debezium.config.CommonConnectorConfig;
 import io.debezium.config.Configuration;
@@ -40,7 +41,9 @@ import io.debezium.connector.postgresql.connection.PostgresConnection.PostgresVa
 import io.debezium.connector.postgresql.connection.PostgresDefaultValueConverter;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.connector.postgresql.spi.SlotState;
+import io.debezium.heartbeat.Heartbeat;
 import io.debezium.jdbc.JdbcConfiguration;
+import io.debezium.junit.logging.LogInterceptor;
 import io.debezium.schema.SchemaTopicNamingStrategy;
 import io.debezium.spi.topic.TopicNamingStrategy;
 import io.debezium.util.Throwables;
@@ -55,7 +58,7 @@ public final class TestHelper {
 
     public static final String CONNECTION_TEST = "Debezium Test";
     public static final String TEST_SERVER = "test_server";
-    protected static final String TEST_DATABASE = "postgres";
+    protected static final String TEST_DATABASE = "yugabyte";
     protected static final String PK_FIELD = "pk";
     private static final String TEST_PROPERTY_PREFIX = "debezium.test.";
     private static final Logger LOGGER = LoggerFactory.getLogger(TestHelper.class);
@@ -129,7 +132,7 @@ public final class TestHelper {
      */
     public static PostgresConnectorConfig.LogicalDecoder decoderPlugin() {
         final String s = System.getProperty(PostgresConnectorConfig.PLUGIN_NAME.name());
-        return (s == null || s.length() == 0) ? PostgresConnectorConfig.LogicalDecoder.DECODERBUFS : PostgresConnectorConfig.LogicalDecoder.parse(s);
+        return (s == null || s.length() == 0) ? PostgresConnectorConfig.LogicalDecoder.YBOUTPUT : PostgresConnectorConfig.LogicalDecoder.parse(s);
     }
 
     /**
@@ -209,11 +212,13 @@ public final class TestHelper {
         if (!schemaNames.contains(PostgresSchema.PUBLIC_SCHEMA_NAME)) {
             schemaNames.add(PostgresSchema.PUBLIC_SCHEMA_NAME);
         }
+        LOGGER.info("Schemas to drop: {}", schemaNames);
         String dropStmts = schemaNames.stream()
                 .map(schema -> "\"" + schema.replaceAll("\"", "\"\"") + "\"")
                 .map(schema -> "DROP SCHEMA IF EXISTS " + schema + " CASCADE;")
                 .collect(Collectors.joining(lineSeparator));
         TestHelper.execute(dropStmts);
+
         try {
             TestHelper.executeDDL("init_database.ddl");
         }
@@ -262,28 +267,37 @@ public final class TestHelper {
     }
 
     public static JdbcConfiguration defaultJdbcConfig(String hostname, int port) {
+        Configuration config = Configuration.fromSystemProperties("database.");
         return JdbcConfiguration.copy(Configuration.fromSystemProperties("database."))
                 .with(CommonConnectorConfig.TOPIC_PREFIX, "dbserver1")
-                .withDefault(JdbcConfiguration.DATABASE, "postgres")
-                .withDefault(JdbcConfiguration.HOSTNAME, hostname)
-                .withDefault(JdbcConfiguration.PORT, port)
-                .withDefault(JdbcConfiguration.USER, "postgres")
-                .withDefault(JdbcConfiguration.PASSWORD, "postgres")
+                .with(JdbcConfiguration.DATABASE, "yugabyte")
+                .with(JdbcConfiguration.HOSTNAME, hostname)
+                .with(JdbcConfiguration.PORT, port)
+                .with(JdbcConfiguration.USER, "yugabyte")
+                .with(JdbcConfiguration.PASSWORD, "yugabyte")
                 .build();
     }
 
     public static JdbcConfiguration defaultJdbcConfig() {
-        return defaultJdbcConfig("localhost", 5432);
+        return defaultJdbcConfig("127.0.0.1", 5433);
+    }
+
+    public static String getDefaultHeartbeatTopic() {
+        return Heartbeat.HEARTBEAT_TOPICS_PREFIX.defaultValueAsString() + "." + TEST_SERVER;
     }
 
     public static Configuration.Builder defaultConfig() {
+        return defaultConfig("YBOUTPUT");
+    }
+
+    public static Configuration.Builder defaultConfig(String pluginName) {
         JdbcConfiguration jdbcConfiguration = defaultJdbcConfig();
         Configuration.Builder builder = Configuration.create();
         jdbcConfiguration.forEach((field, value) -> builder.with(PostgresConnectorConfig.DATABASE_CONFIG_PREFIX + field, value));
         builder.with(CommonConnectorConfig.TOPIC_PREFIX, TEST_SERVER)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, true)
                 .with(PostgresConnectorConfig.STATUS_UPDATE_INTERVAL_MS, 100)
-                .with(PostgresConnectorConfig.PLUGIN_NAME, decoderPlugin())
+                .with(PostgresConnectorConfig.PLUGIN_NAME, pluginName)
                 .with(PostgresConnectorConfig.SSL_MODE, SecureConnectionMode.DISABLED)
                 .with(PostgresConnectorConfig.MAX_RETRIES, 2)
                 .with(PostgresConnectorConfig.RETRY_DELAY_MS, 2000);
@@ -367,7 +381,7 @@ public final class TestHelper {
     }
 
     protected static void dropPublication(String publicationName) {
-        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
+        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) || decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.YBOUTPUT)) {
             try {
                 execute("DROP PUBLICATION " + publicationName);
             }
@@ -378,7 +392,7 @@ public final class TestHelper {
     }
 
     protected static void createPublicationForAllTables(String publicationName) {
-        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
+        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) || decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.YBOUTPUT)) {
             execute("CREATE PUBLICATION " + publicationName + " FOR ALL TABLES");
         }
     }
@@ -388,7 +402,7 @@ public final class TestHelper {
     }
 
     protected static boolean publicationExists(String publicationName) {
-        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT)) {
+        if (decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) || decoderPlugin().equals(PostgresConnectorConfig.LogicalDecoder.YBOUTPUT)) {
             try (PostgresConnection connection = create()) {
                 String query = String.format("SELECT pubname FROM pg_catalog.pg_publication WHERE pubname = '%s'", publicationName);
                 try {
@@ -442,6 +456,20 @@ public final class TestHelper {
                 fail("Expected no open transactions but there was at least one.");
             }
         }
+    }
+
+    protected static void waitFor(Duration duration) throws InterruptedException {
+        Awaitility.await()
+                .pollDelay(duration)
+                .atMost(duration.plusSeconds(1))
+                .until(() -> true);
+    }
+
+    protected static void waitForLogMessage(LogInterceptor logInterceptor, String message) {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofSeconds(1))
+                .until(() -> logInterceptor.containsMessage(message));
     }
 
     private static List<String> getOpenIdleTransactions(PostgresConnection connection) throws SQLException {

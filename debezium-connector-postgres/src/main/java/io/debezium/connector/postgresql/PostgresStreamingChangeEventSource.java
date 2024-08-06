@@ -12,14 +12,16 @@ import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.core.BaseConnection;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
+import io.debezium.connector.postgresql.connection.PostgresReplicationConnection;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.connector.postgresql.connection.ReplicationMessage;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Operation;
@@ -48,7 +50,6 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      * trigger a "WAL backlog growing" warning.
      */
     private static final int GROWING_WAL_WARNING_LOG_INTERVAL = 10_000;
-
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresStreamingChangeEventSource.class);
 
     // PGOUTPUT decoder sends the messages with larger time gaps than other decoders
@@ -62,7 +63,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private final PostgresSchema schema;
     private final PostgresConnectorConfig connectorConfig;
     private final PostgresTaskContext taskContext;
-    private final ReplicationConnection replicationConnection;
+    private final PostgresReplicationConnection replicationConnection;
     private final AtomicReference<ReplicationStream> replicationStream = new AtomicReference<>();
     private final Snapshotter snapshotter;
     private final DelayStrategy pauseNoMessage;
@@ -82,6 +83,11 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private Lsn lastCompletelyProcessedLsn;
     private PostgresOffsetContext effectiveOffset;
 
+    /**
+     * For DEBUGGING
+     */
+    private OptionalLong lastTxnidForWhichCommitSeen = OptionalLong.empty();
+
     public PostgresStreamingChangeEventSource(PostgresConnectorConfig connectorConfig, Snapshotter snapshotter,
                                               PostgresConnection connection, PostgresEventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
                                               PostgresSchema schema, PostgresTaskContext taskContext, ReplicationConnection replicationConnection) {
@@ -94,7 +100,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         pauseNoMessage = DelayStrategy.constant(taskContext.getConfig().getPollInterval());
         this.taskContext = taskContext;
         this.snapshotter = snapshotter;
-        this.replicationConnection = replicationConnection;
+        this.replicationConnection = (PostgresReplicationConnection) replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
 
     }
@@ -133,6 +139,15 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         try {
             final WalPositionLocator walPosition;
 
+            // This log can be printed either once or twice.
+            // once - it means that the wal position is not being searched
+            // twice - the wal position locator is searching for a wal position
+            if (YugabyteDBServer.isEnabled()) {
+                LOGGER.info("PID for replication connection: {} on node {}",
+                        replicationConnection.getBackendPid(),
+                        replicationConnection.getConnectedNodeIp());
+            }
+
             if (hasStartLsnStoredInContext) {
                 // start streaming from the last recorded position in the offset
                 final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
@@ -151,7 +166,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             // such that the connection times out. We must enable keep
             // alive to ensure that it doesn't time out
             ReplicationStream stream = this.replicationStream.get();
-            stream.startKeepAlive(Threads.newSingleThreadExecutor(PostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
+            stream.startKeepAlive(Threads.newSingleThreadExecutor(YugabyteDBConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
 
             initSchema();
 
@@ -163,23 +178,37 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
             this.lastCompletelyProcessedLsn = replicationStream.get().startLsn();
 
-            if (walPosition.searchingEnabled()) {
-                searchWalPosition(context, partition, this.effectiveOffset, stream, walPosition);
-                try {
-                    if (!isInPreSnapshotCatchUpStreaming(this.effectiveOffset)) {
-                        connection.commit();
+            // Against YB, filtering of records based on Wal position is only enabled when connector config provide.transaction.metadata is set to false.
+            if (!YugabyteDBServer.isEnabled() || (YugabyteDBServer.isEnabled() && !connectorConfig.shouldProvideTransactionMetadata())) {
+                if (walPosition.searchingEnabled()) {
+                    searchWalPosition(context, partition, this.effectiveOffset, stream, walPosition);
+                    try {
+                        if (!isInPreSnapshotCatchUpStreaming(this.effectiveOffset)) {
+                            connection.commit();
+                        }
                     }
+                    catch (Exception e) {
+                        LOGGER.info("Commit failed while preparing for reconnect", e);
+                    }
+                    walPosition.enableFiltering();
+                    stream.stopKeepAlive();
+                    replicationConnection.reconnect();
+
+                    if (YugabyteDBServer.isEnabled()) {
+                        LOGGER.info("PID for replication connection: {} on node {}",
+                                replicationConnection.getBackendPid(),
+                                replicationConnection.getConnectedNodeIp());
+                    }
+
+                    replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
+                    stream = this.replicationStream.get();
+                    stream.startKeepAlive(Threads.newSingleThreadExecutor(YugabyteDBConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
                 }
-                catch (Exception e) {
-                    LOGGER.info("Commit failed while preparing for reconnect", e);
-                }
-                walPosition.enableFiltering();
-                stream.stopKeepAlive();
-                replicationConnection.reconnect();
-                replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
-                stream = this.replicationStream.get();
-                stream.startKeepAlive(Threads.newSingleThreadExecutor(PostgresConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
             }
+            else {
+                LOGGER.info("Connector config provide.transaction.metadata is set to true. Therefore, skip records filtering in order to ship entire transactions.");
+            }
+
             processMessages(context, partition, this.effectiveOffset, stream);
         }
         catch (Throwable e) {
@@ -262,6 +291,22 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         // Tx BEGIN/END event
         if (message.isTransactionalMessage()) {
+            if (message.getOperation() == Operation.BEGIN) {
+                LOGGER.debug("Processing BEGIN with end LSN {} and txnid {}", lsn, message.getTransactionId());
+            }
+            else {
+                LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
+            }
+
+            OptionalLong currentTxnid = message.getTransactionId();
+            if (lastTxnidForWhichCommitSeen.isPresent() && currentTxnid.isPresent()) {
+                long delta = currentTxnid.getAsLong() - lastTxnidForWhichCommitSeen.getAsLong() - 1;
+                if (delta > 0) {
+                    LOGGER.debug("Skipped {} empty transactions between {} and {}", delta, lastTxnidForWhichCommitSeen, currentTxnid);
+                }
+            }
+            lastTxnidForWhichCommitSeen = currentTxnid;
+
             if (!connectorConfig.shouldProvideTransactionMetadata()) {
                 LOGGER.trace("Received transactional message {}", message);
                 // Don't skip on BEGIN message as it would flush LSN for the whole transaction

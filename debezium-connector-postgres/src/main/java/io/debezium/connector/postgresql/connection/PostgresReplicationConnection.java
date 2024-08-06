@@ -28,14 +28,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.core.BaseConnection;
-import org.postgresql.core.ServerVersion;
-import org.postgresql.replication.PGReplicationStream;
-import org.postgresql.replication.fluent.logical.ChainedLogicalStreamBuilder;
-import org.postgresql.util.PSQLException;
-import org.postgresql.util.PSQLState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.core.BaseConnection;
+import com.yugabyte.core.ServerVersion;
+import com.yugabyte.replication.PGReplicationStream;
+import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
+import com.yugabyte.util.PSQLException;
+import com.yugabyte.util.PSQLState;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
@@ -146,7 +147,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     }
 
     protected void initPublication() {
-        if (PostgresConnectorConfig.LogicalDecoder.PGOUTPUT.equals(plugin)) {
+        if (PostgresConnectorConfig.LogicalDecoder.PGOUTPUT.equals(plugin) || PostgresConnectorConfig.LogicalDecoder.YBOUTPUT.equals(plugin)) {
             LOGGER.info("Initializing PgOutput logical decoder publication");
             try {
                 // Unless the autocommit is disabled the SELECT publication query will stay running
@@ -540,6 +541,36 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
     protected BaseConnection pgConnection() throws SQLException {
         return (BaseConnection) connection(false);
+    }
+
+    public String getBackendPid() {
+        try (Statement stmt = pgConnection().createStatement()) {
+            ResultSet rs = stmt.executeQuery("SELECT pg_backend_pid() backend_pid;");
+
+            if (rs.next()) {
+                return rs.getString("backend_pid");
+            }
+        }
+        catch (SQLException sqle) {
+            LOGGER.warn("Unable to get the backend PID", sqle);
+        }
+
+        return "FAILED_TO_GET_BACKEND_PID";
+    }
+
+    public String getConnectedNodeIp() {
+        try (Statement stmt = pgConnection().createStatement()) {
+            ResultSet rs = stmt.executeQuery("SELECT inet_server_addr() connected_to_host;");
+
+            if (rs.next()) {
+                return rs.getString("connected_to_host");
+            }
+        }
+        catch (SQLException sqle) {
+            LOGGER.warn("Unable to get the connected host node", sqle);
+        }
+
+        return "FAILED_TO_GET_CONNECTED_NODE";
     }
 
     private SlotCreationResult parseSlotCreation(ResultSet rs) {

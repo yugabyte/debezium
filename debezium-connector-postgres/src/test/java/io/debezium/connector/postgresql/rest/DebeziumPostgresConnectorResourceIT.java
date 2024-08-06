@@ -21,8 +21,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import io.debezium.connector.postgresql.Module;
-import io.debezium.connector.postgresql.PostgresConnector;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
+import io.debezium.connector.postgresql.YugabyteDBConnector;
 import io.debezium.testing.testcontainers.Connector;
 import io.debezium.testing.testcontainers.ConnectorConfiguration;
 import io.debezium.testing.testcontainers.testhelper.RestExtensionTestInfrastructure;
@@ -84,7 +84,7 @@ public class DebeziumPostgresConnectorResourceIT {
     public void testInvalidConnection() {
         given()
                 .port(RestExtensionTestInfrastructure.getDebeziumContainer().getFirstMappedPort())
-                .when().contentType(ContentType.JSON).accept(ContentType.JSON).body("{\"connector.class\": \"" + PostgresConnector.class.getName() + "\"}")
+                .when().contentType(ContentType.JSON).accept(ContentType.JSON).body("{\"connector.class\": \"" + YugabyteDBConnector.class.getName() + "\"}")
                 .put(DebeziumPostgresConnectorResource.BASE_PATH + DebeziumPostgresConnectorResource.VALIDATE_CONNECTION_ENDPOINT)
                 .then().log().all()
                 .statusCode(200)
@@ -233,7 +233,8 @@ public class DebeziumPostgresConnectorResourceIT {
 
     private static ConnectorConfiguration getPostgresConnectorConfiguration(int id, String... options) {
         final ConnectorConfiguration config = ConnectorConfiguration.forJdbcContainer(RestExtensionTestInfrastructure.getPostgresContainer())
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE.name(), "never") // temporarily disable snapshot mode globally until we can check if connectors inside testcontainers are in SNAPSHOT or STREAMING mode (wait for snapshot finished!)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE.name(),
+                        "never") // temporarily disable snapshot mode globally until we can check if connectors inside testcontainers are in SNAPSHOT or STREAMING mode (wait for snapshot finished!)
                 .with(PostgresConnectorConfig.TOPIC_PREFIX.name(), "dbserver" + id)
                 .with(PostgresConnectorConfig.SLOT_NAME.name(), "debezium_" + id);
 

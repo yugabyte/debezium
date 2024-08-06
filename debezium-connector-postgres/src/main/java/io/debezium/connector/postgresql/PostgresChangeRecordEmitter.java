@@ -19,11 +19,13 @@ import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.yugabyte.core.BaseConnection;
+
 import io.debezium.connector.postgresql.connection.PostgresConnection;
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import io.debezium.connector.postgresql.connection.ReplicationMessage;
 import io.debezium.data.Envelope.Operation;
 import io.debezium.function.Predicates;
@@ -107,6 +109,12 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
                 case CREATE:
                     return null;
                 case UPDATE:
+                    // YB Note: For replica identity CHANGE or DEFAULT, there is no old column value available.
+                    if (schema.getReplicaIdentity(tableId) == ReplicaIdentityInfo.ReplicaIdentity.CHANGE
+                            || schema.getReplicaIdentity(tableId) == ReplicaIdentityInfo.ReplicaIdentity.DEFAULT) {
+                        return null;
+                    }
+
                     return columnValues(message.getOldTupleList(), tableId, true, true, true);
                 default:
                     return columnValues(message.getOldTupleList(), tableId, true, false, true);
@@ -151,8 +159,8 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
         return schema.schemaFor(tableId);
     }
 
-    private Object[] columnValues(List<ReplicationMessage.Column> columns, TableId tableId, boolean refreshSchemaIfChanged,
-                                  boolean sourceOfToasted, boolean oldValues)
+    protected Object[] columnValues(List<ReplicationMessage.Column> columns, TableId tableId, boolean refreshSchemaIfChanged,
+                                    boolean sourceOfToasted, boolean oldValues)
             throws SQLException {
         if (columns == null || columns.isEmpty()) {
             return null;
@@ -188,10 +196,68 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
                         }
                     }
                 }
-                values[position] = value;
+
+                if (connectorConfig.plugin().isYBOutput()) {
+                    // YB Note: In this case, if we have the plugin yboutput and the column contains
+                    // the unchanged toasted value, we will not form a value struct for it.
+                    // Ultimately, it will be emitted as a NULL value.
+                    if (!UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
+                        values[position] = new Object[]{ value, Boolean.TRUE };
+                    }
+                }
+                else {
+                    LOGGER.debug("Plugin is NOT yboutput");
+                    values[position] = value;
+                }
             }
         }
         return values;
+    }
+
+    @Override
+    protected void emitUpdateRecord(Receiver<PostgresPartition> receiver, TableSchema tableSchema) throws InterruptedException {
+        Object[] oldColumnValues = getOldColumnValues();
+        Object[] newColumnValues = getNewColumnValues();
+
+        Struct oldKey = tableSchema.keyFromColumnData(oldColumnValues);
+        Struct newKey = tableSchema.keyFromColumnData(newColumnValues);
+
+        Struct newValue = tableSchema.valueFromColumnData(newColumnValues);
+        Struct oldValue = tableSchema.valueFromColumnData(oldColumnValues);
+
+        if (skipEmptyMessages() && (newColumnValues == null || newColumnValues.length == 0)) {
+            LOGGER.debug("no new values found for table '{}' from update message at '{}'; skipping record", tableSchema, getOffset().getSourceInfo());
+            return;
+        }
+
+        /*
+         * If skip.messages.without.change is configured true,
+         * Skip Publishing the message in case there is no change in monitored columns
+         * (Postgres) Only works if REPLICA IDENTITY is set to FULL - as oldValues won't be available
+         */
+        if (skipMessagesWithoutChange() && Objects.nonNull(newValue) && newValue.equals(oldValue)) {
+            LOGGER.debug("No new values found for table '{}' in included columns from update message at '{}'; skipping record", tableSchema,
+                    getOffset().getSourceInfo());
+            return;
+        }
+        // some configurations does not provide old values in case of updates
+        // in this case we handle all updates as regular ones
+
+        // YB Note: If replica identity is change, we always know there will be no
+        // oldKey present so we should simply go ahead with this block. Also, oldKey would be null
+        // at this stage if replica identity is CHANGE.
+        // Another point to be noted here is that in case the source database is YugabyteDB, we will
+        // always handle updates as regular ones since the CDC service itself sends the primary key
+        // updates as two separate records i.e. delete of the original key and insert with new key.
+        if (YugabyteDBServer.isEnabled() || oldKey == null || Objects.equals(oldKey, newKey)) {
+            Struct envelope = tableSchema.getEnvelopeSchema().update(oldValue, newValue, getOffset().getSourceInfo(), getClock().currentTimeAsInstant());
+            receiver.changeRecord(getPartition(), tableSchema, Operation.UPDATE, newKey, envelope, getOffset(), null);
+        }
+        // PK update -> emit as delete and re-insert with new key
+        else {
+            // YB Note: In case of YugabyteDB as source database, the code flow will never come here.
+            emitUpdateAsPrimaryKeyChangeRecord(receiver, tableSchema, oldKey, newKey, oldValue, newValue);
+        }
     }
 
     private int getPosition(String columnName, Table table, Object[] values) {
