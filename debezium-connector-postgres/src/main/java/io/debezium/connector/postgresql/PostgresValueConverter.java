@@ -41,15 +41,15 @@ import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.errors.ConnectException;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.yugabyte.PGStatement;
 import com.yugabyte.geometric.PGpoint;
 import com.yugabyte.jdbc.PgArray;
 import com.yugabyte.util.HStoreConverter;
 import com.yugabyte.util.PGInterval;
 import com.yugabyte.util.PGobject;
-
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
 
 import io.debezium.config.CommonConnectorConfig.BinaryHandlingMode;
 import io.debezium.connector.postgresql.PostgresConnectorConfig.HStoreHandlingMode;

@@ -7,8 +7,8 @@ package io.debezium.connector.postgresql.metadata;
 
 import io.debezium.config.Field;
 import io.debezium.connector.postgresql.Module;
-import io.debezium.connector.postgresql.YugabyteDBConnector;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
+import io.debezium.connector.postgresql.YugabyteDBConnector;
 import io.debezium.metadata.ConnectorDescriptor;
 import io.debezium.metadata.ConnectorMetadata;
 

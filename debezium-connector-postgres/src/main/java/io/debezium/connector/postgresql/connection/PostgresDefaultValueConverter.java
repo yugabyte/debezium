@@ -21,10 +21,11 @@ import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
-import com.yugabyte.jdbc.TimestampUtils;
-import com.yugabyte.util.PGInterval;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.jdbc.TimestampUtils;
+import com.yugabyte.util.PGInterval;
 
 import io.debezium.annotation.ThreadSafe;
 import io.debezium.connector.postgresql.PostgresType;
@@ -167,7 +168,8 @@ public class PostgresDefaultValueConverter implements DefaultValueConverter {
         result.put("jsonb", (c, v) -> extractDefault(v, "{}")); // Sample value: '{}'::jsonb
         result.put("xml", (c, v) -> extractDefault(v, "")); // Sample value: '<foo>bar</foo>'::xml
 
-        result.put("uuid", (c, v) -> UUID.fromString(extractDefault(v, "00000000-0000-0000-0000-000000000000"))); // Sample value: '76019d1a-ad2e-4b22-96e9-1a6d6543c818'::uuid
+        result.put("uuid",
+                (c, v) -> UUID.fromString(extractDefault(v, "00000000-0000-0000-0000-000000000000"))); // Sample value: '76019d1a-ad2e-4b22-96e9-1a6d6543c818'::uuid
 
         result.put("date", (c, v) -> timestampUtils.toLocalDateTime(extractDefault(v, "1970-01-01")));
         result.put("time", (c, v) -> timestampUtils.toLocalTime(extractDefault(v, "00:00")));

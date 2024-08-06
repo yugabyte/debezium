@@ -8,6 +8,7 @@ package io.debezium.connector.postgresql;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.Test;
+
 import com.yugabyte.util.PSQLException;
 import com.yugabyte.util.PSQLState;
 

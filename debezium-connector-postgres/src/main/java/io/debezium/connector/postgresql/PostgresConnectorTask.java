@@ -260,7 +260,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                 coordinator.start(taskContext, this.queue, metadataProvider);
 
                 return coordinator;
-            } finally {
+            }
+            finally {
                 previousContext.restore();
             }
         }

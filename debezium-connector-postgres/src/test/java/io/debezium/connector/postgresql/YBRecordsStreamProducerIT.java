@@ -6,9 +6,66 @@
 
 package io.debezium.connector.postgresql;
 
+import static io.debezium.connector.postgresql.TestHelper.PK_FIELD;
+import static io.debezium.connector.postgresql.TestHelper.TYPE_LENGTH_PARAMETER_KEY;
+import static io.debezium.connector.postgresql.TestHelper.TYPE_NAME_PARAMETER_KEY;
+import static io.debezium.connector.postgresql.TestHelper.TYPE_SCALE_PARAMETER_KEY;
+import static io.debezium.connector.postgresql.TestHelper.execute;
+import static io.debezium.connector.postgresql.TestHelper.topicName;
+import static io.debezium.connector.postgresql.junit.SkipWhenDecoderPluginNameIs.DecoderPluginName.PGOUTPUT;
+import static junit.framework.TestCase.assertEquals;
+import static junit.framework.TestCase.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+
+import java.math.BigDecimal;
+import java.nio.ByteBuffer;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.header.Header;
+import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.kafka.connect.storage.MemoryOffsetBackingStore;
+import org.assertj.core.api.Assertions;
+import org.awaitility.Awaitility;
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TestRule;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.yugabyte.util.PSQLException;
+
 import io.debezium.config.CommonConnectorConfig;
-import io.debezium.config.CommonConnectorConfig.BinaryHandlingMode;
 import io.debezium.config.Configuration;
 import io.debezium.connector.SnapshotRecord;
 import io.debezium.connector.postgresql.PostgresConnectorConfig.IntervalHandlingMode;
@@ -24,15 +81,9 @@ import io.debezium.data.Enum;
 import io.debezium.data.Envelope;
 import io.debezium.data.SpecialValueDecimal;
 import io.debezium.data.VariableScaleDecimal;
-import io.debezium.data.VerifyRecord;
-import io.debezium.data.geometry.Point;
 import io.debezium.doc.FixFor;
 import io.debezium.embedded.EmbeddedEngineConfig;
-import io.debezium.heartbeat.DatabaseHeartbeatImpl;
-import io.debezium.heartbeat.Heartbeat;
-import io.debezium.jdbc.JdbcConnection;
 import io.debezium.jdbc.JdbcValueConverters.DecimalMode;
-import io.debezium.jdbc.TemporalPrecisionMode;
 import io.debezium.junit.ConditionalFail;
 import io.debezium.junit.EqualityCheck;
 import io.debezium.junit.SkipWhenDatabaseVersion;
@@ -49,65 +100,9 @@ import io.debezium.time.ZonedTime;
 import io.debezium.time.ZonedTimestamp;
 import io.debezium.util.HexConverter;
 import io.debezium.util.Stopwatch;
-import io.debezium.util.Testing;
-import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.header.Header;
-import org.apache.kafka.connect.source.SourceRecord;
-import org.apache.kafka.connect.storage.MemoryOffsetBackingStore;
-import org.assertj.core.api.Assertions;
-import org.awaitility.Awaitility;
-import org.awaitility.core.ConditionTimeoutException;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TestRule;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.math.BigDecimal;
-import java.nio.ByteBuffer;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.LocalTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import java.util.stream.LongStream;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
-
-import static io.debezium.connector.postgresql.TestHelper.*;
-import static io.debezium.connector.postgresql.junit.SkipWhenDecoderPluginNameIs.DecoderPluginName.PGOUTPUT;
-import static io.debezium.junit.EqualityCheck.LESS_THAN;
-import static junit.framework.TestCase.assertEquals;
-import static junit.framework.TestCase.assertTrue;
-import static org.assertj.core.api.Assertions.*;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 
 /**
- * Integration test for the {@link RecordsStreamProducer} class. This also tests indirectly the PG plugin functionality for
+ * This also tests indirectly the PG plugin functionality for
  * different use cases. This class is a copy of {@link RecordsStreamProducerIT} with source database
  * being YugabyteDB. This rewrite of the test class is needed since we use the plugin `yboutput` which essentially
  * causes a change in the structure of the record so we had to change the way records were asserted.
@@ -130,7 +125,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         // ensure the slot is deleted for each test
         TestHelper.dropAllSchemas();
         TestHelper.dropPublication();
-//        TestHelper.executeDDL("init_postgis.ddl");
+        // TestHelper.executeDDL("init_postgis.ddl");
         String statements = "CREATE SCHEMA IF NOT EXISTS public;" +
                 "DROP TABLE IF EXISTS test_table;" +
                 "CREATE TABLE test_table (pk SERIAL, text TEXT, PRIMARY KEY(pk));" +
@@ -274,32 +269,6 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         stopConnector();
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.dropPublication();
-    }
-
-    private Struct testProcessNotNullColumns(TemporalPrecisionMode temporalMode) throws Exception {
-        TestHelper.executeDDL("postgres_create_tables.ddl");
-
-        startConnector(config -> config
-                .with(PostgresConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, true)
-                .with(PostgresConnectorConfig.SCHEMA_EXCLUDE_LIST, "postgis")
-                .with(PostgresConnectorConfig.TIME_PRECISION_MODE, temporalMode));
-
-        consumer.expects(1);
-        executeAndWait("INSERT INTO not_null_table VALUES (default, 30, '2019-02-10 11:34:58', '2019-02-10 11:35:00', "
-                + "'10:20:11', '10:20:12', '2019-02-01', '$20', B'101', 32766, 2147483646, 9223372036854775806, 3.14, "
-                + "true, 3.14768, 1234.56, 'Test', '(0,0),(1,1)', '<(0,0),1>', '01:02:03', '{0,1,2}', '((0,0),(1,1))', "
-                + "'((0,0),(0,1),(0,2))', '(1,1)', '((0,0),(0,1),(1,1))', 'a', 'hello world', '{\"key\": 123}', "
-                + "'<doc><item>abc</item></doc>', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', B'101', '192.168.1.100', "
-                + "'192.168.1', '08:00:2b:01:02:03');");
-
-        consumer.remove();
-
-        consumer.expects(1);
-        executeAndWait("UPDATE not_null_table SET val=40");
-        final SourceRecord record = consumer.remove();
-        YBVerifyRecord.isValidUpdate(record, "pk", 1);
-        YBVerifyRecord.isValid(record);
-        return ((Struct) record.value()).getStruct("before");
     }
 
     @Ignore("YB Note: Replica identity cannot be changed at runtime")
@@ -658,13 +627,13 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
 
     public void verifyAllWorkingTypesInATable(PostgresConnectorConfig.LogicalDecoder logicalDecoder) throws Exception {
         String createStmt = "CREATE TABLE all_types (id serial PRIMARY KEY, bigintcol bigint, " +
-                              "bitcol bit(5), varbitcol varbit(5), booleanval boolean, " +
-                              "byteaval bytea, ch char(5), vchar varchar(25), cidrval cidr, " +
-                              "dt date, dp double precision, inetval inet, intervalval interval, " +
-                              "jsonval json, jsonbval jsonb, mc macaddr, mc8 macaddr8, mn money, " +
-                              "rl real, si smallint, i4r int4range, i8r int8range, " +
-                              "nr numrange, tsr tsrange, tstzr tstzrange, dr daterange, txt text, " +
-                              "tm time, tmtz timetz, ts timestamp, tstz timestamptz, uuidval uuid)";
+                "bitcol bit(5), varbitcol varbit(5), booleanval boolean, " +
+                "byteaval bytea, ch char(5), vchar varchar(25), cidrval cidr, " +
+                "dt date, dp double precision, inetval inet, intervalval interval, " +
+                "jsonval json, jsonbval jsonb, mc macaddr, mc8 macaddr8, mn money, " +
+                "rl real, si smallint, i4r int4range, i8r int8range, " +
+                "nr numrange, tsr tsrange, tstzr tstzrange, dr daterange, txt text, " +
+                "tm time, tmtz timetz, ts timestamp, tstz timestamptz, uuidval uuid)";
 
         execute(createStmt);
 
@@ -677,27 +646,26 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         TestHelper.dropPublication();
 
         start(YugabyteDBConnector.class,
-              TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.all_types")
-                .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "filtered")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, "never")
-                .with(PostgresConnectorConfig.PLUGIN_NAME, logicalDecoder.getPostgresPluginName())
-                .build());
+                TestHelper.defaultConfig()
+                        .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.all_types")
+                        .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "filtered")
+                        .with(PostgresConnectorConfig.SNAPSHOT_MODE, "never")
+                        .with(PostgresConnectorConfig.PLUGIN_NAME, logicalDecoder.getPostgresPluginName())
+                        .build());
         assertConnectorIsRunning();
         waitForStreamingToStart();
         consumer = testConsumer(1);
 
-        String insertStmt =
-          "INSERT INTO all_types (bigintcol, bitcol, varbitcol, booleanval, byteaval, ch, vchar, cidrval, dt, " +
-            "dp, inetval, intervalval, jsonval, jsonbval, mc, mc8, mn, rl, si, i4r, i8r, nr, tsr, tstzr, dr, " +
-            "txt, tm, tmtz, ts, tstz, uuidval) VALUES (123456, '11011', '10101', FALSE, E'\\\\001', 'five5', " +
-            "'sample_text', '10.1.0.0/16', '2022-02-24', 12.345, '127.0.0.1', " +
-            "'2020-03-10 00:00:00'::timestamp-'2020-02-10 00:00:00'::timestamp, '{\"a\":\"b\"}', " +
-            "'{\"a\":\"b\"}', '2C:54:91:88:C9:E3', '22:00:5c:03:55:08:01:02', '$100.5', " +
-            "32.145, 12, '(1, 10)', '(100, 200)', '(10.45, 21.32)', " +
-            "'(1970-01-01 00:00:00, 2000-01-01 12:00:00)', '(2017-07-04 12:30:30 UTC, 2021-07-04 12:30:30+05:30)', " +
-            "'(2019-10-07, 2021-10-07)', 'text to verify behaviour', '12:47:32', '12:00:00+05:30', " +
-            "'2021-11-25 12:00:00.123456', '2021-11-25 12:00:00+05:30', 'ffffffff-ffff-ffff-ffff-ffffffffffff');";
+        String insertStmt = "INSERT INTO all_types (bigintcol, bitcol, varbitcol, booleanval, byteaval, ch, vchar, cidrval, dt, " +
+                "dp, inetval, intervalval, jsonval, jsonbval, mc, mc8, mn, rl, si, i4r, i8r, nr, tsr, tstzr, dr, " +
+                "txt, tm, tmtz, ts, tstz, uuidval) VALUES (123456, '11011', '10101', FALSE, E'\\\\001', 'five5', " +
+                "'sample_text', '10.1.0.0/16', '2022-02-24', 12.345, '127.0.0.1', " +
+                "'2020-03-10 00:00:00'::timestamp-'2020-02-10 00:00:00'::timestamp, '{\"a\":\"b\"}', " +
+                "'{\"a\":\"b\"}', '2C:54:91:88:C9:E3', '22:00:5c:03:55:08:01:02', '$100.5', " +
+                "32.145, 12, '(1, 10)', '(100, 200)', '(10.45, 21.32)', " +
+                "'(1970-01-01 00:00:00, 2000-01-01 12:00:00)', '(2017-07-04 12:30:30 UTC, 2021-07-04 12:30:30+05:30)', " +
+                "'(2019-10-07, 2021-10-07)', 'text to verify behaviour', '12:47:32', '12:00:00+05:30', " +
+                "'2021-11-25 12:00:00.123456', '2021-11-25 12:00:00+05:30', 'ffffffff-ffff-ffff-ffff-ffffffffffff');";
 
         consumer.expects(1);
         executeAndWait(insertStmt);
@@ -751,20 +719,20 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     @Test
     public void shouldWorkForNumericTypesWithoutLengthAndScale() throws Exception {
         /*
-            Fails with exception -
-
-            org.apache.kafka.connect.errors.DataException: Invalid Java object for schema
-            "io.debezium.data.VariableScaleDecimal" with type STRUCT: class [B for field: "value"
+         * Fails with exception -
+         *
+         * org.apache.kafka.connect.errors.DataException: Invalid Java object for schema
+         * "io.debezium.data.VariableScaleDecimal" with type STRUCT: class [B for field: "value"
          */
         String createStmt = "CREATE TABLE numeric_type (id serial PRIMARY KEY, nm numeric);";
 
         execute(createStmt);
 
         start(YugabyteDBConnector.class,
-          TestHelper.defaultConfig()
-            .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.numeric_type")
-            .with(PostgresConnectorConfig.SNAPSHOT_MODE, "never")
-            .build());
+                TestHelper.defaultConfig()
+                        .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.numeric_type")
+                        .with(PostgresConnectorConfig.SNAPSHOT_MODE, "never")
+                        .build());
         assertConnectorIsRunning();
         waitForStreamingToStart();
         consumer = testConsumer(1);
@@ -861,9 +829,9 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         String statement = "INSERT INTO numeric_table_with_n_defaults (pk) VALUES (1);";
 
         Awaitility.await()
-            .atMost(Duration.ofSeconds(50))
-            .pollInterval(Duration.ofSeconds(1))
-            .until(() -> logInterceptor.containsMessage("Processing messages"));
+                .atMost(Duration.ofSeconds(50))
+                .pollInterval(Duration.ofSeconds(1))
+                .until(() -> logInterceptor.containsMessage("Processing messages"));
 
         assertInsert(
                 statement,
@@ -2268,9 +2236,9 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         TestHelper.execute("CREATE DOMAIN integer_alias AS integer;");
         TestHelper.execute("CREATE TABLE test_alias_table (pk SERIAL PRIMARY KEY, alias_col integer_alias);");
         startConnector(config -> config
-               .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
-               .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test_alias_table"),
-               false);
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test_alias_table"),
+                false);
 
         waitForStreamingToStart();
         TestHelper.waitFor(Duration.ofSeconds(30));

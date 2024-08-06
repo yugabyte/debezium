@@ -17,15 +17,15 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
-import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
-import com.yugabyte.core.BaseConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.yugabyte.core.BaseConnection;
+
 import io.debezium.connector.postgresql.connection.PostgresConnection;
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import io.debezium.connector.postgresql.connection.ReplicationMessage;
 import io.debezium.data.Envelope.Operation;
 import io.debezium.function.Predicates;
@@ -160,7 +160,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
     }
 
     protected Object[] columnValues(List<ReplicationMessage.Column> columns, TableId tableId, boolean refreshSchemaIfChanged,
-                                  boolean sourceOfToasted, boolean oldValues)
+                                    boolean sourceOfToasted, boolean oldValues)
             throws SQLException {
         if (columns == null || columns.isEmpty()) {
             return null;
@@ -202,9 +202,10 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
                     // the unchanged toasted value, we will not form a value struct for it.
                     // Ultimately, it will be emitted as a NULL value.
                     if (!UnchangedToastedReplicationMessageColumn.isUnchangedToastedValue(value)) {
-                        values[position] = new Object[]{value, Boolean.TRUE};
+                        values[position] = new Object[]{ value, Boolean.TRUE };
                     }
-                } else {
+                }
+                else {
                     LOGGER.debug("Plugin is NOT yboutput");
                     values[position] = value;
                 }
@@ -236,7 +237,7 @@ public class PostgresChangeRecordEmitter extends RelationalChangeRecordEmitter<P
          */
         if (skipMessagesWithoutChange() && Objects.nonNull(newValue) && newValue.equals(oldValue)) {
             LOGGER.debug("No new values found for table '{}' in included columns from update message at '{}'; skipping record", tableSchema,
-              getOffset().getSourceInfo());
+                    getOffset().getSourceInfo());
             return;
         }
         // some configurations does not provide old values in case of updates

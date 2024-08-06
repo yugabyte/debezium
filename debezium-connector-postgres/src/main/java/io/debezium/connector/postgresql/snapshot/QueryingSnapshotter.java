@@ -49,9 +49,9 @@ public abstract class QueryingSnapshotter implements Snapshotter {
         if (YugabyteDBServer.isEnabled() && !isOnDemand) {
             // In case of YB, the consistent snapshot is performed as follows -
             // 1) If connector created the slot, then the snapshotName returned as part of the CREATE_REPLICATION_SLOT
-            //    command will have the hybrid time as of which the snapshot query is to be run
+            // command will have the hybrid time as of which the snapshot query is to be run
             // 2) If slot already exists, then the snapshot query will be run as of the hybrid time corresponding to the
-            //    restart_lsn. This information is available in the pg_replication_slots view
+            // restart_lsn. This information is available in the pg_replication_slots view
             // For YB, one of these 2 cases will hold
             // In both cases, streaming will continue from confirmed_flush_lsn
 
@@ -65,12 +65,12 @@ public abstract class QueryingSnapshotter implements Snapshotter {
             // be removed from here.
             try {
                 Thread.sleep(1000);
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 throw new RuntimeException("Exception while waiting", e);
             }
 
-            String snapshotTimeHT =
-                    newSlotInfo != null ?  newSlotInfo.snapshotName() : String.valueOf(slotState.slotRestartCommitHT());
+            String snapshotTimeHT = newSlotInfo != null ? newSlotInfo.snapshotName() : String.valueOf(slotState.slotRestartCommitHT());
             return ybSnapshotStatement(snapshotTimeHT);
         }
 
@@ -88,13 +88,13 @@ public abstract class QueryingSnapshotter implements Snapshotter {
 
     private String ybSnapshotStatement(String ybReadTime) {
         return String.format("DO " +
-                             "LANGUAGE plpgsql $$ " +
-                             "BEGIN " +
-                                "SET LOCAL yb_read_time TO '%s ht'; "  +
-                             "EXCEPTION " +
-                                "WHEN OTHERS THEN " +
-                                    "CALL set_yb_read_time('%s ht'); " +
-                             "END $$;",
-                             ybReadTime, ybReadTime);
+                "LANGUAGE plpgsql $$ " +
+                "BEGIN " +
+                "SET LOCAL yb_read_time TO '%s ht'; " +
+                "EXCEPTION " +
+                "WHEN OTHERS THEN " +
+                "CALL set_yb_read_time('%s ht'); " +
+                "END $$;",
+                ybReadTime, ybReadTime);
     }
 }
