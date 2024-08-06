@@ -672,11 +672,8 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         if (logicalDecoder == PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) {
             LOGGER.info("Changing replica identity of the table to default");
             TestHelper.execute("ALTER TABLE all_types REPLICA IDENTITY DEFAULT;");
-<<<<<<< HEAD
             TestHelper.execute("ALTER TABLE test_table REPLICA IDENTITY DEFAULT;");
             TestHelper.execute("ALTER TABLE table_with_interval REPLICA IDENTITY DEFAULT;");
-=======
->>>>>>> ybdb-debezium-2.5.2
             TestHelper.waitFor(Duration.ofSeconds(10));
         }
 
