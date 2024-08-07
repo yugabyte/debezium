@@ -15,7 +15,7 @@ env:
 jobs:
   build:
     name: Build and run PG tests
-    runs-on: ubuntu-20.04
+    runs-on: macos-latest
     steps:
       - name: Download YugabyteDB
         uses: wei/wget@v1
