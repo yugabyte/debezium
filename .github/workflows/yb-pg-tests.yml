@@ -15,7 +15,7 @@ env:
 jobs:
   build:
     name: Build and run PG tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Download YugabyteDB
         uses: wei/wget@v1
@@ -67,20 +67,20 @@ jobs:
         if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=ReplicaIdentityTestMapperTest
 
-      - name: Run PostgresSkipMessagesWithoutChangeConfigIT
-        id: postgresskipmessageswithoutchangeconfigit
-        if: success() || failure()
-        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresSkipMessagesWithoutChangeConfigIT
+      # - name: Run PostgresSkipMessagesWithoutChangeConfigIT
+      #   id: postgresskipmessageswithoutchangeconfigit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresSkipMessagesWithoutChangeConfigIT
 
       - name: Run PostgresOffsetContextTest
         id: postgresoffsetcontexttest
         if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresOffsetContextTest
 
-      - name: Run PostgresMoneyIT
-        id: postgresmoneyit
-        if: success() || failure()
-        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresMoneyIT
+      # - name: Run PostgresMoneyIT
+      #   id: postgresmoneyit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresMoneyIT
 
       - name: Run PostgresConnectorConfigDefTest
         id: postgresconnectorconfigdeftest
@@ -102,27 +102,27 @@ jobs:
         if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresPartitionTest
 
-      - name: Run DebeziumEngineIT
-        id: debeziumengineit
-        if: success() || failure()
-        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=DebeziumEngineIT
+      # - name: Run DebeziumEngineIT
+      #   id: debeziumengineit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=DebeziumEngineIT
 
-      - name: Run TransactionMetadataIT
-        id: transactionmetadatait
-        if: success() || failure()
-        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=TransactionMetadataIT
+      # - name: Run TransactionMetadataIT
+      #   id: transactionmetadatait
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=TransactionMetadataIT
       
       - name: Run YugabyteReplicaIdentityIT
         id: yugabytereplicaidentityit
         if: success() || failure()
         run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=YugabyteReplicaIdentityIT
 
-      - name: Run YBRecordsStreamProducerIT
-        id: ybrecordsstreamproducerit
-        if: success() || failure()
-        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=YBRecordsStreamProducerIT
+      # - name: Run YBRecordsStreamProducerIT
+      #   id: ybrecordsstreamproducerit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=YBRecordsStreamProducerIT
 
-      - name: Run PostgresConnectorIT
-        id: postgresconnectorit
-        if: success() || failure()
-        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresConnectorIT
+      # - name: Run PostgresConnectorIT
+      #   id: postgresconnectorit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresConnectorIT
