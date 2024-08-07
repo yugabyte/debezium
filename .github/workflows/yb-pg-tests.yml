@@ -1,0 +1,128 @@
+name: YugabyteDB connector tests
+
+on:
+  push:
+    branches:
+      - ybdb-debezium-2.5.2
+  pull_request:
+    branches:
+      - ybdb-debezium-2.5.2
+
+env:
+  YUGABYTEDB_VERSION: 2024.1.1.0
+  YUGABYTEDB_BUILD: b137
+
+jobs:
+  build:
+    name: Build and run PG tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download YugabyteDB
+        uses: wei/wget@v1
+        with:
+          args: -O yugabytedb-linux.tar.gz https://downloads.yugabyte.com/releases/${YUGABYTEDB_VERSION}/yugabyte-${YUGABYTEDB_VERSION}-${YUGABYTEDB_BUILD}-linux-x86_64.tar.gz
+      - name: Extract YugabyteDB package
+        uses: a7ul/tar-action@v1.2.0
+        id: extract
+        with:
+          command: x
+          cwd: ./
+          files: yugabytedb-linux.tar.gz
+          outPath: ./
+      - name: Complete post install actions for YugabyteDB
+        run: ./yugabyte-${YUGABYTEDB_VERSION}/bin/post_install.sh
+      - name: Start yugabyted
+        run: >
+          ./yugabyte-${YUGABYTEDB_VERSION}/bin/yugabyted start
+          --advertise_address 127.0.0.1 --ui=false
+          --master_flags="ysql_cdc_active_replication_slot_window_ms=0"
+          --tserver_flags="allowed_preview_flags_csv={cdcsdk_enable_dynamic_table_support},cdcsdk_enable_dynamic_table_support=true,ysql_cdc_active_replication_slot_window_ms=0,ysql_sequence_cache_method=server,cdcsdk_publication_list_refresh_interval_secs=3"
+      - name: Checkout Action
+        uses: actions/checkout@v4
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+      
+      - name: Download dependencies
+        run: ./mvnw clean install -Dquick -pl debezium-connector-postgres -pl debezium-bom -pl support/ide-configs -am
+
+      - name: Run SourceInfoTest
+        id: sourceinfotest
+        if: success() || failure()
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=SourceInfoTest
+
+      - name: Run ReplicaIdentityTestMapperTest
+        id: replicaidentitytestmappertest
+        if: success() || failure()
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=ReplicaIdentityTestMapperTest
+
+      # - name: Run PostgresSkipMessagesWithoutChangeConfigIT
+      #   id: postgresskipmessageswithoutchangeconfigit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresSkipMessagesWithoutChangeConfigIT
+
+      - name: Run PostgresOffsetContextTest
+        id: postgresoffsetcontexttest
+        if: success() || failure()
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresOffsetContextTest
+
+      # - name: Run PostgresMoneyIT
+      #   id: postgresmoneyit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresMoneyIT
+
+      - name: Run PostgresConnectorConfigDefTest
+        id: postgresconnectorconfigdeftest
+        if: success() || failure()
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresConnectorConfigDefTest
+
+      - name: Run PostgresErrorHandlerTest
+        id: postgreserrorhandlertest
+        if: success() || failure()
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresErrorHandlerTest
+
+      - name: Run FieldTest
+        id: fieldtest
+        if: success() || failure()
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=FieldTest
+
+      - name: Run PostgresPartitionTest
+        id: postgrespartitiontest
+        if: success() || failure()
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresPartitionTest
+
+      # - name: Run DebeziumEngineIT
+      #   id: debeziumengineit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=DebeziumEngineIT
+
+      # - name: Run TransactionMetadataIT
+      #   id: transactionmetadatait
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=TransactionMetadataIT
+      
+      - name: Run YugabyteReplicaIdentityIT
+        id: yugabytereplicaidentityit
+        if: success() || failure()
+        run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=YugabyteReplicaIdentityIT
+
+      # - name: Run YBRecordsStreamProducerIT
+      #   id: ybrecordsstreamproducerit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=YBRecordsStreamProducerIT
+
+      # - name: Run PostgresConnectorIT
+      #   id: postgresconnectorit
+      #   if: success() || failure()
+      #   run: mvn test -Ddocker.skip.build=true -Ddocker.skip.run=true -Duser.timezone=UTC -pl debezium-connector-postgres -Dtest=PostgresConnectorIT
