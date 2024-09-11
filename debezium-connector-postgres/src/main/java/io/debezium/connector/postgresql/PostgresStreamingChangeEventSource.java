@@ -9,6 +9,8 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.kafka.connect.errors.ConnectException;
@@ -82,6 +84,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private Lsn lastCompletelyProcessedLsn;
     private PostgresOffsetContext effectiveOffset;
 
+    protected ConcurrentLinkedQueue<Lsn> commitTimes;
+
     /**
      * For DEBUGGING
      */
@@ -101,7 +105,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         this.snapshotter = snapshotter;
         this.replicationConnection = (PostgresReplicationConnection) replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
-
+        this.commitTimes = new ConcurrentLinkedQueue<>();
     }
 
     @Override
@@ -415,6 +419,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private void commitMessage(PostgresPartition partition, PostgresOffsetContext offsetContext, final Lsn lsn) throws SQLException, InterruptedException {
         lastCompletelyProcessedLsn = lsn;
         offsetContext.updateCommitPosition(lsn, lastCompletelyProcessedLsn);
+        commitTimes.add(lsn);
         maybeWarnAboutGrowingWalBacklog(false);
         dispatcher.dispatchHeartbeatEvent(partition, offsetContext);
     }
@@ -463,7 +468,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             final Lsn changeLsn = Lsn.valueOf((Long) offset.get(PostgresOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
             final Lsn lsn = (commitLsn != null) ? commitLsn : changeLsn;
 
-            LOGGER.debug("Received offset commit request on commit LSN '{}' and change LSN '{}'", commitLsn, changeLsn);
+            LOGGER.info("Received offset commit request on commit LSN '{}' and change LSN '{}'", commitLsn, changeLsn);
             if (replicationStream != null && lsn != null) {
                 if (!lsnFlushingAllowed) {
                     LOGGER.info("Received offset commit request on '{}', but ignoring it. LSN flushing is not allowed yet", lsn);
@@ -473,8 +478,14 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("Flushing LSN to server: {}", lsn);
                 }
+
+                Lsn finalLsn = getLsnToBeFlushed(lsn);
+                LOGGER.info("Flushing lsn '{}'", finalLsn);
+
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
-                replicationStream.flushLsn(lsn);
+                replicationStream.flushLsn(finalLsn);
+
+                cleanCommitTimeQueue(finalLsn);
             }
             else {
                 LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
@@ -483,6 +494,30 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         catch (SQLException e) {
             throw new ConnectException(e);
         }
+    }
+
+    protected Lsn getLsnToBeFlushed(Lsn lsn) {
+        if (commitTimes == null || commitTimes.isEmpty()) {
+            // This means that the queue has not been initialised and the task is still starting.
+            return lsn;
+        }
+
+        Lsn result = null;
+
+        for (Lsn commitLsn : commitTimes) {
+            if (commitLsn.compareTo(lsn) < 1) {
+                result = commitLsn;
+            } else {
+                // This will be the loop exit when we encounter any bigger element.
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    protected void cleanCommitTimeQueue(Lsn lsn) {
+        commitTimes.removeIf(ele -> ele.compareTo(lsn) < 1);
     }
 
     @Override
