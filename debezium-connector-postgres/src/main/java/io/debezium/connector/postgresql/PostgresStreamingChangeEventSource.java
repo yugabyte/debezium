@@ -82,6 +82,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      */
     private long numberOfEventsSinceLastEventSentOrWalGrowingWarning = 0;
     private Lsn lastCompletelyProcessedLsn;
+    private Lsn lastSentFeedback = Lsn.valueOf(1L);
     private PostgresOffsetContext effectiveOffset;
 
     protected ConcurrentLinkedQueue<Lsn> commitTimes;
@@ -312,7 +313,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 // Don't skip on BEGIN message as it would flush LSN for the whole transaction
                 // too early
                 if (message.getOperation() == Operation.COMMIT) {
-                    commitMessage(partition, offsetContext, lsn);
+                    commitMessage(partition, offsetContext, lsn, message);
                 }
                 return;
             }
@@ -325,7 +326,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 dispatcher.dispatchTransactionStartedEvent(partition, toString(message.getTransactionId()), offsetContext, message.getCommitTime());
             }
             else if (message.getOperation() == Operation.COMMIT) {
-                commitMessage(partition, offsetContext, lsn);
+                commitMessage(partition, offsetContext, lsn, message);
                 dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext, message.getCommitTime());
             }
             maybeWarnAboutGrowingWalBacklog(true);
@@ -337,7 +338,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
             // non-transactional message that will not be followed by a COMMIT message
             if (message.isLastEventForLsn()) {
-                commitMessage(partition, offsetContext, lsn);
+                commitMessage(partition, offsetContext, lsn, message);
             }
 
             dispatcher.dispatchLogicalDecodingMessage(
@@ -350,6 +351,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         }
         // DML event
         else {
+            LOGGER.trace("Processing DML event with lsn {} and lastCompletelyProcessedLsn {}", lsn, lastCompletelyProcessedLsn);
+
             TableId tableId = null;
             if (message.getOperation() != Operation.NOOP) {
                 tableId = PostgresSchema.parse(message.getTable());
@@ -416,10 +419,15 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         }
     }
 
-    private void commitMessage(PostgresPartition partition, PostgresOffsetContext offsetContext, final Lsn lsn) throws SQLException, InterruptedException {
+    private void commitMessage(PostgresPartition partition, PostgresOffsetContext offsetContext, final Lsn lsn, ReplicationMessage message) throws SQLException, InterruptedException {
         lastCompletelyProcessedLsn = lsn;
         offsetContext.updateCommitPosition(lsn, lastCompletelyProcessedLsn);
-        commitTimes.add(lsn);
+
+        if (message.getOperation() == Operation.COMMIT) {
+            LOGGER.info("Adding '{}' as lsn to the commit times queue", Lsn.valueOf(lsn.asLong() - 1));
+            commitTimes.add(Lsn.valueOf(lsn.asLong() - 1));
+        }
+
         maybeWarnAboutGrowingWalBacklog(false);
         dispatcher.dispatchHeartbeatEvent(partition, offsetContext);
     }
@@ -484,6 +492,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
                 replicationStream.flushLsn(finalLsn);
+                lastSentFeedback = finalLsn;
 
                 cleanCommitTimeQueue(finalLsn);
             }
@@ -499,13 +508,16 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     protected Lsn getLsnToBeFlushed(Lsn lsn) {
         if (commitTimes == null || commitTimes.isEmpty()) {
             // This means that the queue has not been initialised and the task is still starting.
-            return lsn;
+            return lastSentFeedback;
         }
 
-        Lsn result = null;
+        Lsn result = lastSentFeedback;
+
+        LOGGER.info("Queue at this time: {}", commitTimes);
 
         for (Lsn commitLsn : commitTimes) {
-            if (commitLsn.compareTo(lsn) < 1) {
+            if (commitLsn.compareTo(lsn) < 0) {
+                LOGGER.debug("Assigning result as {}", commitLsn);
                 result = commitLsn;
             } else {
                 // This will be the loop exit when we encounter any bigger element.
@@ -517,7 +529,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     }
 
     protected void cleanCommitTimeQueue(Lsn lsn) {
-        commitTimes.removeIf(ele -> ele.compareTo(lsn) < 1);
+        if (commitTimes != null) {
+            commitTimes.removeIf(ele -> ele.compareTo(lsn) < 1);
+        }
     }
 
     @Override
