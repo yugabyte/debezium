@@ -185,18 +185,18 @@
 
                                 The connector generates data change event records and streams them to Kafka topics. For each table, the default behavior is that the connector streams all generated events to a separate Kafka topic for that table. Applications and services consume data change event records from that topic.
                             </description>
-<!--                            <logo>logos/elasticsearch.jpg</logo>--> <!-- need to add a logo here -->
+                            <logo>logos/yugabytedb.png</logo>
 
                             <supportProviderName>Yugabyte Inc.</supportProviderName>
                             <supportSummary>Yugabyte supports the YugabyteDB source connector.</supportSummary>
                             <supportUrl>http://support.yugabyte.com/</supportUrl>
-<!--                            <supportLogo>logos/confluent.png</supportLogo>--> <!--need to add a logo here -->
+                            <supportLogo>logos/yugabytedb.png</supportLogo>
 
                             <ownerUsername>yugabyte</ownerUsername>
                             <ownerType>organization</ownerType>
                             <ownerName>Yugabyte Inc.</ownerName>
                             <ownerUrl>https://www.yugabyte.com//</ownerUrl>
-<!--                            <ownerLogo>logos/confluent.png</ownerLogo>--> <!--need to add a logo here -->
+                            <ownerLogo>logos/yugabytedb.png</ownerLogo>
 
                             <dockerNamespace>quay.io/yugabyte</dockerNamespace>
                             <dockerName>ybdb-debezium</dockerName>
