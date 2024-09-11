@@ -18,12 +18,15 @@ import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.connect.data.Struct;
 import org.bson.Document;
+import org.bson.UuidRepresentation;
 import org.bson.types.ObjectId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mongodb.ConnectionString;
+import com.mongodb.MongoClientSettings;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
@@ -33,7 +36,6 @@ import io.debezium.config.Configuration;
 import io.debezium.config.Configuration.Builder;
 import io.debezium.connector.mongodb.connection.ConnectionStrings;
 import io.debezium.connector.mongodb.connection.MongoDbConnection;
-import io.debezium.connector.mongodb.connection.ReplicaSet;
 import io.debezium.testing.testcontainers.MongoDbDeployment;
 import io.debezium.util.Collect;
 
@@ -95,7 +97,11 @@ public class TestHelper {
     }
 
     public static MongoClient connect(MongoDbDeployment mongo) {
-        return MongoClients.create(mongo.getConnectionString());
+        var settings = MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(mongo.getConnectionString()))
+                .uuidRepresentation(UuidRepresentation.STANDARD)
+                .build();
+        return MongoClients.create(settings);
     }
 
     public static void cleanDatabase(MongoDbDeployment mongo, String dbName) {
@@ -115,6 +121,9 @@ public class TestHelper {
                     client.getDatabase(name).drop();
                 }
             });
+        }
+        catch (Exception e) {
+            logger.error("Error while cleaning database", e);
         }
     }
 
@@ -184,8 +193,4 @@ public class TestHelper {
         }
     }
 
-    public static ReplicaSet replicaSet(MongoDbDeployment mongo) {
-        var cs = connectionString(mongo);
-        return new ReplicaSet(cs);
-    }
 }

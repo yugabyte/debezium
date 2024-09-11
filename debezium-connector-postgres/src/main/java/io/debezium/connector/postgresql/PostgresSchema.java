@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.annotation.NotThreadSafe;
+import io.debezium.connector.postgresql.PostgresConnectorConfig.LogicalDecoder;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.PostgresDefaultValueConverter;
 import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
@@ -49,6 +50,7 @@ public class PostgresSchema extends RelationalDatabaseSchema {
     private final Map<Integer, TableId> relationIdToTableId;
     private final Map<TableId, ReplicaIdentityInfo.ReplicaIdentity> tableIdToReplicaIdentity;
     private final boolean readToastableColumns;
+    private final PostgresConnectorConfig connectorConfig;
 
     /**
      * Create a schema component given the supplied {@link PostgresConnectorConfig Postgres connector configuration}.
@@ -61,6 +63,7 @@ public class PostgresSchema extends RelationalDatabaseSchema {
                 config.getColumnFilter(), getTableSchemaBuilder(config, valueConverter, defaultValueConverter),
                 false, config.getKeyMapper());
 
+        this.connectorConfig = config;
         this.tableIdToToastableColumns = new HashMap<>();
         this.relationIdToTableId = new HashMap<>();
         this.readToastableColumns = config.skipRefreshSchemaOnMissingToastableData();
@@ -123,9 +126,10 @@ public class PostgresSchema extends RelationalDatabaseSchema {
      * @param connection a {@link JdbcConnection} instance, never {@code null}
      * @param tableId the table identifier; may not be null
      * @param refreshToastableColumns refreshes the cache of toastable columns for `tableId`, if {@code true}
+     * @param removeGeneratedColumns removes the GENERATED columns from `tableId`, if {@code true}
      * @throws SQLException if there is a problem refreshing the schema from the database server
      */
-    protected void refresh(PostgresConnection connection, TableId tableId, boolean refreshToastableColumns) throws SQLException {
+    private void refresh(PostgresConnection connection, TableId tableId, boolean refreshToastableColumns, boolean removeGeneratedColumns) throws SQLException {
         Tables temp = new Tables();
         connection.readSchema(temp, null, null, tableId::equals, null, true);
 
@@ -134,8 +138,18 @@ public class PostgresSchema extends RelationalDatabaseSchema {
             LOGGER.warn("Refresh of {} was requested but the table no longer exists", tableId);
             return;
         }
+
+        var updatedTable = temp.forTable(tableId);
+        if (removeGeneratedColumns) {
+            var editor = updatedTable.edit();
+            final var notGeneratedColumns = updatedTable.filterColumns(x -> !x.isGenerated());
+            LOGGER.debug("Removing generated columns, the new column list is '{}'", notGeneratedColumns);
+            editor.setColumns(notGeneratedColumns);
+            updatedTable = editor.create();
+        }
+
         // overwrite (add or update) or views of the tables
-        tables().overwriteTable(temp.forTable(tableId));
+        tables().overwriteTable(updatedTable);
         // refresh the schema
         refreshSchema(tableId);
 
@@ -143,6 +157,29 @@ public class PostgresSchema extends RelationalDatabaseSchema {
             // and refresh toastable columns info
             refreshToastableColumnsMap(connection, tableId);
         }
+    }
+
+    /**
+     * Refreshes this schema's content for a particular table
+     *
+     * @param connection a {@link JdbcConnection} instance, never {@code null}
+     * @param tableId the table identifier; may not be null
+     * @param refreshToastableColumns refreshes the cache of toastable columns for `tableId`, if {@code true}
+     * @throws SQLException if there is a problem refreshing the schema from the database server
+     */
+    protected void refresh(PostgresConnection connection, TableId tableId, boolean refreshToastableColumns) throws SQLException {
+        refresh(connection, tableId, refreshToastableColumns, false);
+    }
+
+    /**
+     * Refreshes this schema's content for a particular table in incremental snapshot
+     *
+     * @param connection a {@link JdbcConnection} instance, never {@code null}
+     * @param tableId the table identifier; may not be null
+     * @throws SQLException if there is a problem refreshing the schema from the database server
+     */
+    protected void refreshFromIncrementalSnapshot(PostgresConnection connection, TableId tableId) throws SQLException {
+        refresh(connection, tableId, true, connectorConfig.plugin() == LogicalDecoder.PGOUTPUT);
     }
 
     protected boolean isFilteredOut(TableId id) {

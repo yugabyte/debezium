@@ -3,7 +3,7 @@
     <parent>
         <groupId>io.debezium</groupId>
         <artifactId>debezium-parent</artifactId>
-        <version>dz.2.5.2.yb.2024.1-SNAPSHOT</version>
+        <version>2.7.2.Final</version>
         <relativePath>../debezium-parent/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -41,7 +41,6 @@
         <dependency>
             <groupId>com.oracle.database.jdbc</groupId>
             <artifactId>ojdbc8</artifactId>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.antlr</groupId>
@@ -58,6 +57,11 @@
         <dependency>
             <groupId>org.infinispan.protostream</groupId>
             <artifactId>protostream-processor</artifactId>
+        </dependency>
+        <!-- Dependencies for NLS for Internationalization support -->
+        <dependency>
+            <groupId>com.oracle.database.nls</groupId>
+            <artifactId>orai18n</artifactId>
         </dependency>
         <!-- Dependencies needed for XML support -->
         <dependency>
@@ -807,6 +811,16 @@
             </activation>
             <properties>
                 <log.mining.read.only.mode>true</log.mining.read.only.mode>
+            </properties>
+        </profile>
+        <profile>
+            <id>oracle-23</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+            <properties>
+                <version.oracle.driver>23.3.0.23.09</version.oracle.driver>
+                <version.oracle.instantclient>23.3.0.0</version.oracle.instantclient>
             </properties>
         </profile>
     </profiles>

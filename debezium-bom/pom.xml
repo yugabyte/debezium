@@ -3,7 +3,7 @@
     <parent>
         <groupId>io.debezium</groupId>
         <artifactId>debezium-build-parent</artifactId>
-        <version>dz.2.5.2.yb.2024.1-SNAPSHOT</version>
+        <version>2.7.2.Final</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -59,7 +59,7 @@
         <version.mockito>3.0.0</version.mockito>
         <version.awaitility>4.0.1</version.awaitility>
         <version.testcontainers>1.19.1</version.testcontainers>
-        <version.jsonpath>2.7.0</version.jsonpath>
+        <version.jsonpath>2.9.0</version.jsonpath>
         <version.jsonassert>1.5.0</version.jsonassert>
         <version.org.reflections>0.9.12</version.org.reflections>
         <version.cassandra.unit>3.5.0.1</version.cassandra.unit>
@@ -229,6 +229,11 @@
                 <version>${version.oracle.driver}</version>
             </dependency>
             <dependency>
+                <groupId>com.oracle.database.nls</groupId>
+                <artifactId>orai18n</artifactId>
+                <version>${version.oracle.driver}</version>
+            </dependency>
+            <dependency>
                 <groupId>com.oracle.database.xml</groupId>
                 <artifactId>xdb</artifactId>
                 <version>${version.oracle.driver}</version>
@@ -241,7 +246,7 @@
             <dependency>
                 <groupId>com.oracle.instantclient</groupId>
                 <artifactId>xstreams</artifactId>
-                <version>${version.oracle.driver}</version>
+                <version>${version.oracle.instantclient}</version>
             </dependency>
 
             <!-- Db2 JDBC driver -->
@@ -479,6 +484,12 @@
                 <version>${version.rocketmq}</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-remoting</artifactId>
+                <version>${version.rocketmq}</version>
+            </dependency>
+
             <!-- S3 Storage -->
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
@@ -678,6 +689,16 @@
             </dependency>
             <dependency>
                 <groupId>io.debezium</groupId>
+                <artifactId>debezium-connector-mariadb</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.debezium</groupId>
+                <artifactId>debezium-connector-binlog</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.debezium</groupId>
                 <artifactId>debezium-ddl-parser</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -763,6 +784,12 @@
             <dependency>
                 <groupId>io.debezium</groupId>
                 <artifactId>debezium-connector-mysql</artifactId>
+                <version>${project.version}</version>
+                <type>test-jar</type>
+            </dependency>
+            <dependency>
+                <groupId>io.debezium</groupId>
+                <artifactId>debezium-connector-binlog</artifactId>
                 <version>${project.version}</version>
                 <type>test-jar</type>
             </dependency>

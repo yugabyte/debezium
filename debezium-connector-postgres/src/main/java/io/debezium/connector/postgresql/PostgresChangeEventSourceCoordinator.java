@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
 import io.debezium.DebeziumException;
 import io.debezium.config.CommonConnectorConfig;
 import io.debezium.connector.postgresql.spi.SlotState;
-import io.debezium.connector.postgresql.spi.Snapshotter;
 import io.debezium.pipeline.ChangeEventSourceCoordinator;
 import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.EventDispatcher;
@@ -35,6 +34,7 @@ import io.debezium.pipeline.source.spi.ChangeEventSource.ChangeEventSourceContex
 import io.debezium.pipeline.source.spi.SnapshotChangeEventSource;
 import io.debezium.pipeline.spi.Offsets;
 import io.debezium.schema.DatabaseSchema;
+import io.debezium.snapshot.SnapshotterService;
 
 /**
  * Coordinates one or more {@link ChangeEventSource}s and executes them in order. Extends the base
@@ -44,7 +44,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresChangeEventSourceCoordinator.class);
 
-    private final Snapshotter snapshotter;
+    private final SnapshotterService snapshotterService;
     private final SlotState slotInfo;
 
     private volatile boolean waitForSnapshotCompletion;
@@ -56,12 +56,12 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
                                                 PostgresChangeEventSourceFactory changeEventSourceFactory,
                                                 ChangeEventSourceMetricsFactory<PostgresPartition> changeEventSourceMetricsFactory,
                                                 EventDispatcher<PostgresPartition, ?> eventDispatcher, DatabaseSchema<?> schema,
-                                                Snapshotter snapshotter, SlotState slotInfo,
+                                                SnapshotterService snapshotterService, SlotState slotInfo,
                                                 SignalProcessor<PostgresPartition, PostgresOffsetContext> signalProcessor,
                                                 NotificationService<PostgresPartition, PostgresOffsetContext> notificationService) {
         super(previousOffsets, errorHandler, connectorType, connectorConfig, changeEventSourceFactory,
-                changeEventSourceMetricsFactory, eventDispatcher, schema, signalProcessor, notificationService);
-        this.snapshotter = snapshotter;
+                changeEventSourceMetricsFactory, eventDispatcher, schema, signalProcessor, notificationService, snapshotterService);
+        this.snapshotterService = snapshotterService;
         this.slotInfo = slotInfo;
         this.waitForSnapshotCompletion = false;
     }
@@ -109,7 +109,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
                                                              PostgresPartition partition,
                                                              PostgresOffsetContext previousOffset)
             throws InterruptedException {
-        if (previousOffset != null && !snapshotter.shouldStreamEventsStartingFromSnapshot() && slotInfo != null) {
+        if (previousOffset != null && !snapshotterService.getSnapshotter().shouldStreamEventsStartingFromSnapshot() && slotInfo != null) {
             try {
                 setSnapshotStartLsn((PostgresSnapshotChangeEventSource) snapshotSource,
                         previousOffset);

@@ -31,6 +31,7 @@ When {prodname} detects that a new xref:debezium-signaling-example-of-a-logging-
 Signaling is available for use with the following {prodname} connectors:
 
 * Db2
+* MariaDB (Technology Preview)
 * MongoDB
 * MySQL
 * Oracle
@@ -65,7 +66,10 @@ For example, `signal.data.collection = inventory.debezium_signals`. +
 The format for the fully-qualified name of the signaling collection depends on the connector. +
 The following example shows the naming formats to use for each connector:
 
+.Fully qualified table names
+[id="format-for-specifying-fully-qualified-names-for-data-collections"]
 Db2:: `_<schemaName>_._<tableName>_`
+MariaDB (Technology Preview):: `_<databaseName>_._<tableName>_`
 MongoDB:: `_<databaseName>_._<collectionName>_`
 MySQL:: `_<databaseName>_._<tableName>_`
 Oracle:: `_<databaseName>_._<schemaName>_._<tableName>_`
@@ -165,6 +169,7 @@ After you enable the signaling channel, a Kafka consumer is created to consume s
 .Additional configuration available for the consumer
 
 * {link-prefix}:{link-db2-connector}#debezium-db2-connector-kafka-signals-configuration-properties[Db2 connector Kafka signal configuration properties]
+* {link-prefix}:{link-mariadb-connector}#debezium-mariadb-connector-kafka-signals-configuration-properties[MariaDB connector Kafka signal configuration properties]
 * {link-prefix}:{link-mongodb-connector}#debezium-mongodb-connector-kafka-signals-configuration-properties[MongoDB connector Kafka signal configuration properties]
 * {link-prefix}:{link-mysql-connector}#debezium-mysql-connector-kafka-signals-configuration-properties[MySQL connector Kafka signal configuration properties]
 * {link-prefix}:{link-oracle-connector}#debezium-oracle-connector-kafka-signals-configuration-properties[Oracle connector Kafka signal configuration properties]
@@ -199,17 +204,8 @@ Currently {prodname} supports the `incremental` and `blocking` types.
 
 |`data-collections`
 |_N/A_
-| An array of comma-separated regular expressions that match the fully-qualified names of the data collections to include in the snapshot. +
-Specify the names by using the same format as is required for the `signal.data.collection` configuration option.
-
-|`[.line-through]#additional-condition#`
-|_N/A_
-| An optional string that specifies a condition that the connector evaluates to designate a subset of records to include in a snapshot. +
- +
-[NOTE]
-====
-This property is deprecated and should be replaced by the `additional-conditions` property.
-====
+| An array of comma-separated regular expressions that match the fully qualified names of the data collections to include in the snapshot. +
+The xref:format-for-specifying-fully-qualified-names-for-data-collections[naming format] depends on the database.
 
 |`additional-conditions`
 |_N/A_
@@ -217,10 +213,10 @@ This property is deprecated and should be replaced by the `additional-conditions
 Each additional condition is an object that specifies the criteria for filtering the data that an ad hoc snapshot captures.
 You can set the following properties for each additional condition:
 
-`data-collection`:: The fully-qualified name of the +{data-collection}+ that the filter applies to.
-You can apply different filters to each +{data-collection}+.
+`data-collection`:: The fully-qualified name of the data collection that the filter applies to.
+You can apply different filters to each data collection.
 `filter`:: Specifies column values that must be present in a database record for the snapshot to include it, for example,  `"color='blue'"`. +
-The snapshot process evaluates records in the +{data-collection}+ against the `filter` value and captures only records that contain matching values. +
+The snapshot process evaluates records in the data collection against the `filter` value and captures only records that contain matching values. +
  +
 The specific values that you assign to the `filter` property depend on the type of ad hoc snapshot:
 
@@ -270,17 +266,7 @@ Currently {prodname} supports the `incremental` and `blocking` types.
 
 |`data-collections`
 |_N/A_
-| An array of comma-separated regular expressions that match the fully-qualified names of the tables to include in the snapshot. +
-Specify the names by using the same format as is required for the xref:{context}-property-signal-data-collection[signal.data.collection] configuration option.
-
-|`[.line-through]#additional-condition#`
-|_N/A_
-| An optional string that specifies a condition that the connector evaluates to designate a subset of records to include in a snapshot. +
-
-[NOTE]
-====
-This property is deprecated and should be replaced by the `additional-conditions` property.
-====
+| An array of comma-separated regular expressions that match the xref:format-for-specifying-fully-qualified-names-for-data-collections[fully-qualified names of the tables] to include in the snapshot. +
 
 |`additional-conditions`
 |_N/A_
@@ -288,11 +274,11 @@ This property is deprecated and should be replaced by the `additional-conditions
 Each additional condition is an object that specifies the criteria for filtering the data that an ad hoc snapshot captures.
 You can set the following properties for each additional condition:
 
-`data-collection`:: The fully-qualified name of the +{data-collection}+ that the filter applies to.
-You can apply different filters to each +{data-collection}+.
+`data-collection`:: The fully-qualified name of the data collection that the filter applies to.
+You can apply different filters to each data collection.
 
 `filter`:: Specifies column values that must be present in a database record for the snapshot to include it, for example,  `"color='blue'"`. +
-The snapshot process evaluates records in the +{data-collection}+ against the `filter` value and captures only records that contain matching values. +
+The snapshot process evaluates records in the data collection against the `filter` value and captures only records that contain matching values. +
  +
 The specific values that you assign to the `filter` property depend on the type of ad hoc snapshot:
 
@@ -449,6 +435,7 @@ You can initiate ad hoc snapshots at any time.
 Ad hoc snapshots are available for the following {prodname} connectors:
 
 * Db2
+* MariaDB (Technology Preview)
 * MongoDB
 * MySQL
 * Oracle
@@ -486,7 +473,7 @@ a|
 a|
 [source,json]
 ----
-{"type":"execute-snapshot","data": {"data-collections": ["public.MyFirstTable"], "type": "INCREMENTAL", "additional-conditions":[{"data-collection": "public.MyFirstTable", "filter":"color='blue' AND brand='MyBrand'"]}}
+{"type":"execute-snapshot","data": {"data-collections": ["public.MyFirstTable"], "type": "INCREMENTAL", "additional-conditions":[{"data-collection": "public.MyFirstTable", "filter":"color='blue' AND brand='MyBrand'"}]}}
 ----
 
 |===
@@ -514,6 +501,7 @@ After processing the signal, the connector will stop the current in-progress sna
 You can stop ad hoc snapshots for the following {prodname} connectors:
 
 * Db2
+* MariaDB (Technology Preview)
 * MongoDB
 * MySQL
 * Oracle
@@ -571,6 +559,7 @@ Therefor it's not possible to specify the data collection as the snapshot proces
 You can pause incremental snapshots for the following {prodname} connectors:
 
 * Db2
+* MariaDB (Technology Preview)
 * MongoDB
 * MySQL
 * Oracle
@@ -603,6 +592,7 @@ After processing the signal, the connector will resume previously paused snapsho
 You can resume incremental snapshots for the following {prodname} connectors:
 
 * Db2
+* MariaDB (Technology Preview)
 * MongoDB
 * MySQL
 * Oracle
@@ -651,6 +641,7 @@ You can initiate ad hoc blocking snapshots at any time.
 Blocking snapshots are available for the following {prodname} connectors:
 
 * Db2
+* MariaDB (Technology Preview)
 ifdef::community[]
 * MongoDB
 endif::community[]

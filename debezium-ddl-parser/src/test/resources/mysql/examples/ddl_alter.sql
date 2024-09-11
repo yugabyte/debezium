@@ -25,6 +25,7 @@ alter table table1 add primary key (id);
 alter table table1 add primary key table_pk (id);
 alter table table1 add primary key `table_pk` (id);
 alter table table1 add primary key `table_pk` (`id`);
+alter table table1 add column yes varchar(255)  default '' null;
 alter table add_test add column if not exists col1 varchar(255);
 alter table add_test add column if not exists col4 varchar(255);
 alter table add_test add index if not exists ix_add_test_col1 using btree (col1) comment 'test index';
@@ -155,3 +156,4 @@ ALTER TABLE t1 ADD PARTITION IF NOT EXISTS (PARTITION p3 VALUES LESS THAN (2002)
 ALTER SEQUENCE IF EXISTS s2 start=100;
 ALTER SEQUENCE s1 CACHE=1000 NOCYCLE RESTART WITH 1;
 ALTER TABLE `TABLE_NAME` DROP FOREIGN KEY `TABLE_NAME`.`FK_COLUMN`;
+ALTER TABLE `order` ADD cancelled TINYINT(1) DEFAULT 0 NOT NULL, ADD delivered TINYINT(1) DEFAULT 0 NOT NULL, ADD returning TINYINT(1) DEFAULT 0 NOT NULL

@@ -31,9 +31,11 @@ import io.debezium.connector.oracle.OracleConnection;
 import io.debezium.connector.oracle.OracleConnectorConfig;
 import io.debezium.connector.oracle.OracleConnectorConfig.ConnectorAdapter;
 import io.debezium.connector.oracle.OracleConnectorConfig.LogMiningBufferType;
+import io.debezium.connector.oracle.OracleConnectorConfig.LogMiningStrategy;
 import io.debezium.connector.oracle.Scn;
 import io.debezium.connector.oracle.logminer.processor.infinispan.CacheProvider;
 import io.debezium.connector.oracle.rest.DebeziumOracleConnectorResourceIT;
+import io.debezium.embedded.async.AsyncEmbeddedEngine;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.storage.file.history.FileSchemaHistory;
 import io.debezium.storage.kafka.history.KafkaSchemaHistory;
@@ -193,7 +195,8 @@ public class TestHelper {
         return builder.with(CommonConnectorConfig.TOPIC_PREFIX, SERVER_NAME)
                 .with(OracleConnectorConfig.SCHEMA_HISTORY, FileSchemaHistory.class)
                 .with(FileSchemaHistory.FILE_PATH, SCHEMA_HISTORY_PATH)
-                .with(OracleConnectorConfig.INCLUDE_SCHEMA_CHANGES, false);
+                .with(OracleConnectorConfig.INCLUDE_SCHEMA_CHANGES, false)
+                .with(AsyncEmbeddedEngine.TASK_MANAGEMENT_TIMEOUT_MS, 90_000);
     }
 
     /**
@@ -253,7 +256,7 @@ public class TestHelper {
     /**
      * Returns a configuration builder based on the test schema and user account settings.
      */
-    private static Configuration.Builder testConfig() {
+    public static Configuration.Builder testConfig() {
         JdbcConfiguration jdbcConfiguration = testJdbcConfig();
         Configuration.Builder builder = Configuration.create();
 
@@ -305,6 +308,15 @@ public class TestHelper {
      */
     public static OracleConnection testConnection() {
         Configuration config = testConfig().build();
+        Configuration jdbcConfig = config.subset(DATABASE_PREFIX, true);
+        return createConnection(config, JdbcConfiguration.adapt(jdbcConfig), false);
+    }
+
+    /**
+     * Return a test connection that is suitable for performing test database changes in tests.
+     */
+    public static OracleConnection testConnection(Configuration config) {
+
         Configuration jdbcConfig = config.subset(DATABASE_PREFIX, true);
         return createConnection(config, JdbcConfiguration.adapt(jdbcConfig), false);
     }
@@ -371,7 +383,7 @@ public class TestHelper {
         Configuration jdbcConfig = config.subset(DATABASE_PREFIX, true);
 
         try (OracleConnection jdbcConnection = new OracleConnection(JdbcConfiguration.adapt(jdbcConfig))) {
-            if ((new OracleConnectorConfig(defaultConfig().build())).getPdbName() != null) {
+            if (!Strings.isNullOrEmpty((new OracleConnectorConfig(defaultConfig().build())).getPdbName())) {
                 jdbcConnection.resetSessionToCdb();
             }
             jdbcConnection.execute("ALTER SYSTEM SWITCH LOGFILE");
@@ -386,7 +398,7 @@ public class TestHelper {
         Configuration jdbcConfig = config.subset(DATABASE_PREFIX, true);
 
         try (OracleConnection jdbcConnection = new OracleConnection(JdbcConfiguration.adapt(jdbcConfig))) {
-            if ((new OracleConnectorConfig(defaultConfig().build())).getPdbName() != null) {
+            if (!Strings.isNullOrEmpty((new OracleConnectorConfig(defaultConfig().build())).getPdbName())) {
                 jdbcConnection.resetSessionToCdb();
             }
             return jdbcConnection.queryAndMap("SELECT COUNT(GROUP#) FROM V$LOG", rs -> {
@@ -536,6 +548,17 @@ public class TestHelper {
         return (s == null || s.length() == 0) ? ConnectorAdapter.LOG_MINER : ConnectorAdapter.parse(s);
     }
 
+    public static LogMiningStrategy logMiningStrategy() {
+        if (ConnectorAdapter.LOG_MINER.equals(adapter())) {
+            // This won't catch all use cases where the user overrides the default configuration in the test
+            // itself but generally this should be satisfactory for marker annotations based on static or
+            // CLI provided configurations.
+            Configuration configuration = TestHelper.defaultConfig().build();
+            return LogMiningStrategy.parse(configuration.getString(OracleConnectorConfig.LOG_MINING_STRATEGY));
+        }
+        return null;
+    }
+
     /**
      * Drops all tables visible to user {@link #SCHEMA_USER}.
      */
@@ -543,13 +566,37 @@ public class TestHelper {
         try (OracleConnection connection = testConnection()) {
             connection.query("SELECT TABLE_NAME FROM USER_TABLES", rs -> {
                 while (rs.next()) {
-                    dropTable(connection, SCHEMA_USER + "." + rs.getString(1));
+                    // Oracle normally stores tables in upper case; however, if a table is created using
+                    // special characters, it must be quoted and therefore is treated as case-sensitive,
+                    // which will require quotes. This checks this specific use case and quotes the name
+                    // of the table if necessary.
+                    String tableName = rs.getString(1);
+                    if (isQuoteRequired(tableName)) {
+                        tableName = "\"" + tableName + "\"";
+                    }
+                    dropTable(connection, String.format("%s.%s", SCHEMA_USER, tableName));
                 }
             });
         }
         catch (SQLException e) {
             throw new RuntimeException("Failed to clean database", e);
         }
+    }
+
+    public static boolean isQuoteRequired(String tableName) {
+        if (!Strings.isNullOrBlank(tableName)) {
+            // Make sure table isn't already quoted
+            if (!tableName.startsWith("\"") && !tableName.endsWith("\"")) {
+                for (int i = 0; i < tableName.length(); i++) {
+                    final char c = tableName.charAt(i);
+                    // If we detect any lower case character or non letter/digit, name must be quoted
+                    if (Character.isLowerCase(c) || !Character.isLetterOrDigit(c)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     public static List<BigInteger> getCurrentRedoLogSequences() throws SQLException {

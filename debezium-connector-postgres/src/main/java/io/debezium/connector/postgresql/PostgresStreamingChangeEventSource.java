@@ -26,11 +26,11 @@ import io.debezium.connector.postgresql.connection.ReplicationMessage;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Operation;
 import io.debezium.connector.postgresql.connection.ReplicationStream;
 import io.debezium.connector.postgresql.connection.WalPositionLocator;
-import io.debezium.connector.postgresql.spi.Snapshotter;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.source.spi.StreamingChangeEventSource;
 import io.debezium.relational.TableId;
+import io.debezium.snapshot.SnapshotterService;
 import io.debezium.util.Clock;
 import io.debezium.util.DelayStrategy;
 import io.debezium.util.ElapsedTimeStrategy;
@@ -64,7 +64,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private final PostgresTaskContext taskContext;
     private final PostgresReplicationConnection replicationConnection;
     private final AtomicReference<ReplicationStream> replicationStream = new AtomicReference<>();
-    private final Snapshotter snapshotter;
+    private final SnapshotterService snapshotterService;
     private final DelayStrategy pauseNoMessage;
     private final ElapsedTimeStrategy connectionProbeTimer;
 
@@ -87,7 +87,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      */
     private OptionalLong lastTxnidForWhichCommitSeen = OptionalLong.empty();
 
-    public PostgresStreamingChangeEventSource(PostgresConnectorConfig connectorConfig, Snapshotter snapshotter,
+    public PostgresStreamingChangeEventSource(PostgresConnectorConfig connectorConfig, SnapshotterService snapshotterService,
                                               PostgresConnection connection, PostgresEventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
                                               PostgresSchema schema, PostgresTaskContext taskContext, ReplicationConnection replicationConnection) {
         this.connectorConfig = connectorConfig;
@@ -98,7 +98,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         this.schema = schema;
         pauseNoMessage = DelayStrategy.constant(taskContext.getConfig().getPollInterval());
         this.taskContext = taskContext;
-        this.snapshotter = snapshotter;
+        this.snapshotterService = snapshotterService;
         this.replicationConnection = (PostgresReplicationConnection) replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
 
@@ -124,14 +124,10 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     @Override
     public void execute(ChangeEventSourceContext context, PostgresPartition partition, PostgresOffsetContext offsetContext)
             throws InterruptedException {
-        if (!snapshotter.shouldStream()) {
-            LOGGER.info("Streaming is not enabled in correct configuration");
-            return;
-        }
 
         lsnFlushingAllowed = false;
 
-        // replication slot could exist at the time of starting Debezium so we will stream from the position in the slot
+        // replication slot could exist at the time of starting Debezium, so we will stream from the position in the slot
         // instead of the last position in the database
         boolean hasStartLsnStoredInContext = offsetContext != null;
 
@@ -149,7 +145,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
             if (hasStartLsnStoredInContext) {
                 // start streaming from the last recorded position in the offset
-                final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
+                final Lsn lsn = this.effectiveOffset.hasCompletelyProcessedPosition() ? this.effectiveOffset.lastCompletelyProcessedLsn()
                         : this.effectiveOffset.lsn();
                 final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
                 LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
@@ -253,7 +249,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 lsnFlushingAllowed = true;
             }
             else {
-                dispatcher.dispatchHeartbeatEvent(partition, offsetContext);
+                dispatcher.dispatchHeartbeatEventAlsoToIncrementalSnapshot(partition, offsetContext);
                 noMessageIterations++;
                 if (noMessageIterations >= THROTTLE_NO_MESSAGE_BEFORE_PAUSE) {
                     noMessageIterations = 0;
@@ -281,7 +277,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             throws SQLException, InterruptedException {
 
         final Lsn lsn = stream.lastReceivedLsn();
-
+        LOGGER.trace("Processing replication message {}", message);
         if (message.isLastEventForLsn()) {
             lastCompletelyProcessedLsn = lsn;
         }
@@ -303,20 +299,22 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             }
             lastTxnidForWhichCommitSeen = currentTxnid;
 
+            offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
+                    taskContext.getSlotXmin(connection),
+                    null,
+                    message.getOperation());
+
             if (!connectorConfig.shouldProvideTransactionMetadata()) {
                 LOGGER.trace("Received transactional message {}", message);
                 // Don't skip on BEGIN message as it would flush LSN for the whole transaction
                 // too early
                 if (message.getOperation() == Operation.COMMIT) {
                     commitMessage(partition, offsetContext, lsn);
+                    dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext, message.getCommitTime());
                 }
                 return;
             }
 
-            offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
-                    taskContext.getSlotXmin(connection),
-                    null,
-                    message.getOperation());
             if (message.getOperation() == Operation.BEGIN) {
                 dispatcher.dispatchTransactionStartedEvent(partition, toString(message.getTransactionId()), offsetContext, message.getCommitTime());
             }

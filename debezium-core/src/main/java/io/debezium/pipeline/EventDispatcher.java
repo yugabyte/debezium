@@ -5,6 +5,8 @@
  */
 package io.debezium.pipeline;
 
+import static io.debezium.config.CommonConnectorConfig.WatermarkStrategy.INSERT_DELETE;
+
 import java.time.Instant;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -39,6 +41,8 @@ import io.debezium.pipeline.spi.ChangeRecordEmitter.Receiver;
 import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.pipeline.spi.Partition;
 import io.debezium.pipeline.spi.SchemaChangeEventEmitter;
+import io.debezium.pipeline.txmetadata.DefaultTransactionInfo;
+import io.debezium.pipeline.txmetadata.TransactionInfo;
 import io.debezium.pipeline.txmetadata.TransactionMonitor;
 import io.debezium.processors.PostProcessorRegistry;
 import io.debezium.processors.spi.PostProcessor;
@@ -231,7 +235,7 @@ public class EventDispatcher<P extends Partition, T extends DataCollectionId> im
     }
 
     public SnapshotReceiver<P> getSnapshotChangeEventReceiver() {
-        return new BufferingSnapshotChangeRecordReceiver();
+        return new BufferingSnapshotChangeRecordReceiver(connectorConfig.getSnapshotMaxThreads() > 1);
     }
 
     public SnapshotReceiver<P> getIncrementalSnapshotChangeEventReceiver(DataChangeEventListener<P> dataListener) {
@@ -302,7 +306,8 @@ public class EventDispatcher<P extends Partition, T extends DataCollectionId> im
                     }
 
                     private boolean isASignalEventToProcess(T dataCollectionId, Operation operation) {
-                        return operation == Operation.CREATE &&
+                        return (operation == Operation.CREATE ||
+                                (operation == Operation.DELETE && connectorConfig.getIncrementalSnapshotWatermarkingStrategy() == INSERT_DELETE)) &&
                                 connectorConfig.isSignalDataCollection(dataCollectionId);
                     }
                 });
@@ -349,7 +354,11 @@ public class EventDispatcher<P extends Partition, T extends DataCollectionId> im
     }
 
     public void dispatchTransactionStartedEvent(P partition, String transactionId, OffsetContext offset, Instant timestamp) throws InterruptedException {
-        transactionMonitor.transactionStartedEvent(partition, transactionId, offset, timestamp);
+        dispatchTransactionStartedEvent(partition, new DefaultTransactionInfo(transactionId), offset, timestamp);
+    }
+
+    public void dispatchTransactionStartedEvent(P partition, TransactionInfo transactionInfo, OffsetContext offset, Instant timestamp) throws InterruptedException {
+        transactionMonitor.transactionStartedEvent(partition, transactionInfo, offset, timestamp);
         if (incrementalSnapshotChangeEventSource != null) {
             incrementalSnapshotChangeEventSource.processTransactionStartedEvent(partition, offset);
         }
@@ -418,6 +427,20 @@ public class EventDispatcher<P extends Partition, T extends DataCollectionId> im
                 partition.getSourcePartition(),
                 offset.getOffset(),
                 this::enqueueHeartbeat);
+    }
+
+    // Use this method when you want to dispatch the heartbeat also to incremental snapshot.
+    // Currently, this is used by PostgreSQL for read-only incremental snapshot but doesn't suites well for
+    // MySQL since the dispatchHeartbeatEvent is called at every received message and not when there is no message from the DB log.
+    public void dispatchHeartbeatEventAlsoToIncrementalSnapshot(P partition, OffsetContext offset) throws InterruptedException {
+        heartbeat.heartbeat(
+                partition.getSourcePartition(),
+                offset.getOffset(),
+                this::enqueueHeartbeat);
+
+        if (incrementalSnapshotChangeEventSource != null) {
+            incrementalSnapshotChangeEventSource.processHeartbeat(partition, offset);
+        }
     }
 
     public boolean heartbeatsEnabled() {
@@ -512,6 +535,11 @@ public class EventDispatcher<P extends Partition, T extends DataCollectionId> im
     private final class BufferingSnapshotChangeRecordReceiver implements SnapshotReceiver<P> {
 
         private AtomicReference<BufferedDataChangeEvent> bufferedEventRef = new AtomicReference<>(BufferedDataChangeEvent.NULL);
+        private final boolean threaded;
+
+        BufferingSnapshotChangeRecordReceiver(boolean threaded) {
+            this.threaded = threaded;
+        }
 
         @Override
         public void changeRecord(P partition,
@@ -543,7 +571,17 @@ public class EventDispatcher<P extends Partition, T extends DataCollectionId> im
             nextBufferedEvent.offsetContext = offsetContext;
             nextBufferedEvent.dataChangeEvent = new DataChangeEvent(record);
 
-            queue.enqueue(bufferedEventRef.getAndSet(nextBufferedEvent).dataChangeEvent);
+            if (threaded) {
+                // This entire step needs to happen atomically when using buffering with multiple threads.
+                // This guarantees that the getAndSet and the enqueue do not cause a dispatch of out-of-order
+                // events within a single thread.
+                synchronized (queue) {
+                    queue.enqueue(bufferedEventRef.getAndSet(nextBufferedEvent).dataChangeEvent);
+                }
+            }
+            else {
+                queue.enqueue(bufferedEventRef.getAndSet(nextBufferedEvent).dataChangeEvent);
+            }
         }
 
         @Override

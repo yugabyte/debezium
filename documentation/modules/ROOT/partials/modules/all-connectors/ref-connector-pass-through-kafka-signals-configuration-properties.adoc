@@ -18,11 +18,11 @@ The signaling topic must have a single partition.
 
 |[[{context}-property-signal-kafka-groupId]]<<{context}-property-signal-kafka-groupId, `+signal.kafka.groupId+`>>
 |kafka-signal
-|The name of the group ID  that is used by Kafka consumers.
+|The name of the group ID that is used by Kafka consumers.
 
 |[[{context}-property-signal-kafka-bootstrap-servers]]<<{context}-property-signal-kafka-bootstrap-servers, `+signal.kafka.bootstrap.servers+`>>
 |No default
-|A list of host/port pairs that the connector uses for establishing an initial connection to the Kafka cluster.
+|A list of the host and port pairs that the connector uses to establish its initial connection to the Kafka cluster.
 Each pair references the Kafka cluster that is used by the {prodname} Kafka Connect process.
 
 |[[{context}-property-signal-kafka-poll-timeout-ms]]<<{context}-property-signal-kafka-poll-timeout-ms, `+signal.kafka.poll.timeout.ms+`>>
@@ -31,15 +31,17 @@ Each pair references the Kafka cluster that is used by the {prodname} Kafka Conn
 
 |[[{context}-kafka-consumer-offset-commit-enabled]]<<{context}-kafka-consumer-offset-commit-enabled, `+kafka.consumer.offset.commit.enabled+`>>
 |`false`
-|Enable the offset commit for the signal topic in order to guarantee At-Least-Once delivery. If disabled, only signals received when the consumer is up&running are processed. Any signals received when the consumer is down are lost.
+|Specifies whether the Kafka consumer writes an offset commit after it reads a message from the signaling topic.
+The value that you assign to this property determines whether the connector can process requests that the signaling topic receives while the connector is offline.
+Choose one of the following settings:
 
+`false`:: When the connector is unavailable, the Kafka consumer does not commit an offset after it reads a signal received by the signaling topic.
+As a result, if the connector is offline for any interval, it cannot process requests that the signaling topic receives during the downtime.
+After the connector restarts, it always reads from the last position in the Kafka signaling topic, processing only signals that it receives after the restart.
+Signals received while the connector is offline are ignored, and are effectively lost.
+
+`true`::
+When a user submits a request to the signaling topic, after the Kafka consumer reads the signal message it commits a topic offset, even if the connector is offline.
+Choose this option to provide {prodname} with information about the last signal message that the consumer read, helping to ensure At-Least-Once delivery.
+After a connector restarts, it resumes processing from the last recorded offset, responding to signals that users submitted while the connector is offline.
 |===
-
-[id="debezium-{context}-connector-pass-through-signals-kafka-consumer-configuration-properties"]
-=== {prodname} connector pass-through signals Kafka consumer client configuration properties
-
-The {prodname} connector provides for pass-through configuration of the signals Kafka consumer.
-Pass-through signals properties begin with the prefix `signals.consumer.*`.
-For example, the connector passes properties such as `signal.consumer.security.protocol=SSL` to the Kafka consumer.
-
-{prodname} strips the prefixes from the properties before it passes the properties to the Kafka signals consumer.

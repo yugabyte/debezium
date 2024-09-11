@@ -72,6 +72,7 @@ import com.yugabyte.util.PSQLState;
 
 import io.debezium.DebeziumException;
 import io.debezium.config.CommonConnectorConfig;
+import io.debezium.config.CommonConnectorConfig.SnapshotQueryMode;
 import io.debezium.config.Configuration;
 import io.debezium.config.EnumeratedValue;
 import io.debezium.config.Field;
@@ -83,10 +84,10 @@ import io.debezium.connector.postgresql.connection.PostgresReplicationConnection
 import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.connector.postgresql.connection.pgoutput.PgOutputMessageDecoder;
+import io.debezium.connector.postgresql.junit.PostgresDatabaseVersionResolver;
 import io.debezium.connector.postgresql.junit.SkipTestDependingOnDecoderPluginNameRule;
 import io.debezium.connector.postgresql.junit.SkipWhenDecoderPluginNameIs;
 import io.debezium.connector.postgresql.junit.SkipWhenDecoderPluginNameIsNot;
-import io.debezium.connector.postgresql.snapshot.InitialOnlySnapshotter;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.converters.CloudEventsConverterTest;
 import io.debezium.data.Envelope;
@@ -107,7 +108,6 @@ import io.debezium.relational.RelationalSnapshotChangeEventSource;
 import io.debezium.relational.TableId;
 import io.debezium.schema.DatabaseSchema;
 import io.debezium.util.Strings;
-import io.debezium.util.Testing;
 
 /**
  * Integration test for {@link YugabyteDBConnector} using an {@link io.debezium.engine.DebeziumEngine}
@@ -193,7 +193,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute("CREATE USER badboy WITH PASSWORD 'failing';", "GRANT ALL PRIVILEGES ON DATABASE postgres TO badboy;");
 
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA)
                 .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
                 .build();
 
@@ -204,7 +204,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with("name", "failingPGConnector")
                 .with(PostgresConnectorConfig.DATABASE_CONFIG_PREFIX + JdbcConfiguration.USER, "badboy")
                 .with(PostgresConnectorConfig.DATABASE_CONFIG_PREFIX + JdbcConfiguration.PASSWORD, "failing")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA)
                 .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
                 .build();
         List<ConfigValue> validatedConfig = new YugabyteDBConnector().validate(failingConfig.asMap()).configValues();
@@ -446,7 +446,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     @Test
     @FixFor("DBZ-997")
     public void shouldReceiveChangesForChangePKColumnDefinition() throws Exception {
-        Testing.Print.enable();
+        // Testing.Print.enable();
         final String slotName = "pkcolumndef" + new Random().nextInt(100);
         TestHelper.create().dropReplicationSlot(slotName);
         try {
@@ -545,7 +545,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     @Ignore("Will require a complete test refactor")
     @Test
     public void shouldReceiveChangesForChangeColumnDefault() throws Exception {
-        Testing.Print.enable();
+        // Testing.Print.enable();
         final String slotName = "default_change" + new Random().nextInt(100);
         TestHelper.create().dropReplicationSlot(slotName);
 
@@ -706,7 +706,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     @Ignore("Complete test refactor required")
     @Test
     public void showThatSchemaColumnDefaultMayApplyRetroactively() throws Exception {
-        Testing.Print.enable();
+        // Testing.Print.enable();
         final String slotName = "default_change" + new Random().nextInt(100);
         try (PostgresConnection conn = TestHelper.create()) {
             conn.dropReplicationSlot(slotName);
@@ -1004,11 +1004,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     public void shouldProduceEventsWhenSnapshotsAreNeverAllowed() throws InterruptedException {
-        Testing.Print.enable();
+        // Testing.Print.enable();
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .build();
         start(YugabyteDBConnector.class, config);
@@ -1028,7 +1028,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     public void shouldNotProduceEventsWithInitialOnlySnapshot() throws InterruptedException {
-        Testing.Print.enable();
+        // Testing.Print.enable();
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL_ONLY.getValue())
@@ -1200,7 +1200,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         String setupStmt = SETUP_TABLES_STMT;
         TestHelper.execute(setupStmt);
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s1.a:FULL,s2.a:DEFAULT")
                 .build();
@@ -1233,7 +1233,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.executeDDL("postgres_create_multiple_tables.ddl");
 
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "(.*).a:FULL,s2.*:NOTHING")
                 .build();
@@ -1267,7 +1267,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.executeDDL("postgres_create_multiple_tables.ddl");
 
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s.*:FULL,s2.*:NOTHING")
                 .build();
@@ -1295,7 +1295,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         String setupStmt = SETUP_TABLES_STMT;
         TestHelper.execute(setupStmt);
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s1.a:FULL")
                 .build();
@@ -1325,7 +1325,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         String setupStmt = SETUP_TABLES_STMT;
         TestHelper.execute(setupStmt);
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s1.a:FULL,s2.a:INDEX a_pkey")
                 .build();
@@ -1362,7 +1362,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.executeDDL("postgres_create_role_specific_tables.ddl");
 
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s1.a:FULL,s2.a:DEFAULT")
                 .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "DISABLED")
@@ -1390,7 +1390,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         String setupStmt = SETUP_TABLES_STMT;
         TestHelper.execute(setupStmt);
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, "s1.a:FULL,s2.b:DEFAULT")
                 .build();
@@ -1678,7 +1678,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 "CREATE SCHEMA s1; " +
                 "CREATE TABLE s1.a (pk SERIAL, aa integer, PRIMARY KEY(pk));";
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.a")
                 .with(Heartbeat.HEARTBEAT_INTERVAL, 10)
@@ -1700,7 +1700,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         final int recordCount = 10;
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.a")
                 .build();
@@ -1744,7 +1744,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         final int recordCount = 10;
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1.a")
                 .with(PostgresConnectorConfig.PROVIDE_TRANSACTION_METADATA, true)
@@ -1801,7 +1801,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CUSTOM_NAME, CustomTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
         start(YugabyteDBConnector.class, config);
@@ -2065,7 +2065,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     @FixFor("DBZ-1437")
     public void shouldPerformSnapshotOnceForInitialOnlySnapshotMode() throws Exception {
         // This captures all logged messages, allowing us to verify log message was written.
-        final LogInterceptor logInterceptor = new LogInterceptor(InitialOnlySnapshotter.class);
+        final LogInterceptor logInterceptor = new LogInterceptor(PostgresSnapshotChangeEventSource.class);
 
         TestHelper.dropDefaultReplicationSlot();
 
@@ -2111,7 +2111,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         waitForConnectorShutdown("postgres", TestHelper.TEST_SERVER);
 
         // Stop the connector, verify that no snapshot was performed
-        assertThat(logInterceptor.containsMessage("Previous initial snapshot completed, no snapshot will be performed")).isTrue();
+        assertThat(logInterceptor.containsMessage("A previous offset indicating a completed snapshot has been found."))
+                .isTrue();
     }
 
     @Test
@@ -2170,7 +2171,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // Perform an regular snapshot
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomStartFromStreamingTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CUSTOM_NAME, CustomStartFromStreamingTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
         start(YugabyteDBConnector.class, config);
@@ -2193,7 +2194,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // Perform catch up streaming and resnapshot everything
         config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomStartFromStreamingTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CUSTOM_NAME, CustomStartFromStreamingTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
         start(YugabyteDBConnector.class, config);
@@ -2254,7 +2255,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // Perform a custom partial snapshot
         config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomPartialTableTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CUSTOM_NAME, CustomPartialTableTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_QUERY_MODE, SnapshotQueryMode.CUSTOM)
+                .with(PostgresConnectorConfig.SNAPSHOT_QUERY_MODE_CUSTOM_NAME, CustomPartialTableTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
         start(YugabyteDBConnector.class, config);
@@ -2293,7 +2296,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     public void customSnapshotterSkipsTablesOnRestartWithConcurrentTx() throws Exception {
         final LogInterceptor logInterceptor = new LogInterceptor(RelationalSnapshotChangeEventSource.class);
 
-        Testing.Print.enable();
+        // Testing.Print.enable();
         TestHelper.execute(SETUP_TABLES_STMT);
         // Perform an regular snapshot using the always snapshotter
         Configuration config = TestHelper.defaultConfig()
@@ -2320,7 +2323,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         // Perform a custom partial snapshot
         config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomPartialTableTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CUSTOM_NAME, CustomPartialTableTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_QUERY_MODE, SnapshotQueryMode.CUSTOM)
+                .with(PostgresConnectorConfig.SNAPSHOT_QUERY_MODE_CUSTOM_NAME, CustomPartialTableTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
         start(YugabyteDBConnector.class, config);
@@ -2371,7 +2376,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 "CREATE TABLE s1.lifecycle_state (hook text, state text, PRIMARY KEY(hook));");
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomLifecycleHookTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CUSTOM_NAME, CustomLifecycleHookTestSnapshot.class.getName())
                 .build();
         start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
@@ -2440,7 +2445,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.dropAllSchemas();
         TestHelper.executeDDL("postgres_create_tables.ddl");
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
@@ -2493,6 +2498,39 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Ignore("YB: YB doesn't support the way of initial_only snapshot this connector uses, see https://github.com/yugabyte/yugabyte-db/issues/21425")
+    @Test
+    public void shouldProcessPurgedLogsWhenDownAndSnapshotNeeded() throws InterruptedException {
+
+        TestHelper.execute(SETUP_TABLES_STMT);
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
+
+        start(PostgresConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForSnapshotToBeCompleted();
+
+        // check the records from the snapshot
+        assertRecordsFromSnapshot(2, 1, 1);
+        // insert and verify 2 new records
+        TestHelper.execute(INSERT_STMT);
+        assertRecordsAfterInsert(2, 2, 2);
+
+        // now stop the connector
+        stopConnector();
+        assertNoRecordsToConsume();
+
+        // start the connector back up and check that a new snapshot has been performed
+        start(PostgresConnector.class, configBuilder
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.WHEN_NEEDED.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
+
+        assertConnectorIsRunning();
+        waitForSnapshotToBeCompleted();
+
+        assertRecordsFromSnapshot(4, 1, 2, 1, 2);
+    }
+
     @Test
     @FixFor("DBZ-1242")
     public void testEmptySchemaWarningAfterApplyingFilters() throws Exception {
@@ -2639,7 +2677,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.executeDDL("postgres_create_tables.ddl");
 
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false)
                 .build();
 
@@ -3268,7 +3306,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         waitForStreamingRunning();
         TestHelper.execute(INSERT_STMT);
 
-        Testing.Print.enable();
+        // Testing.Print.enable();
 
         // YB Note: Increasing the wait time for records.
         final List<SourceRecord> streaming = new ArrayList<SourceRecord>();
@@ -3581,11 +3619,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     public void shouldEmitNoEventsForSkippedCreateOperations() throws Exception {
-        Testing.Print.enable();
+        // Testing.Print.enable();
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.SKIPPED_OPERATIONS, Envelope.Operation.UPDATE.code())
                 .build();
@@ -3691,7 +3729,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(SETUP_TABLES_STMT);
         start(YugabyteDBConnector.class, TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.PROVIDE_TRANSACTION_METADATA, true)
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.getValue())
                 .build());
         assertConnectorIsRunning();
 
@@ -3896,7 +3934,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(INSERT_STMT);
 
         configBuilder = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.name())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.name())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET, Boolean.TRUE);
 
@@ -3929,7 +3967,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute(INSERT_STMT);
 
         configBuilder = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.name())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA.name())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET, Boolean.TRUE);
 
@@ -3960,7 +3998,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.POLL_INTERVAL_MS, 60 * 1000)
                 .with(PostgresConnectorConfig.SNAPSHOT_FETCH_SIZE, 1)
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomLifecycleHookTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CUSTOM_NAME, CustomLifecycleHookTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
 
         DebeziumEngine.CompletionCallback completionCallback = (success, message, error) -> {
@@ -4017,10 +4055,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .until(() -> finished.get());
         assertThat(status.get()).isFalse();
         assertNull(error.get());
-        assertThat(message.get()).contains("snapshot.custom_class cannot be empty when snapshot.mode 'custom' is defined");
+        assertThat(message.get()).contains("snapshot.mode.custom.name cannot be empty when snapshot.mode 'custom' is defined");
     }
 
-    // Added test annotation since it was not present
     @Test
     @FixFor("DBZ-5917")
     public void shouldIncludeTableWithBackSlashInName() throws Exception {
@@ -4129,6 +4166,26 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             assertEquals("io.debezium.connector.postgresql.Source", source.schema().name());
             assertNotNull(source.getInt64(SourceInfo.LSN_KEY));
         });
+    }
+
+    @Test
+    public void shouldFailWhenReadOnlyIsNotSupported() {
+
+        PostgresDatabaseVersionResolver databaseVersionResolver = new PostgresDatabaseVersionResolver();
+
+        start(PostgresConnector.class, TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.READ_ONLY_CONNECTION, true)
+                .build(), (success, message, error) -> {
+
+                    if (databaseVersionResolver.getVersion().isLessThan(13, 0, 0)) {
+                        assertThat(error)
+                                .isInstanceOf(DebeziumException.class)
+                                .hasMessage("Read only is not supported for version minor to 13");
+                    }
+                    else {
+                        assertTrue(success);
+                    }
+                });
     }
 
     private Predicate<SourceRecord> stopOnPKPredicate(int pkValue) {

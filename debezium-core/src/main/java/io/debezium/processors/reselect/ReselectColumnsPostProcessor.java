@@ -8,6 +8,7 @@ package io.debezium.processors.reselect;
 import java.nio.ByteBuffer;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -25,6 +26,7 @@ import io.debezium.common.annotation.Incubating;
 import io.debezium.config.Configuration;
 import io.debezium.connector.AbstractSourceInfo;
 import io.debezium.data.Envelope;
+import io.debezium.data.Json;
 import io.debezium.function.Predicates;
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.processors.spi.PostProcessor;
@@ -62,8 +64,11 @@ public class ReselectColumnsPostProcessor implements PostProcessor, BeanRegistry
     private JdbcConnection jdbcConnection;
     private ValueConverterProvider valueConverterProvider;
     private String unavailableValuePlaceholder;
-    private byte[] unavailableValuePlaceholderBytes;
+    private ByteBuffer unavailableValuePlaceholderBytes;
+    private Map<String, String> unavailableValuePlaceholderMap;
+    private String unavailableValuePlaceholderJson;
     private RelationalDatabaseSchema schema;
+    private RelationalDatabaseConnectorConfig connectorConfig;
 
     @Override
     public void configure(Map<String, ?> properties) {
@@ -123,6 +128,11 @@ public class ReselectColumnsPostProcessor implements PostProcessor, BeanRegistry
             return;
         }
 
+        if (connectorConfig.isSignalDataCollection(tableId)) {
+            LOGGER.debug("Signal table '{}' events are not eligible for re-selection.", tableId);
+            return;
+        }
+
         final Table table = schema.tableFor(tableId);
         if (table == null) {
             LOGGER.debug("Unable to locate table {} in relational model.", tableId);
@@ -179,10 +189,13 @@ public class ReselectColumnsPostProcessor implements PostProcessor, BeanRegistry
 
     @Override
     public void injectBeanRegistry(BeanRegistry beanRegistry) {
-        final RelationalDatabaseConnectorConfig connectorConfig = beanRegistry.lookupByName(
-                StandardBeanNames.CONNECTOR_CONFIG, RelationalDatabaseConnectorConfig.class);
+        this.connectorConfig = beanRegistry.lookupByName(StandardBeanNames.CONNECTOR_CONFIG, RelationalDatabaseConnectorConfig.class);
+
+        // Various unavailable value placeholders
         this.unavailableValuePlaceholder = new String(connectorConfig.getUnavailableValuePlaceholder());
-        this.unavailableValuePlaceholderBytes = connectorConfig.getUnavailableValuePlaceholder();
+        this.unavailableValuePlaceholderBytes = ByteBuffer.wrap(connectorConfig.getUnavailableValuePlaceholder());
+        this.unavailableValuePlaceholderMap = Map.of(this.unavailableValuePlaceholder, this.unavailableValuePlaceholder);
+        this.unavailableValuePlaceholderJson = "{\"" + this.unavailableValuePlaceholder + "\":\"" + this.unavailableValuePlaceholder + "\"}";
 
         this.valueConverterProvider = beanRegistry.lookupByName(StandardBeanNames.VALUE_CONVERTER, ValueConverterProvider.class);
         this.jdbcConnection = beanRegistry.lookupByName(StandardBeanNames.JDBC_CONNECTION, JdbcConnection.class);
@@ -213,10 +226,40 @@ public class ReselectColumnsPostProcessor implements PostProcessor, BeanRegistry
     }
 
     private boolean isUnavailableValueHolder(org.apache.kafka.connect.data.Field field, Object value) {
-        if (field.schema().type() == Schema.Type.BYTES && this.unavailableValuePlaceholderBytes != null) {
-            return ByteBuffer.wrap(unavailableValuePlaceholderBytes).equals(value);
+        if (unavailableValuePlaceholder != null) {
+            if (field.schema().type() == Schema.Type.ARRAY && value != null) {
+                // Special use case to inspect by element
+                final Collection<?> values = (Collection<?>) value;
+                for (Object collectionValue : values) {
+                    if (isUnavailableValueHolder(field.schema().valueSchema(), collectionValue)) {
+                        return true;
+                    }
+                }
+            }
+            else {
+                return isUnavailableValueHolder(field.schema(), value);
+            }
         }
-        return unavailableValuePlaceholder != null && unavailableValuePlaceholder.equals(value);
+        return false;
+    }
+
+    private boolean isUnavailableValueHolder(Schema schema, Object value) {
+        switch (schema.type()) {
+            case BYTES:
+                return unavailableValuePlaceholderBytes.equals(value);
+            case MAP:
+                return unavailableValuePlaceholderMap.equals(value);
+            case STRING:
+                // Both PostgreSQL HSTORE and JSON/JSONB have a schema name of "json".
+                // PostgreSQL HSTORE fields use a JSON-like unavailable value placeholder, e.g., {"key":"value"},
+                // while JSON/JSONB fields use a simple string placeholder.
+                // This condition is needed to handle both cases:
+                // - HSTORE unavailable value placeholders (as JSON objects)
+                // - JSON/JSONB unavailable value placeholders (as strings)
+                final boolean isJsonAndUnavailable = Json.LOGICAL_NAME.equals(schema.name()) && unavailableValuePlaceholderJson.equals(value);
+                return unavailableValuePlaceholder.equals(value) || isJsonAndUnavailable;
+        }
+        return false;
     }
 
     private Object getConvertedValue(Column column, org.apache.kafka.connect.data.Field field, Object value) {
@@ -258,7 +301,9 @@ public class ReselectColumnsPostProcessor implements PostProcessor, BeanRegistry
             if (columnNames == null || columnNames.trim().isEmpty()) {
                 reselectColumnInclusions = null;
             }
-            reselectColumnInclusions = Predicates.includes(columnNames, Pattern.CASE_INSENSITIVE);
+            else {
+                reselectColumnInclusions = Predicates.includes(columnNames, Pattern.CASE_INSENSITIVE);
+            }
             return this;
         }
 
@@ -266,13 +311,20 @@ public class ReselectColumnsPostProcessor implements PostProcessor, BeanRegistry
             if (columnNames == null || columnNames.trim().isEmpty()) {
                 reselectColumnExclusions = null;
             }
-            reselectColumnExclusions = Predicates.excludes(columnNames, Pattern.CASE_INSENSITIVE);
+            else {
+                reselectColumnExclusions = Predicates.excludes(columnNames, Pattern.CASE_INSENSITIVE);
+            }
             return this;
         }
 
         public Predicate<String> build() {
-            Predicate<String> filter = reselectColumnInclusions != null ? reselectColumnInclusions : reselectColumnExclusions;
-            return filter != null ? filter : (x) -> true;
+            if (reselectColumnInclusions != null) {
+                return reselectColumnInclusions;
+            }
+            if (reselectColumnExclusions != null) {
+                return reselectColumnExclusions;
+            }
+            return (x) -> true;
         }
     }
 
