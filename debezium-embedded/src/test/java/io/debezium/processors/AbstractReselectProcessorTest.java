@@ -142,12 +142,7 @@ public abstract class AbstractReselectProcessorTest<T extends SourceConnector> e
     public void testNoColumnsReselectedWhenNotNullStreaming() throws Exception {
         enableTableForCdc();
 
-<<<<<<< HEAD
-        LogInterceptor interceptor = new LogInterceptor(ReselectColumnsPostProcessor.class);
-        interceptor.setLoggerLevel(ReselectColumnsPostProcessor.class, Level.DEBUG);
-=======
         LogInterceptor interceptor = getReselectLogInterceptor();
->>>>>>> 2.7.2.Final
 
         Configuration config = getConfigurationBuilder()
                 .with("reselector.reselect.columns.include.list", reselectColumnsList())
@@ -288,8 +283,6 @@ public abstract class AbstractReselectProcessorTest<T extends SourceConnector> e
     protected void enableTableForCdc() throws Exception {
     }
 
-<<<<<<< HEAD
-=======
     protected LogInterceptor getReselectLogInterceptor() {
         final LogInterceptor logInterceptor = new LogInterceptor(ReselectColumnsPostProcessor.class);
         logInterceptor.setLoggerLevel(ReselectColumnsPostProcessor.class, Level.DEBUG);
@@ -304,5 +297,4 @@ public abstract class AbstractReselectProcessorTest<T extends SourceConnector> e
                 .isTrue();
     }
 
->>>>>>> 2.7.2.Final
 }
