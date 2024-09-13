@@ -150,14 +150,8 @@ Do not set this property if you set the `reselect.columns.include.list` property
 |`false`
 |Specifies whether the post processor reselects based on the event's key field names or uses the relational table's primary key column names. +
  +
-<<<<<<< HEAD
-By default, the reselect is based on the relational table's primary key columns or unique key index.
-Setting this to `true` can be useful if the table has no primary key and the connector is configured to use `message.key.columns` to create events with a key.
-This will then use the key field names as the primary key in the SQL reselection query.
-=======
 By default, the reselection query is based on the relational table's primary key columns or unique key index.
 For tables that do not have a primary key, set this property to `true`, and configure the `message.key.columns` property in the connector configuration to specify a custom key for the connector to use when it creates events.
 The post processor then uses the specified key field names as the primary key in the SQL reselection query.
 
->>>>>>> 2.7.2.Final
 |===

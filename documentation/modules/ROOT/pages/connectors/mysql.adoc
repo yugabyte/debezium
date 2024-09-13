@@ -41,35 +41,6 @@ include::{partialsdir}/modules/all-connectors/shared-mariadb-mysql.adoc[leveloff
 
 include::{partialsdir}/modules/all-connectors/shared-mariadb-mysql.adoc[leveloffset=+1,tags=supported-topos]
 
-ifdef::community[]
-[[mysql-mariadb-support]]
-=== MariaDB support
-
-While it is possible to use the MySQL driver to connect and stream changes from MariaDB, we recommend configuring the {prodname} MySQL connector to use the MariaDB adapter mode, allowing you to take advantage of the MariaDB driver, and it's unique feature stack.
-To toggle the MariaDB support mode, the xref:#mysql-property-connector-adapter[`connector.adapter`] configuration property must be specified with a value of `mariadb`.
-This mode utilizes the MariaDB driver instead of the MySQL driver, meaning that you must also provide the database protocol and JDBC driver strings that are compliant with MariaDB, see the example below.
-
-.MariaDB supplemental configuration
-[source,json]
-----
-{
-  ...
-  "connector.adapter": "mariadb",
-  "database.protocol": "jdbc:mariadb",
-  "database.jdbc.driver": "org.mariadb.jdbc.Driver"
-}
-----
-
-[NOTE]
-====
-When the new {prodname} MariaDB connector is available in a future release, these supplemental configurations will no longer be necessary.
-As the connector currently includes both the MySQL and MariaDB drivers, the MariaDB mode is _opt-in_ until {prodname} introduces the new MariaDB-specific connector.
-====
-
-With this configuration, the {prodname} MySQL connector will use the new MariaDB adapter connector, which natively streams changes from MariaDB binary transaction logs.
-All other MySQL xref:mysql-connector-properties[connector properties] can be used in conjunction with the above supplemental configuration.
-endif::community[]
-
 // Type: concept
 // Title: How {prodname} MySQL connectors handle database schema changes
 [[mysql-schema-history-topic]]

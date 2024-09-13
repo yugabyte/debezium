@@ -2418,7 +2418,7 @@ This mode prevents other transactions from updating table rows during an initial
 Only `exclusive` mode guarantees full consistency; the initial snapshot and streaming logs constitute a linear history.
 
 |[[informix-property-cdc-timeout]]<<informix-property-cdc-timeout, `+cdc.timeout+`>>
-|`1`
+|`5`
 |Positive integer value that specifies the timeout behavior of a read call to the change stream client. +
 Specify one of the following values:
 

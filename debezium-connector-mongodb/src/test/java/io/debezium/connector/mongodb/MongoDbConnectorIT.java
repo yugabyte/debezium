@@ -548,11 +548,7 @@ public class MongoDbConnectorIT extends AbstractMongoConnectorIT {
         updateRecords.forEach(record -> {
             // Check that all records are valid, and can be serialized and deserialized ...
             validate(record);
-<<<<<<< HEAD
-            verifyNotFromInitialSync(record);
-=======
             verifyNotFromInitialSnapshot(record);
->>>>>>> 2.7.2.Final
         });
 
         // Verify after values

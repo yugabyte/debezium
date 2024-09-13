@@ -1615,6 +1615,10 @@ The following table describes how the connector maps each Db2 data type to a _li
  +
 String representation of a timestamp without timezone information
 
+|`DECFLOAT`
+|`BYTES`
+|`org.apache.kafka.connect.data.Decimal`
+
 |`DECIMAL`
 |`BYTES`
 |`org.apache.kafka.connect.data.Decimal`
@@ -1783,12 +1787,6 @@ The `connect.decimal.precision` schema parameter contains an integer that repres
  +
 The `scale` schema parameter contains an integer that represents how many digits the decimal point is shifted.
 The `connect.decimal.precision` schema parameter contains an integer that  represents the precision of the given decimal value.
-
-|`DECFLOAT`
-|`STRUCT`
-|`io.debezium.data.VariableScaleDecimal` +
- +
-Contains a structure with two fields: `scale` of type `INT32` that contains the scale of the transferred value and `value`of type `BYTES` containing the original value in an unscaled form.
 
 |===
 

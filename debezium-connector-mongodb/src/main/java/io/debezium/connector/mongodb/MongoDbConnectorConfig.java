@@ -1090,14 +1090,6 @@ public class MongoDbConnectorConfig extends CommonConnectorConfig {
     private final OversizeHandlingMode oversizeHandlingMode;
     private final FiltersMatchMode filtersMatchMode;
     private final int oversizeSkipThreshold;
-    private final boolean sslEnabled;
-    private final boolean sslAllowInvalidHostnames;
-    private final String sslKeyStore;
-    private final String sslKeyStorePassword;
-    private final String sslKeyStoreType;
-    private final String sslTrustStore;
-    private final String sslTrustStorePassword;
-    private final String sslTrustStoreType;
 
     public MongoDbConnectorConfig(Configuration config) {
         super(config, DEFAULT_SNAPSHOT_FETCH_SIZE);
@@ -1414,42 +1406,6 @@ public class MongoDbConnectorConfig extends CommonConnectorConfig {
     @Override
     public int getSnapshotMaxThreads() {
         return snapshotMaxThreads;
-    }
-
-    public boolean isSslEnabled() {
-        return sslEnabled;
-    }
-
-    public boolean isSslAllowInvalidHostnames() {
-        return sslAllowInvalidHostnames;
-    }
-
-    public Optional<Path> getSslKeyStore() {
-        return Optional.ofNullable(sslKeyStore)
-                .filter(not(Strings::isNullOrBlank))
-                .map(Path::of);
-    }
-
-    public char[] getSslKeyStorePassword() {
-        return sslKeyStorePassword != null ? sslKeyStorePassword.toCharArray() : null;
-    }
-
-    public String getSslKeyStoreType() {
-        return sslKeyStoreType;
-    }
-
-    public Optional<Path> getSslTrustStore() {
-        return Optional.ofNullable(sslTrustStore)
-                .filter(not(Strings::isNullOrBlank))
-                .map(Path::of);
-    }
-
-    public char[] getSslTrustStorePassword() {
-        return sslTrustStorePassword != null ? sslTrustStorePassword.toCharArray() : null;
-    }
-
-    public String getSslTrustStoreType() {
-        return sslTrustStoreType;
     }
 
     @Override

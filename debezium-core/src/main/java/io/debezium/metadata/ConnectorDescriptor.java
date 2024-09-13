@@ -50,7 +50,6 @@ public class ConnectorDescriptor {
             case "io.debezium.connector.oracle.OracleConnector":
                 return "oracle";
             case "io.debezium.connector.postgresql.PostgresConnector":
-            case "io.debezium.connector.postgresql.YugabyteDBConnector":
                 return "postgres";
             case "io.debezium.connector.sqlserver.SqlServerConnector":
                 return "sqlserver";
@@ -71,8 +70,6 @@ public class ConnectorDescriptor {
                 return "Debezium Oracle Connector";
             case "io.debezium.connector.postgresql.PostgresConnector":
                 return "Debezium PostgreSQL Connector";
-            case "io.debezium.connector.postgresql.YugabyteDBConnector":
-                return "Debezium YugabyteDB Connector";
             case "io.debezium.connector.sqlserver.SqlServerConnector":
                 return "Debezium SQLServer Connector";
             case "io.debezium.connector.mariadb.MariaDbConnector":

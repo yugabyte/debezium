@@ -176,7 +176,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
 
             if (snapshottingTask.snapshotData()) {
                 LOGGER.info("Snapshot step 7 - Snapshotting data");
-                createDataEvents(context, ctx, connectionPool, snapshotSelectOverridesByTable, snapshottingTask);
+                createDataEvents(context, ctx, connectionPool, snapshotSelectOverridesByTable);
             }
             else {
                 LOGGER.info("Snapshot step 7 - Skipping snapshotting of data");
@@ -470,8 +470,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
 
     private void createDataEvents(ChangeEventSourceContext sourceContext,
                                   RelationalSnapshotContext<P, O> snapshotContext,
-                                  Queue<JdbcConnection> connectionPool, Map<DataCollectionId, String> snapshotSelectOverridesByTable,
-                                  SnapshottingTask snapshottingTask)
+                                  Queue<JdbcConnection> connectionPool, Map<DataCollectionId, String> snapshotSelectOverridesByTable)
             throws Exception {
         tryStartingSnapshot(snapshotContext);
 
