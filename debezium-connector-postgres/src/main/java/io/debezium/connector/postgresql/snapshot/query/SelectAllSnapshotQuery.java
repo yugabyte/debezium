@@ -12,10 +12,10 @@ import java.util.stream.Collectors;
 
 import io.debezium.annotation.ConnectorSpecific;
 import io.debezium.config.CommonConnectorConfig;
-import io.debezium.connector.postgresql.PostgresConnector;
+import io.debezium.connector.postgresql.YugabyteDBConnector;
 import io.debezium.snapshot.spi.SnapshotQuery;
 
-@ConnectorSpecific(connector = PostgresConnector.class)
+@ConnectorSpecific(connector = YugabyteDBConnector.class)
 public class SelectAllSnapshotQuery implements SnapshotQuery {
 
     @Override

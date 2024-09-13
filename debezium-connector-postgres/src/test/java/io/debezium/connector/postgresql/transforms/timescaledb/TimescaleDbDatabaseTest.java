@@ -146,7 +146,7 @@ public class TimescaleDbDatabaseTest extends AbstractConnectorTest {
 
     @Test
     public void shouldTransformCompressedChunks() throws Exception {
-        Testing.Print.enable();
+//        Testing.Print.enable();
 
         start(YugabyteDBConnector.class, config);
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);

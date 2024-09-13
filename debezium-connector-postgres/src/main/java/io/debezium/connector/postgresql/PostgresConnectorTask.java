@@ -82,39 +82,12 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
     @Override
     public ChangeEventSourceCoordinator<PostgresPartition, PostgresOffsetContext> start(Configuration config) {
-<<<<<<< HEAD
-=======
-        final PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
-        final TopicNamingStrategy<TableId> topicNamingStrategy = connectorConfig.getTopicNamingStrategy(CommonConnectorConfig.TOPIC_NAMING_STRATEGY);
-        final SchemaNameAdjuster schemaNameAdjuster = connectorConfig.schemaNameAdjuster();
-
-        final Charset databaseCharset;
-        try (PostgresConnection tempConnection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_GENERAL)) {
-            databaseCharset = tempConnection.getDatabaseCharset();
-        }
-
-        final PostgresValueConverterBuilder valueConverterBuilder = (typeRegistry) -> PostgresValueConverter.of(
-                connectorConfig,
-                databaseCharset,
-                typeRegistry);
-
-        MainConnectionProvidingConnectionFactory<PostgresConnection> connectionFactory = new DefaultMainConnectionProvidingConnectionFactory<>(
-                () -> new PostgresConnection(connectorConfig.getJdbcConfig(), valueConverterBuilder, PostgresConnection.CONNECTION_GENERAL));
-        // Global JDBC connection used both for snapshotting and streaming.
-        // Must be able to resolve datatypes.
-        jdbcConnection = connectionFactory.mainConnection();
->>>>>>> 2.7.2.Final
         try {
             final PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
             final TopicNamingStrategy<TableId> topicNamingStrategy = connectorConfig.getTopicNamingStrategy(CommonConnectorConfig.TOPIC_NAMING_STRATEGY);
-            final Snapshotter snapshotter = connectorConfig.getSnapshotter();
+            // final Snapshotter snapshotter = connectorConfig.getSnapshotter();
             final SchemaNameAdjuster schemaNameAdjuster = connectorConfig.schemaNameAdjuster();
 
-            if (snapshotter == null) {
-                throw new ConnectException("Unable to load snapshotter, if using custom snapshot mode, double check your settings");
-            }
-
-<<<<<<< HEAD
             final Charset databaseCharset;
             try (PostgresConnection tempConnection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_GENERAL)) {
                 databaseCharset = tempConnection.getDatabaseCharset();
@@ -132,27 +105,32 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             jdbcConnection = connectionFactory.mainConnection();
             try {
                 jdbcConnection.setAutoCommit(false);
-=======
-        schema = new PostgresSchema(connectorConfig, defaultValueConverter, topicNamingStrategy, valueConverter);
-        this.taskContext = new PostgresTaskContext(connectorConfig, schema, topicNamingStrategy);
-        this.partitionProvider = new PostgresPartition.Provider(connectorConfig, config);
-        this.offsetContextLoader = new PostgresOffsetContext.Loader(connectorConfig);
-        final Offsets<PostgresPartition, PostgresOffsetContext> previousOffsets = getPreviousOffsets(
-                this.partitionProvider, this.offsetContextLoader);
-        final Clock clock = Clock.system();
-        final PostgresOffsetContext previousOffset = previousOffsets.getTheOnlyOffset();
+            }
+            catch (SQLException e) {
+                throw new DebeziumException(e);
+            }
 
-        // Manual Bean Registration
-        beanRegistryJdbcConnection = connectionFactory.newConnection();
-        connectorConfig.getBeanRegistry().add(StandardBeanNames.CONFIGURATION, config);
-        connectorConfig.getBeanRegistry().add(StandardBeanNames.CONNECTOR_CONFIG, connectorConfig);
-        connectorConfig.getBeanRegistry().add(StandardBeanNames.DATABASE_SCHEMA, schema);
-        connectorConfig.getBeanRegistry().add(StandardBeanNames.JDBC_CONNECTION, beanRegistryJdbcConnection);
-        connectorConfig.getBeanRegistry().add(StandardBeanNames.VALUE_CONVERTER, valueConverter);
-        connectorConfig.getBeanRegistry().add(StandardBeanNames.OFFSETS, previousOffsets);
+            final TypeRegistry typeRegistry = jdbcConnection.getTypeRegistry();
+            final PostgresDefaultValueConverter defaultValueConverter = jdbcConnection.getDefaultValueConverter();
+            final PostgresValueConverter valueConverter = valueConverterBuilder.build(typeRegistry);
 
-        // Service providers
-        registerServiceProviders(connectorConfig.getServiceRegistry());
+            schema = new PostgresSchema(connectorConfig, defaultValueConverter, topicNamingStrategy, valueConverter);
+            this.taskContext = new PostgresTaskContext(connectorConfig, schema, topicNamingStrategy);
+            final Offsets<PostgresPartition, PostgresOffsetContext> previousOffsets = getPreviousOffsets(
+                    new PostgresPartition.Provider(connectorConfig, config), new PostgresOffsetContext.Loader(connectorConfig));
+            final Clock clock = Clock.system();
+            final PostgresOffsetContext previousOffset = previousOffsets.getTheOnlyOffset();
+
+            // Manual Bean Registration
+            beanRegistryJdbcConnection = connectionFactory.newConnection();
+            connectorConfig.getBeanRegistry().add(StandardBeanNames.CONFIGURATION, config);
+            connectorConfig.getBeanRegistry().add(StandardBeanNames.CONNECTOR_CONFIG, connectorConfig);
+            connectorConfig.getBeanRegistry().add(StandardBeanNames.DATABASE_SCHEMA, schema);
+            connectorConfig.getBeanRegistry().add(StandardBeanNames.JDBC_CONNECTION, beanRegistryJdbcConnection);
+            connectorConfig.getBeanRegistry().add(StandardBeanNames.VALUE_CONVERTER, valueConverter);
+
+            // Service providers
+            registerServiceProviders(connectorConfig.getServiceRegistry());
 
         final SnapshotterService snapshotterService = connectorConfig.getServiceRegistry().tryGetService(SnapshotterService.class);
         final Snapshotter snapshotter = snapshotterService.getSnapshotter();
@@ -181,112 +159,6 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             SlotState slotInfo = getSlotState(connectorConfig);
 
             SlotCreationResult slotCreatedInfo = tryToCreateSlot(snapshotter, connectorConfig, slotInfo);
-
-            try {
-                jdbcConnection.commit();
->>>>>>> 2.7.2.Final
-            }
-            catch (SQLException e) {
-                throw new DebeziumException(e);
-            }
-
-            final TypeRegistry typeRegistry = jdbcConnection.getTypeRegistry();
-            final PostgresDefaultValueConverter defaultValueConverter = jdbcConnection.getDefaultValueConverter();
-            final PostgresValueConverter valueConverter = valueConverterBuilder.build(typeRegistry);
-
-            schema = new PostgresSchema(connectorConfig, defaultValueConverter, topicNamingStrategy, valueConverter);
-            this.taskContext = new PostgresTaskContext(connectorConfig, schema, topicNamingStrategy);
-            final Offsets<PostgresPartition, PostgresOffsetContext> previousOffsets = getPreviousOffsets(
-                    new PostgresPartition.Provider(connectorConfig, config), new PostgresOffsetContext.Loader(connectorConfig));
-            final Clock clock = Clock.system();
-            final PostgresOffsetContext previousOffset = previousOffsets.getTheOnlyOffset();
-
-            // Manual Bean Registration
-            beanRegistryJdbcConnection = connectionFactory.newConnection();
-            connectorConfig.getBeanRegistry().add(StandardBeanNames.CONFIGURATION, config);
-            connectorConfig.getBeanRegistry().add(StandardBeanNames.CONNECTOR_CONFIG, connectorConfig);
-            connectorConfig.getBeanRegistry().add(StandardBeanNames.DATABASE_SCHEMA, schema);
-            connectorConfig.getBeanRegistry().add(StandardBeanNames.JDBC_CONNECTION, beanRegistryJdbcConnection);
-            connectorConfig.getBeanRegistry().add(StandardBeanNames.VALUE_CONVERTER, valueConverter);
-
-            // Service providers
-            registerServiceProviders(connectorConfig.getServiceRegistry());
-
-            LoggingContext.PreviousContext previousContext = taskContext.configureLoggingContext(CONTEXT_NAME);
-            try {
-                // Print out the server information
-                SlotState slotInfo = null;
-                try {
-                    if (LOGGER.isInfoEnabled()) {
-                        LOGGER.info(jdbcConnection.serverInfo().toString());
-                    }
-                    slotInfo = jdbcConnection.getReplicationSlotState(connectorConfig.slotName(), connectorConfig.plugin().getPostgresPluginName());
-                }
-                catch (SQLException e) {
-                    LOGGER.warn("unable to load info of replication slot, Debezium will try to create the slot", e);
-                    throw e;
-                }
-
-                if (previousOffset == null) {
-                    LOGGER.info("No previous offset found");
-                    // if we have no initial offset, indicate that to Snapshotter by passing null
-                    snapshotter.init(connectorConfig, null, slotInfo);
-                }
-                else {
-                    LOGGER.info("Found previous offset {}", previousOffset);
-                    snapshotter.init(connectorConfig, previousOffset.asOffsetState(), slotInfo);
-                }
-
-<<<<<<< HEAD
-                SlotCreationResult slotCreatedInfo = null;
-                if (snapshotter.shouldStream() || (YugabyteDBServer.isEnabled() && (slotInfo == null))) {
-                    replicationConnection = createReplicationConnection(this.taskContext,
-                            connectorConfig.maxRetries(), connectorConfig.retryDelay());
-=======
-            ChangeEventSourceCoordinator<PostgresPartition, PostgresOffsetContext> coordinator = new PostgresChangeEventSourceCoordinator(
-                    previousOffsets,
-                    errorHandler,
-                    PostgresConnector.class,
-                    connectorConfig,
-                    new PostgresChangeEventSourceFactory(
-                            connectorConfig,
-                            snapshotterService,
-                            connectionFactory,
-                            errorHandler,
-                            dispatcher,
-                            clock,
-                            schema,
-                            taskContext,
-                            replicationConnection,
-                            slotCreatedInfo,
-                            slotInfo),
-                    new DefaultChangeEventSourceMetricsFactory<>(),
-                    dispatcher,
-                    schema,
-                    snapshotterService,
-                    slotInfo,
-                    signalProcessor,
-                    notificationService);
->>>>>>> 2.7.2.Final
-
-                    // we need to create the slot before we start streaming if it doesn't exist
-                    // otherwise we can't stream back changes happening while the snapshot is taking place
-                    if (slotInfo == null) {
-                        try {
-                            slotCreatedInfo = replicationConnection.createReplicationSlot().orElse(null);
-                        }
-                        catch (SQLException ex) {
-                            String message = "Creation of replication slot failed";
-                            if (ex.getMessage().contains("already exists")) {
-                                message += "; when setting up multiple connectors for the same database host, please make sure to use a distinct replication slot name for each.";
-                            }
-                            throw new DebeziumException(message, ex);
-                        }
-                    }
-                    else {
-                        slotCreatedInfo = null;
-                    }
-                }
 
                 try {
                     jdbcConnection.commit();
@@ -352,7 +224,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                         connectorConfig,
                         new PostgresChangeEventSourceFactory(
                                 connectorConfig,
-                                snapshotter,
+                                snapshotterService,
                                 connectionFactory,
                                 errorHandler,
                                 dispatcher,
@@ -365,7 +237,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                         new DefaultChangeEventSourceMetricsFactory<>(),
                         dispatcher,
                         schema,
-                        snapshotter,
+                        snapshotterService,
                         slotInfo,
                         signalProcessor,
                         notificationService);

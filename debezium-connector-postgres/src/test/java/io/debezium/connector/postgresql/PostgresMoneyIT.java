@@ -161,7 +161,7 @@ public class PostgresMoneyIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE + ".post_money.debezium_test",
                         "SELECT id, null AS m FROM post_money.debezium_test")
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
 
         var records = consumeRecordsByTopic(1);
         var recordsForTopic = records.recordsForTopic(topicName("post_money.debezium_test"));
@@ -178,7 +178,7 @@ public class PostgresMoneyIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE + ".post_money.debezium_test",
                         "SELECT id, null AS m FROM post_money.debezium_test")
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
 
         records = consumeRecordsByTopic(1);
         recordsForTopic = records.recordsForTopic(topicName("post_money.debezium_test"));

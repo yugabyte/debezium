@@ -21,7 +21,6 @@ import org.slf4j.LoggerFactory;
 import io.debezium.connector.postgresql.PostgresOffsetContext.Loader;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
-import io.debezium.connector.postgresql.snapshot.AlwaysSnapshotter;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.jdbc.MainConnectionProvidingConnectionFactory;

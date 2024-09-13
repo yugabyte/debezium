@@ -46,6 +46,7 @@ import java.util.stream.IntStream;
 
 import javax.management.InstanceNotFoundException;
 
+import io.debezium.custom.snapshotter.CustomTestSnapshot;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
@@ -1078,7 +1079,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     public void shouldHaveBeforeImageOfUpdatedRow() throws InterruptedException {
-        Testing.Print.enable();
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.execute(SETUP_TABLES_STMT);
         TestHelper.execute("ALTER TABLE s1.a REPLICA IDENTITY FULL;");
@@ -1832,7 +1832,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.CUSTOM.getValue())
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CLASS, CustomTestSnapshot.class.getName())
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE_CUSTOM_NAME, CustomTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .build();
         start(YugabyteDBConnector.class, config);
@@ -2506,7 +2506,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE);
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -2521,7 +2521,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertNoRecordsToConsume();
 
         // start the connector back up and check that a new snapshot has been performed
-        start(PostgresConnector.class, configBuilder
+        start(YugabyteDBConnector.class, configBuilder
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.WHEN_NEEDED.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE).build());
 
@@ -4173,7 +4173,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         PostgresDatabaseVersionResolver databaseVersionResolver = new PostgresDatabaseVersionResolver();
 
-        start(PostgresConnector.class, TestHelper.defaultConfig()
+        start(YugabyteDBConnector.class, TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.READ_ONLY_CONNECTION, true)
                 .build(), (success, message, error) -> {
 
@@ -4279,14 +4279,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 ++recordsConsumed;
                 if (recordConsumer != null) {
                     recordConsumer.accept(record);
-                }
-                if (Testing.Debug.isEnabled()) {
-                    Testing.debug(logMessage.apply(recordsConsumed, record));
-                    debug(record);
-                }
-                else if (Testing.Print.isEnabled()) {
-                    Testing.print(logMessage.apply(recordsConsumed, record));
-                    print(record);
                 }
                 if (assertRecords) {
                     YBVerifyRecord.isValid(record, /* skipAvroValidation */ false);

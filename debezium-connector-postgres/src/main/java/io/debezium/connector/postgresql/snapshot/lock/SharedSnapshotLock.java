@@ -10,11 +10,11 @@ import java.util.Map;
 import java.util.Optional;
 
 import io.debezium.annotation.ConnectorSpecific;
-import io.debezium.connector.postgresql.PostgresConnector;
+import io.debezium.connector.postgresql.YugabyteDBConnector;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.snapshot.spi.SnapshotLock;
 
-@ConnectorSpecific(connector = PostgresConnector.class)
+@ConnectorSpecific(connector = YugabyteDBConnector.class)
 public class SharedSnapshotLock implements SnapshotLock {
 
     @Override

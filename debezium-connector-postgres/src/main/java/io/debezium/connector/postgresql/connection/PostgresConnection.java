@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
+import com.yugabyte.core.ConnectionFactory;
 import org.apache.kafka.connect.errors.ConnectException;
 import com.yugabyte.core.BaseConnection;
 import com.yugabyte.jdbc.PgConnection;
@@ -82,7 +83,7 @@ public class PostgresConnection extends JdbcConnection {
     public static final String MULTI_HOST_URL_PATTERN = "jdbc:yugabytedb://${" + JdbcConfiguration.HOSTNAME + "}/${" + JdbcConfiguration.DATABASE + "}?load-balance=true";
     public static final String URL_PATTERN = "jdbc:yugabytedb://${" + JdbcConfiguration.HOSTNAME + "}:${"
             + JdbcConfiguration.PORT + "}/${" + JdbcConfiguration.DATABASE + "}";
-    protected static ConnectionFactory FACTORY = JdbcConnection.patternBasedFactory(URL_PATTERN,
+    protected static ConnectionFactory CONNECTION_FACTORY = JdbcConnection.patternBasedFactory(URL_PATTERN,
             com.yugabyte.Driver.class.getName(),
             PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
 
@@ -111,7 +112,7 @@ public class PostgresConnection extends JdbcConnection {
     public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage, ConnectionFactory factory) {
         super(addDefaultSettings(config, connectionUsage), factory, PostgresConnection::validateServerVersion, "\"", "\"");
         this.jdbcConfig = config;
-        PostgresConnection.FACTORY = factory;
+        PostgresConnection.CONNECTION_FACTORY = factory;
 
         if (Objects.isNull(valueConverterBuilder)) {
             this.typeRegistry = null;
@@ -135,9 +136,9 @@ public class PostgresConnection extends JdbcConnection {
      * @param typeRegistry an existing/already-primed {@link TypeRegistry} instance
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
      */
-    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage) {
+    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage, ConnectionFactory factory) {
         super(addDefaultSettings(config.getJdbcConfig(), connectionUsage),
-                FACTORY,
+                factory,
                 PostgresConnection::validateServerVersion,
                 "\"", "\"");
 
@@ -151,7 +152,7 @@ public class PostgresConnection extends JdbcConnection {
             this.defaultValueConverter = new PostgresDefaultValueConverter(valueConverter, this.getTimestampUtils(), typeRegistry);
         }
 
-        PostgresConnection.FACTORY = factory;
+        PostgresConnection.CONNECTION_FACTORY = factory;
         this.jdbcConfig = config.getJdbcConfig();
     }
 

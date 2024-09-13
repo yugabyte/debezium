@@ -125,13 +125,8 @@ public class TablesWithoutPrimaryKeyIT extends AbstractRecordsProducerTest {
 
     @Test
     public void shouldProcessFromStreamingOld() throws Exception {
-<<<<<<< HEAD
         start(YugabyteDBConnector.class, TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
-=======
-        start(PostgresConnector.class, TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA)
->>>>>>> 2.7.2.Final
                 .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "nopk")
                 .build());
         assertConnectorIsRunning();

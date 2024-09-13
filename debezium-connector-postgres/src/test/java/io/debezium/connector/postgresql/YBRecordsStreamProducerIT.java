@@ -139,18 +139,10 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 "INSERT INTO test_table(text) VALUES ('insert');";
         TestHelper.execute(statements);
 
-        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+        PostgresConnectorConfig config = new PostgresConnectorConfig(TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, false)
-                .with(PostgresConnectorConfig.SCHEMA_EXCLUDE_LIST, "postgis");
-
-        // todo DBZ-766 are these really needed?
-        if (TestHelper.decoderPlugin() == PostgresConnectorConfig.LogicalDecoder.PGOUTPUT) {
-            configBuilder = configBuilder.with("database.replication", "database")
-                    .with("database.preferQueryMode", "simple")
-                    .with("assumeMinServerVersion.set", "9.4");
-        }
-
-        Print.enable();
+                .with(PostgresConnectorConfig.SCHEMA_EXCLUDE_LIST, "postgis")
+                .build());
     }
 
     private void startConnector(Function<Configuration.Builder, Configuration.Builder> customConfig, boolean waitForSnapshot, Predicate<SourceRecord> isStopRecord)
@@ -158,7 +150,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
         start(YugabyteDBConnector.class, new PostgresConnectorConfig(customConfig.apply(TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, false)
                 .with(PostgresConnectorConfig.SCHEMA_EXCLUDE_LIST, "postgis")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, waitForSnapshot ? SnapshotMode.INITIAL : SnapshotMode.NEVER))
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, waitForSnapshot ? SnapshotMode.INITIAL : SnapshotMode.NO_DATA))
                 .build()).getConfig(), isStopRecord);
         assertConnectorIsRunning();
         waitForStreamingToStart();
@@ -1583,7 +1575,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     @Test
     @FixFor("DBZ-6122")
     public void shouldHandleToastedByteArrayColumn() throws Exception {
-        Print.enable();
+//        Print.enable();
         TestHelper.execute(
                 "DROP TABLE IF EXISTS test_toast_table;",
                 "CREATE TABLE test_toast_table (id SERIAL PRIMARY KEY);");
@@ -2408,7 +2400,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     @Test
     @FixFor("DBZ-1824")
     public void stopInTheMiddleOfTxAndResume() throws Exception {
-        Print.enable();
+//        Print.enable();
         final int numberOfEvents = 50;
         final int STOP_ID = 20;
 
@@ -2458,7 +2450,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     @Test
     @FixFor("DBZ-2397")
     public void restartConnectorInTheMiddleOfUncommittedTx() throws Exception {
-        Print.enable();
+//        Print.enable();
 
         final PostgresConnection tx1Connection = TestHelper.create();
         tx1Connection.setAutoCommit(false);
@@ -2501,7 +2493,7 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     @Test
     @FixFor("DBZ-1730")
     public void shouldStartConsumingFromSlotLocation() throws Exception {
-        Print.enable();
+//        Print.enable();
 
         startConnector(config -> config
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false)

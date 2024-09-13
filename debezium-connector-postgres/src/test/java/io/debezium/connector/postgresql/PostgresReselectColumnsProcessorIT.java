@@ -127,7 +127,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1\\.dbz8168_toast")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingStarted();
 
         final String json = "{\"key\": \"" + RandomStringUtils.randomAlphabetic(10000) + "\"}";
@@ -212,7 +212,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.HSTORE_HANDLING_MODE, MAP.getValue())
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingStarted();
 
         TestHelper.execute(
@@ -256,7 +256,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.HSTORE_HANDLING_MODE, JSON.getValue())
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingStarted();
 
         TestHelper.execute(
@@ -303,7 +303,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, "true")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingStarted();
 
         TestHelper.execute(

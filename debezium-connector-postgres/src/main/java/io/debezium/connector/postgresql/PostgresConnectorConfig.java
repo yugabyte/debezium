@@ -1399,7 +1399,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         }
     }
 
-    @Override
     public Optional<String[]> parseSignallingMessage(Struct value) {
         final Struct after = value.getStruct(Envelope.FieldName.AFTER);
         if (after == null) {
