@@ -363,6 +363,10 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 Objects.requireNonNull(tableId);
             }
 
+            /*
+              tx1: BEGIN2 - DML1 - COMMIT2 (updates lastCommitLsn)
+              tx2: BEGIN2 - DML2 (update lastCompletelyProcessedLsn) - COMMIT2 (updates lastCommitLsn)
+             */
             offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
                     taskContext.getSlotXmin(connection),
                     tableId,
@@ -425,6 +429,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
     private void commitMessage(PostgresPartition partition, PostgresOffsetContext offsetContext, final Lsn lsn, ReplicationMessage message) throws SQLException, InterruptedException {
         lastCompletelyProcessedLsn = lsn;
+
+        // todo
         offsetContext.updateCommitPosition(lsn, lastCompletelyProcessedLsn);
 
         if (message.getOperation() == Operation.COMMIT) {
