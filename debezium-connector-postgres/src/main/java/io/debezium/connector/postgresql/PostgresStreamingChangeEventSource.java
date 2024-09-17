@@ -82,7 +82,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      */
     private long numberOfEventsSinceLastEventSentOrWalGrowingWarning = 0;
     private Lsn lastCompletelyProcessedLsn;
-    private Lsn lastSentFeedback = Lsn.valueOf(1L);
+    private Lsn lastSentFeedback = Lsn.valueOf(2L);
     private PostgresOffsetContext effectiveOffset;
 
     protected ConcurrentLinkedQueue<Lsn> commitTimes;
@@ -153,14 +153,25 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                   replicationConnection.getConnectedNodeIp());
             }
 
+            // B, 1, 2 - lsn, 3, 4, C, B, 5, 6, 7, 8
+
             if (hasStartLsnStoredInContext) {
                 // start streaming from the last recorded position in the offset
-                final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
-                        : this.effectiveOffset.lsn();
+//                final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
+//                        : this.effectiveOffset.lsn();
+                // we will be streaming from the last commit lsn since we are sure that we have
+                // received that transaction completely.
+                // if lastCommitLsn is null, that means we are only in the beginning of streaming.
+                final Lsn lsn = this.effectiveOffset.lastCommitLsn() == null ?
+                        Lsn.valueOf(2L) : this.effectiveOffset.lastCommitLsn();
+
+                LOGGER.info("Retrieved last committed LSN from stored offset '{}'", lsn);
+
                 final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
-                LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
+//                LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
                 walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType);
                 replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
+                lastSentFeedback = lsn;
             }
             else {
                 LOGGER.info("No previous LSN found in Kafka, streaming from the latest xlogpos or flushed LSN...");
@@ -204,7 +215,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                                 replicationConnection.getConnectedNodeIp());
                     }
 
-                    replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
+                    replicationStream.set(replicationConnection.startStreaming(walPosition.getLastCommitStoredLsn(), walPosition));
                     stream = this.replicationStream.get();
                     stream.startKeepAlive(Threads.newSingleThreadExecutor(YugabyteDBConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
                 }
@@ -399,8 +410,18 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         while (context.isRunning() && resumeLsn.get() == null) {
 
             boolean receivedMessage = stream.readPending(message -> {
-                final Lsn lsn = stream.lastReceivedLsn();
+                // YB Note: We do not need this, we need to start from the last commit lsn from the
+                //  walPosition
+//                final Lsn lsn = stream.lastReceivedLsn();
+                final Lsn lsn = walPosition.getLastCommitStoredLsn() != null ? walPosition.getLastCommitStoredLsn() : stream.startLsn();
+                if (lsn == null) {
+
+                }
                 resumeLsn.set(walPosition.resumeFromLsn(lsn, message).orElse(null));
+
+                if (resumeLsn.get() == null) {
+                    LOGGER.info("Resume LSN is null");
+                }
             });
 
             if (receivedMessage) {
@@ -498,7 +519,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 }
 
                 Lsn finalLsn = getLsnToBeFlushed(lsn);
-                LOGGER.info("Flushing lsn '{}'", finalLsn);
+                LOGGER.info("Flushing lsn '{}' for table", finalLsn);
 
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
                 replicationStream.flushLsn(finalLsn);

@@ -42,6 +42,7 @@ public class WalPositionLocator {
 
     public WalPositionLocator(Lsn lastCommitStoredLsn, Lsn lastEventStoredLsn, Operation lastProcessedMessageType) {
         this.lastCommitStoredLsn = lastCommitStoredLsn;
+        // YB Note: lastEventStoredLsn and lastCommitStoredLsn will be the same.
         this.lastEventStoredLsn = lastEventStoredLsn;
         this.lastProcessedMessageType = lastProcessedMessageType;
 
@@ -85,6 +86,8 @@ public class WalPositionLocator {
                 return Optional.empty();
             }
             lsnAfterLastEventStoredLsn = currentLsn;
+
+            // YB Note: we do not want this to be turned true ever.
             storeLsnAfterLastEventStoredLsn = false;
             LOGGER.info("LSN after last stored change LSN '{}' received", lsnAfterLastEventStoredLsn);
             startStreamingLsn = lsnAfterLastEventStoredLsn;
@@ -97,6 +100,11 @@ public class WalPositionLocator {
         if (lastCommitStoredLsn == null) {
             startStreamingLsn = firstLsnReceived;
             return Optional.of(startStreamingLsn);
+        }
+
+        if (currentLsn.equals(lastCommitStoredLsn)) {
+            LOGGER.info("Returning lastCommitStoredLsn {} for resuming", lastCommitStoredLsn);
+            return Optional.of(lastCommitStoredLsn);
         }
 
         switch (message.getOperation()) {
@@ -160,7 +168,7 @@ public class WalPositionLocator {
                     lsn,
                     lsnSeen));
         }
-        LOGGER.debug("Message with LSN '{}' filtered", lsn);
+        LOGGER.info("Message with LSN '{}' filtered", lsn);
         return true;
     }
 
