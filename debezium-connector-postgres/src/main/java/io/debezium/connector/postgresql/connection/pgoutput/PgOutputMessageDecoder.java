@@ -26,7 +26,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
-import org.postgresql.replication.fluent.logical.ChainedLogicalStreamBuilder;
+import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
+import io.debezium.connector.postgresql.YugabyteDBServer;
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -335,6 +337,11 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 optional = true;
             }
 
+            if (YugabyteDBServer.isEnabled() && !key && isReplicaIdentityChange(replicaIdentityId)) {
+                LOGGER.trace("Marking column {} optional for replica identity CHANGE", columnName);
+                optional = true;
+            }
+
             final boolean hasDefault = columnDefaults.containsKey(columnName);
             final String defaultValueExpression = columnDefaults.getOrDefault(columnName, Optional.empty()).orElse(null);
 
@@ -360,7 +367,20 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         primaryKeyColumns.retainAll(columnNames);
 
         Table table = resolveRelationFromMetadata(new PgOutputRelationMetaData(relationId, schemaName, tableName, columns, primaryKeyColumns));
-        decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
+        if (YugabyteDBServer.isEnabled()) {
+            decoderContext.getSchema().applySchemaChangesForTableWithReplicaIdentity(relationId, table, replicaIdentityId);
+        } else {
+            decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
+        }
+    }
+
+    /**
+     * @param replicaIdentityId the integer representation of the character for denoting replica identity.
+     * @return true if the replica identity is change, false otherwise.
+     */
+    private boolean isReplicaIdentityChange(int replicaIdentityId) {
+        return ReplicaIdentityInfo.ReplicaIdentity.CHANGE
+                 == ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId));
     }
 
     private List<io.debezium.relational.Column> getTableColumnsFromDatabase(PostgresConnection connection, DatabaseMetaData databaseMetadata, TableId tableId)
