@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import io.debezium.connector.postgresql.YugabyteDBServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +43,7 @@ public class WalPositionLocator {
 
     public WalPositionLocator(Lsn lastCommitStoredLsn, Lsn lastEventStoredLsn, Operation lastProcessedMessageType) {
         this.lastCommitStoredLsn = lastCommitStoredLsn;
+        // YB Note: lastEventStoredLsn and lastCommitStoredLsn will be the same.
         this.lastEventStoredLsn = lastEventStoredLsn;
         this.lastProcessedMessageType = lastProcessedMessageType;
 
@@ -82,21 +84,31 @@ public class WalPositionLocator {
                     startStreamingLsn = txStartLsn;
                     return Optional.of(startStreamingLsn);
                 }
+                LOGGER.info("Returning optional empty as resume LSN");
                 return Optional.empty();
             }
             lsnAfterLastEventStoredLsn = currentLsn;
+
+            // YB Note: we do not want this to be turned true ever.
             storeLsnAfterLastEventStoredLsn = false;
             LOGGER.info("LSN after last stored change LSN '{}' received", lsnAfterLastEventStoredLsn);
             startStreamingLsn = lsnAfterLastEventStoredLsn;
             return Optional.of(startStreamingLsn);
         }
         if (currentLsn.equals(lastEventStoredLsn)) {
+            LOGGER.info("Current LSN is equal to the last event stored LSN {}", lastEventStoredLsn);
             storeLsnAfterLastEventStoredLsn = true;
         }
 
         if (lastCommitStoredLsn == null) {
             startStreamingLsn = firstLsnReceived;
+            LOGGER.info("Last commit stored LSN is null, returning firstLsnReceived {}", startStreamingLsn);
             return Optional.of(startStreamingLsn);
+        }
+
+        if (currentLsn.equals(lastCommitStoredLsn)) {
+            LOGGER.info("Returning lastCommitStoredLsn {} for resuming", lastCommitStoredLsn);
+            return Optional.of(lastCommitStoredLsn);
         }
 
         switch (message.getOperation()) {
@@ -145,6 +157,11 @@ public class WalPositionLocator {
      * @return true if the message should be skipped, false otherwise
      */
     public boolean skipMessage(Lsn lsn) {
+        if (YugabyteDBServer.isEnabled()) {
+            // YB Note: We will not be skipping any message.
+            return false;
+        }
+
         if (passMessages) {
             return false;
         }
@@ -160,7 +177,7 @@ public class WalPositionLocator {
                     lsn,
                     lsnSeen));
         }
-        LOGGER.debug("Message with LSN '{}' filtered", lsn);
+        LOGGER.info("Message with LSN '{}' filtered", lsn);
         return true;
     }
 
