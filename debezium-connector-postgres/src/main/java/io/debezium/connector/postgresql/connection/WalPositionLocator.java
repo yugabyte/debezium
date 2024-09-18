@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import io.debezium.connector.postgresql.YugabyteDBServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -83,6 +84,7 @@ public class WalPositionLocator {
                     startStreamingLsn = txStartLsn;
                     return Optional.of(startStreamingLsn);
                 }
+                LOGGER.info("Returning optional empty as resume LSN");
                 return Optional.empty();
             }
             lsnAfterLastEventStoredLsn = currentLsn;
@@ -94,11 +96,13 @@ public class WalPositionLocator {
             return Optional.of(startStreamingLsn);
         }
         if (currentLsn.equals(lastEventStoredLsn)) {
+            LOGGER.info("Current LSN is equal to the last event stored LSN {}", lastEventStoredLsn);
             storeLsnAfterLastEventStoredLsn = true;
         }
 
         if (lastCommitStoredLsn == null) {
             startStreamingLsn = firstLsnReceived;
+            LOGGER.info("Last commit stored LSN is null, returning firstLsnReceived {}", startStreamingLsn);
             return Optional.of(startStreamingLsn);
         }
 
@@ -153,6 +157,11 @@ public class WalPositionLocator {
      * @return true if the message should be skipped, false otherwise
      */
     public boolean skipMessage(Lsn lsn) {
+        if (YugabyteDBServer.isEnabled()) {
+            // YB Note: We will not be skipping any message.
+            return false;
+        }
+
         if (passMessages) {
             return false;
         }

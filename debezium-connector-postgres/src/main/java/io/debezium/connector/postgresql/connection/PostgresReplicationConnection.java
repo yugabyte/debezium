@@ -395,8 +395,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             offset = defaultStartingPos;
         }
         Lsn lsn = offset;
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("starting streaming from LSN '{}'", lsn);
+        if (LOGGER.isInfoEnabled()) {
+            LOGGER.info("starting streaming from LSN '{}'", lsn);
         }
 
         final int maxRetries = connectorConfig.maxRetries();

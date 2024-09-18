@@ -162,14 +162,19 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 // we will be streaming from the last commit lsn since we are sure that we have
                 // received that transaction completely.
                 // if lastCommitLsn is null, that means we are only in the beginning of streaming.
+                LOGGER.info("LSN is stored in context");
                 final Lsn lsn = this.effectiveOffset.lastCommitLsn() == null ?
-                        Lsn.valueOf(2L) : this.effectiveOffset.lastCommitLsn();
+                        lastSentFeedback : this.effectiveOffset.lastCommitLsn();
+
+                if (this.effectiveOffset.lastCommitLsn() == null) {
+                    LOGGER.info("Last commit stored in offset is null");
+                }
 
                 LOGGER.info("Retrieved last committed LSN from stored offset '{}'", lsn);
 
                 final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
 //                LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
-                walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType);
+                walPosition = new WalPositionLocator(lsn, lsn, lastProcessedMessageType);
                 replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
                 lastSentFeedback = lsn;
             }
@@ -413,10 +418,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 // YB Note: We do not need this, we need to start from the last commit lsn from the
                 //  walPosition
 //                final Lsn lsn = stream.lastReceivedLsn();
-                final Lsn lsn = walPosition.getLastCommitStoredLsn() != null ? walPosition.getLastCommitStoredLsn() : stream.startLsn();
-                if (lsn == null) {
-
-                }
+                final Lsn lsn = walPosition.getLastCommitStoredLsn() != null ? walPosition.getLastCommitStoredLsn() : lastSentFeedback;
                 resumeLsn.set(walPosition.resumeFromLsn(lsn, message).orElse(null));
 
                 if (resumeLsn.get() == null) {
