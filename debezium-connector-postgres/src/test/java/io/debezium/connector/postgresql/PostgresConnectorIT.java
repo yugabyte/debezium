@@ -22,6 +22,7 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -33,9 +34,13 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -45,6 +50,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import javax.management.InstanceNotFoundException;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.kafka.common.config.Config;
@@ -2945,6 +2952,73 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
+    public void testPerf() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.execute(CREATE_TABLES_STMT);
+        TestHelper.execute("create table s2.orders (id varchar(36) primary key, status varchar(64) not null, roundid int not null, userid bigint not null, shardid int not null, createdat timestamp with time zone not null default now(), updatedat timestamp with time zone not null default now());");
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s2.orders")
+                .with(PostgresConnectorConfig.MAX_QUEUE_SIZE, 12000);
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+        TestHelper.waitFor(Duration.ofSeconds(5));
+
+        final int iterations = 20000;
+
+        // Launch insertion thread here.
+        ExecutorService exec = Executors.newFixedThreadPool(1);
+        Future<?> future = exec.submit(() -> {
+            long idBegin = 1;
+            final int batchSize = 500;
+            LOGGER.info("Starting the insertion thread");
+            try (PostgresConnection pgConn = TestHelper.create()) {
+                Statement st = pgConn.connection().createStatement();
+
+                for (int i = 0; i < iterations; ++i) {
+                    st.execute(String.format("insert into s2.orders values (generate_series(%d,%d), 'SHIPPED', 12, 1234, 2345);", idBegin, idBegin + batchSize - 1));
+
+                    idBegin += batchSize;
+                }
+            } catch (Exception ex) {
+                LOGGER.error("Exception in the insertion thread: ", ex);
+                throw new RuntimeException(ex);
+            }
+        });
+
+        long lastLoggedTime = 0;
+        long lastReadValue = 0;
+
+        final MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+        while (!future.isDone()) {
+            int consumed = consumeRecordsWithDrain();
+
+            long timeDifference = System.currentTimeMillis() - lastLoggedTime;
+            if (timeDifference >= 10_000) {
+                long currentValue = (long) mBeanServer.getAttribute(getStreamingMetricsObjectName("postgres", TestHelper.TEST_SERVER), "TotalNumberOfEventsSeen");
+//                int queueRemainingCapacity = (int) mBeanServer.getAttribute(getStreamingMetricsObjectName("postgres", TestHelper.TEST_SERVER), "QueueRemainingCapacity");
+//                LOGGER.info("Queue remaining capacity: {}", queueRemainingCapacity);
+//                LOGGER.info("Current consumed value {}", currentValue);
+                LOGGER.info("Streaming rate currently is {}", (currentValue - lastReadValue) / (timeDifference / 1000));
+                lastLoggedTime = System.currentTimeMillis();
+                lastReadValue = currentValue;
+            }
+        }
+
+    }
+
+    private int consumeRecordsWithDrain() {
+        List<SourceRecord> records = new ArrayList<>();
+        consumedLines.drainTo(records);
+
+        return records.size();
+    }
+
+    @Test
     public void testTableWithCompositePrimaryKey() throws Exception {
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.execute(CREATE_TABLES_STMT);
@@ -4101,6 +4175,9 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
         return records.size();
     }
+
+//    protected int consumeAvailableRecordsAndClearQueue() {
+//    }
 
     @Test
     @FixFor("DBZ-6076")
