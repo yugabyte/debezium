@@ -3000,9 +3000,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             long timeDifference = System.currentTimeMillis() - lastLoggedTime;
             if (timeDifference >= 10_000) {
                 long currentValue = (long) mBeanServer.getAttribute(getStreamingMetricsObjectName("postgres", TestHelper.TEST_SERVER), "TotalNumberOfEventsSeen");
-//                int queueRemainingCapacity = (int) mBeanServer.getAttribute(getStreamingMetricsObjectName("postgres", TestHelper.TEST_SERVER), "QueueRemainingCapacity");
-//                LOGGER.info("Queue remaining capacity: {}", queueRemainingCapacity);
-//                LOGGER.info("Current consumed value {}", currentValue);
                 LOGGER.info("Streaming rate currently is {}", (currentValue - lastReadValue) / (timeDifference / 1000));
                 lastLoggedTime = System.currentTimeMillis();
                 lastReadValue = currentValue;
@@ -4175,9 +4172,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         }
         return records.size();
     }
-
-//    protected int consumeAvailableRecordsAndClearQueue() {
-//    }
 
     @Test
     @FixFor("DBZ-6076")
