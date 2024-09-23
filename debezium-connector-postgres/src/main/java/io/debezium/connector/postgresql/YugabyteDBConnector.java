@@ -96,7 +96,6 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 // Prepare connection without initial statement execution
                 connection.connection(false);
                 testConnection(connection);
-
                 checkReadOnlyMode(connection, postgresConfig);
                 checkLoginReplicationRoles(connection);
             }
