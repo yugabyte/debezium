@@ -74,7 +74,7 @@ public class CustomSnapshotterIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_QUERY_MODE_CUSTOM_NAME, CustomTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         SourceRecords actualRecords = consumeRecordsByTopic(1);
@@ -107,7 +107,7 @@ public class CustomSnapshotterIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_QUERY_MODE_CUSTOM_NAME, CustomTestSnapshot.class.getName())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         actualRecords = consumeRecordsByTopic(4);
 
@@ -133,7 +133,7 @@ public class CustomSnapshotterIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_QUERY_MODE_CUSTOM_NAME, CustomTestSnapshot.class.getName())
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         assertNoRecordsToConsume();
@@ -166,7 +166,7 @@ public class CustomSnapshotterIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_QUERY_MODE_CUSTOM_NAME, CustomTestSnapshot.class.getName())
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
 
         assertNoRecordsToConsume();

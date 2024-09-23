@@ -37,14 +37,14 @@ import io.debezium.relational.TableId;
  *
  * @author Horia Chiorean
  */
-public class PostgresConnector extends RelationalBaseSourceConnector {
+public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresConnector.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBConnector.class);
     public static final int READ_ONLY_SUPPORTED_VERSION = 13;
 
     private Map<String, String> props;
 
-    public PostgresConnector() {
+    public YugabyteDBConnector() {
     }
 
     @Override

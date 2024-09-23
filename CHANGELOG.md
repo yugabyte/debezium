@@ -692,6 +692,11 @@ January 18th 2024 [Detailed release notes](https://issues.redhat.com/secure/Rele
 
 ### Fixes since 2.5.0.Final
 
+* Connector is getting stopped while processing bulk update(50k) records in debezium server 2.0.1.Final [DBZ-6955](https://issues.redhat.com/browse/DBZ-6955)
+* Empty object sent to GCP Pub/Sub after DELETE event [DBZ-7098](https://issues.redhat.com/browse/DBZ-7098)
+* Enhance Oracle's CREATE TABLE for Multiple Table Specifications [DBZ-7286](https://issues.redhat.com/browse/DBZ-7286)
+* PostgreSQL ad-hoc blocking snapshots fail when snapshot mode is "never" [DBZ-7311](https://issues.redhat.com/browse/DBZ-7311)
+* Ad-hoc blocking snapshot dies with "invalid snapshot identifier" immediately after connector creation [DBZ-7312](https://issues.redhat.com/browse/DBZ-7312)
 * Empty object sent to GCP Pub/Sub after DELETE event [DBZ-7098](https://issues.redhat.com/browse/DBZ-7098)
 * Debezium-ddl-parser crashes on parsing MySQL DDL statement (subquery with UNION) [DBZ-7259](https://issues.redhat.com/browse/DBZ-7259)
 * Oracle DDL parsing error in PARTITION REFERENCE [DBZ-7266](https://issues.redhat.com/browse/DBZ-7266)

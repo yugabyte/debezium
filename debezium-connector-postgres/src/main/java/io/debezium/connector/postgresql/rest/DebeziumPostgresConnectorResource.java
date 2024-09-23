@@ -16,11 +16,11 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 
+import io.debezium.connector.postgresql.YugabyteDBConnector;
 import org.apache.kafka.connect.health.ConnectClusterState;
 
 import io.debezium.config.Configuration;
 import io.debezium.connector.postgresql.Module;
-import io.debezium.connector.postgresql.PostgresConnector;
 import io.debezium.rest.ConnectionValidationResource;
 import io.debezium.rest.FilterValidationResource;
 import io.debezium.rest.MetricsResource;
@@ -52,8 +52,8 @@ public class DebeziumPostgresConnectorResource implements SchemaResource, Connec
     }
 
     @Override
-    public PostgresConnector getConnector() {
-        return new PostgresConnector();
+    public YugabyteDBConnector getConnector() {
+        return new YugabyteDBConnector();
     }
 
     @Override

@@ -36,7 +36,7 @@ import io.debezium.processors.reselect.ReselectColumnsPostProcessor;
  *
  * @author Chris Cranford
  */
-public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcessorTest<PostgresConnector> {
+public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcessorTest<YugabyteDBConnector> {
 
     public static final String CREATE_STMT = "DROP SCHEMA IF EXISTS s1 CASCADE;" +
             "CREATE SCHEMA s1; ";
@@ -59,8 +59,8 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
     }
 
     @Override
-    protected Class<PostgresConnector> getConnectorClass() {
-        return PostgresConnector.class;
+    protected Class<YugabyteDBConnector> getConnectorClass() {
+        return YugabyteDBConnector.class;
     }
 
     @Override
@@ -127,7 +127,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1\\.dbz8168_toast")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingStarted();
 
         final String json = "{\"key\": \"" + RandomStringUtils.randomAlphabetic(10000) + "\"}";
@@ -168,7 +168,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "s1\\.dbz4321_toast")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingStarted();
 
         final String text = RandomStringUtils.randomAlphabetic(10000);
@@ -212,7 +212,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.HSTORE_HANDLING_MODE, MAP.getValue())
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingStarted();
 
         TestHelper.execute(
@@ -256,7 +256,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.HSTORE_HANDLING_MODE, JSON.getValue())
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingStarted();
 
         TestHelper.execute(
@@ -303,7 +303,7 @@ public class PostgresReselectColumnsProcessorIT extends AbstractReselectProcesso
                 .with(PostgresConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, "true")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingStarted();
 
         TestHelper.execute(

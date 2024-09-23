@@ -7,12 +7,14 @@ package io.debezium.connector.postgresql;
 
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -95,15 +97,40 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     }
 
     @Override
+    protected ChangeRecordEmitter<PostgresPartition> getChangeRecordEmitter(
+      PostgresPartition partition, PostgresOffsetContext offset, TableId tableId, Object[] row,
+      Instant timestamp) {
+        if (YugabyteDBServer.isEnabled() && connectorConfig.plugin().isYBOutput()) {
+            offset.event(tableId, timestamp);
+
+            return new YBSnapshotChangeRecordEmitter<>(partition, offset, row, getClock(),
+              connectorConfig);
+        } else {
+            return super.getChangeRecordEmitter(partition, offset, tableId, row, timestamp);
+        }
+    }
+
+    @Override
     protected void connectionCreated(RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext)
             throws Exception {
-        // If using catch up streaming, the connector opens the transaction that the snapshot will eventually use
-        // before the catch up streaming starts. By looking at the current wal location, the transaction can determine
-        // where the catch up streaming should stop. The transaction is held open throughout the catch up
-        // streaming phase so that the snapshot is performed from a consistent view of the data. Since the isolation
-        // level on the transaction used in catch up streaming has already set the isolation level and executed
-        // statements, the transaction does not need to get set the level again here.
-        if (snapshotterService.getSnapshotter().shouldStreamEventsStartingFromSnapshot() && startingSlotInfo == null) {
+        if (YugabyteDBServer.isEnabled()) {
+            // In case of YB, the consistent snapshot is performed as follows -
+            // 1) If connector created the slot, then the snapshotName returned as part of the CREATE_REPLICATION_SLOT
+            //    command will have the hybrid time as of which the snapshot query is to be run
+            // 2) If slot already exists, then the snapshot query will be run as of the hybrid time corresponding to the
+            //    restart_lsn. This information is available in the pg_replication_slots view
+            // In either case, the setSnapshotTransactionIsolationLevel function needs to be called so that the preparatory
+            // commands can be run on the snapshot connection so that the snapshot query can be run as of the appropriate
+            // hybrid time
+            setSnapshotTransactionIsolationLevel(snapshotContext.onDemand);
+        }
+        else if (snapshotterService.getSnapshotter().shouldStreamEventsStartingFromSnapshot() && startingSlotInfo == null) {
+            // If using catch up streaming, the connector opens the transaction that the snapshot will eventually use
+            // before the catch up streaming starts. By looking at the current wal location, the transaction can determine
+            // where the catch up streaming should stop. The transaction is held open throughout the catch up
+            // streaming phase so that the snapshot is performed from a consistent view of the data. Since the isolation
+            // level on the transaction used in catch up streaming has already set the isolation level and executed
+            // statements, the transaction does not need to get set the level again here.
             setSnapshotTransactionIsolationLevel(snapshotContext.onDemand);
         }
         schema.refresh(jdbcConnection, false);
@@ -195,6 +222,14 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             // they'll be lost.
             return slotCreatedInfo.startLsn();
         }
+        else if (YugabyteDBServer.isEnabled()) {
+            // For YB, there are only 2 cases -
+            // 1) Connector creates the slot - in this case (slotCreatedInfo != null) will hold
+            // 2) Slot already exists - in this case, the streaming should start from the confirmed_flush_lsn
+            SlotState currentSlotState = jdbcConnection.getReplicationSlotState(connectorConfig.slotName(),
+                    connectorConfig.plugin().getPostgresPluginName());
+            return currentSlotState.slotLastFlushedLsn();
+        }
         else if (!snapshotterService.getSnapshotter().shouldStreamEventsStartingFromSnapshot() && startingSlotInfo != null) {
             // Allow streaming to resume from where streaming stopped last rather than where the current snapshot starts.
             SlotState currentSlotState = jdbcConnection.getReplicationSlotState(connectorConfig.slotName(),
@@ -263,15 +298,18 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     @Override
     protected Optional<String> getSnapshotSelect(RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext,
                                                  TableId tableId, List<String> columns) {
-
         return snapshotterService.getSnapshotQuery().snapshotQuery(tableId.toDoubleQuotedString(), columns);
     }
 
     protected void setSnapshotTransactionIsolationLevel(boolean isOnDemand) throws SQLException {
-        LOGGER.info("Setting isolation level");
-        String transactionStatement = snapshotTransactionIsolationLevelStatement(slotCreatedInfo, isOnDemand);
-        LOGGER.info("Opening transaction with statement {}", transactionStatement);
-        jdbcConnection.executeWithoutCommitting(transactionStatement);
+        if (!YugabyteDBServer.isEnabled() || connectorConfig.isYbConsistentSnapshotEnabled()) {
+            LOGGER.info("Setting isolation level");
+            String transactionStatement = snapshotTransactionIsolationLevelStatement(slotCreatedInfo, isOnDemand);
+            LOGGER.info("Opening transaction with statement {}", transactionStatement);
+            jdbcConnection.executeWithoutCommitting(transactionStatement);
+        } else {
+            LOGGER.info("Skipping setting snapshot time, snapshot data will not be consistent");
+        }
     }
 
     private String snapshotTransactionIsolationLevelStatement(SlotCreationResult newSlotInfo, boolean isOnDemand) {
