@@ -634,7 +634,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
         return OptionalLong.empty();
     }
 
-    protected Timer getTableScanLogTimer() {
+    private Timer getTableScanLogTimer() {
         return Threads.timer(clock, LOG_INTERVAL);
     }
 
