@@ -995,6 +995,20 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDescription("Internal use only");
 
+    public static final Field PRIMARY_KEYS = Field.create("primary.keys")
+            .withDisplayName("Comma separated primary key fields")
+            .withType(Type.STRING)
+            .withImportance(Importance.LOW)
+            .withDescription("A comma separated value having all the primary key components")
+            .withValidation((config, field, output) -> {
+                if (config.getString(SNAPSHOT_MODE).equalsIgnoreCase("parallel") && config.getString(field, "").isEmpty()) {
+                    output.accept(field, "", "primary.keys cannot be empty when snapshot.mode is 'parallel'");
+                    return 1;
+                }
+
+                return 0;
+            });
+
     private final LogicalDecodingMessageFilter logicalDecodingMessageFilter;
     private final HStoreHandlingMode hStoreHandlingMode;
     private final IntervalHandlingMode intervalHandlingMode;
@@ -1122,6 +1136,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public int taskId() {
         return getConfig().getInteger(TASK_ID);
+    }
+
+    public String primaryKeys() {
+        return getConfig().getString(PRIMARY_KEYS);
     }
 
     @Override

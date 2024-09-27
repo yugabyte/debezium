@@ -115,16 +115,9 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     }
 
     protected String getQueryForParallelSnapshotSelect(long lowerBound, long upperBound) {
-        return String.format("SELECT * FROM " + getTableNameInConfigFormat() + " WHERE yb_hash_code(id) >= %d AND yb_hash_code(id) <= %d", lowerBound, upperBound);
-    }
-
-    /**
-     * @return table name in the format [schemaName].[tableName]
-     */
-    protected String getTableNameInConfigFormat() {
-        String[] splitName = props.get("table.include.list").split("\\.");
-
-        return String.format("%s.%s", splitName[0], splitName[1]);
+        return String.format("SELECT * FROM %s WHERE yb_hash_code(%s) >= %d AND yb_hash_code(id) <= %s",
+                    props.get("table.include.list"), props.get("primary.keys"), lowerBound,
+                    props.get("primary.keys"), upperBound);
     }
 
     @Override
