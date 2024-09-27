@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 import io.debezium.DebeziumException;
+import io.debezium.connector.postgresql.snapshot.ParallelSnapshotter;
 import io.debezium.data.Envelope;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.heartbeat.HeartbeatConnectionProvider;
@@ -211,6 +212,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
          * Perform a snapshot and then stop before attempting to receive any logical changes.
          */
         INITIAL_ONLY("initial_only", (c) -> new InitialOnlySnapshotter()),
+
+        /**
+         * Perform a snapshot using parallel tasks.
+         */
+        PARALLEL("parallel", (c) -> new ParallelSnapshotter()),
 
         /**
          * Inject a custom snapshotter, which allows for more control over snapshots.
@@ -983,6 +989,12 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field SOURCE_INFO_STRUCT_MAKER = CommonConnectorConfig.SOURCE_INFO_STRUCT_MAKER
             .withDefault(PostgresSourceInfoStructMaker.class.getName());
 
+    public static final Field TASK_ID = Field.create("task.id")
+            .withDisplayName("ID of the connector task")
+            .withType(Type.INT)
+            .withImportance(Importance.LOW)
+            .withDescription("Internal use only");
+
     private final LogicalDecodingMessageFilter logicalDecodingMessageFilter;
     private final HStoreHandlingMode hStoreHandlingMode;
     private final IntervalHandlingMode intervalHandlingMode;
@@ -1106,6 +1118,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public boolean isFlushLsnOnSource() {
         return flushLsnOnSource;
+    }
+
+    public int taskId() {
+        return getConfig().getInteger(TASK_ID);
     }
 
     @Override

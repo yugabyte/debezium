@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.pipeline.spi.ChangeRecordEmitter;
+import io.debezium.relational.TableSchema;
 import io.debezium.util.ColumnUtils;
 import io.debezium.util.Strings;
 import io.debezium.util.Threads;
@@ -293,82 +294,83 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         return snapshotter.buildSnapshotQuery(tableId, columns);
     }
 
-    @Override
-    protected void doCreateDataEventsForTable(ChangeEventSourceContext sourceContext, RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext,
-                                              PostgresOffsetContext offset, EventDispatcher.SnapshotReceiver<PostgresPartition> snapshotReceiver, Table table,
-                                              boolean firstTable, boolean lastTable, int tableOrder, int tableCount, String selectStatement, OptionalLong rowCount,
-                                              JdbcConnection jdbcConnection) throws InterruptedException {
-        if (!sourceContext.isRunning()) {
-            throw new InterruptedException("Interrupted while snapshotting table " + table.id());
-        }
-
-        long exportStart = clock.currentTimeInMillis();
-        LOGGER.info("Exporting data from table '{}' ({} of {} tables)", table.id(), tableOrder, tableCount);
-
-        Instant sourceTableSnapshotTimestamp = getSnapshotSourceTimestamp(jdbcConnection, offset, table.id());
-
-        List<String> columns = getPreparedColumnNames(snapshotContext.partition, schema.tableFor(table.id()));
-
-        List<String> queries = getParallelSnapshotQueries(table.id(), columns);
-
-        for (int i = 0; i < queries.size(); ++i) {
-            LOGGER.info("Executing snapshot query: {}", queries.get(i));
-            try (Statement statement = readTableStatement(jdbcConnection, rowCount);
-                    ResultSet rs = resultSetForDataEvents(queries.get(i), statement)) {
-
-                ColumnUtils.ColumnArray columnArray = ColumnUtils.toArray(rs, table);
-                long rows = 0;
-                Threads.Timer logTimer = getTableScanLogTimer();
-                boolean hasNext = rs.next();
-
-                if (hasNext) {
-                    while (hasNext) {
-                        if (!sourceContext.isRunning()) {
-                            throw new InterruptedException("Interrupted while snapshotting table " + table.id());
-                        }
-
-                        rows++;
-                        final Object[] row = jdbcConnection.rowToArray(table, rs, columnArray);
-
-                        if (logTimer.expired()) {
-                            long stop = clock.currentTimeInMillis();
-                            if (rowCount.isPresent()) {
-                                LOGGER.info("\t Exported {} of {} records for table '{}' after {}", rows, rowCount.getAsLong(),
-                                        table.id(), Strings.duration(stop - exportStart));
-                            }
-                            else {
-                                LOGGER.info("\t Exported {} records for table '{}' after {}", rows, table.id(),
-                                        Strings.duration(stop - exportStart));
-                            }
-                            //                        snapshotProgressListener.rowsScanned(snapshotContext.partition, table.id(), rows);
-                            logTimer = getTableScanLogTimer();
-                        }
-
-                        hasNext = rs.next();
-                        setSnapshotMarker(offset, firstTable, lastTable, rows == 1, !hasNext);
-
-                        dispatcher.dispatchSnapshotEvent(snapshotContext.partition, table.id(),
-                                getChangeRecordEmitter(snapshotContext.partition, offset, table.id(), row, sourceTableSnapshotTimestamp), snapshotReceiver);
-                    }
-                }
-                else {
-                                    setSnapshotMarker(offset, firstTable, lastTable, false, true);
-                }
-
-                LOGGER.info("\t Finished exporting {} records for table '{}' ({} of {} tables); total duration '{}'",
-                        rows, table.id(), tableOrder, tableCount, Strings.duration(clock.currentTimeInMillis() - exportStart));
-                            snapshotProgressListener.dataCollectionSnapshotCompleted(snapshotContext.partition, table.id(), rows);
-                notificationService.initialSnapshotNotificationService().notifyCompletedTableSuccessfully(snapshotContext.partition,
-                        snapshotContext.offset, table.id().identifier(), rows, snapshotContext.capturedTables);
-            }
-            catch (SQLException e) {
-                notificationService.initialSnapshotNotificationService().notifyCompletedTableWithError(snapshotContext.partition,
-                        snapshotContext.offset,
-                        table.id().identifier());
-                throw new ConnectException("Snapshotting of table " + table.id() + " with query " + queries.get(i) + " failed", e);
-            }
-        }
-    }
+//    @Override
+//    protected void doCreateDataEventsForTable(ChangeEventSourceContext sourceContext, RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext,
+//                                              PostgresOffsetContext offset, EventDispatcher.SnapshotReceiver<PostgresPartition> snapshotReceiver, Table table,
+//                                              boolean firstTable, boolean lastTable, int tableOrder, int tableCount, String selectStatement, OptionalLong rowCount,
+//                                              JdbcConnection jdbcConnection) throws InterruptedException {
+//        if (!sourceContext.isRunning()) {
+//            throw new InterruptedException("Interrupted while snapshotting table " + table.id());
+//        }
+//
+//        long exportStart = clock.currentTimeInMillis();
+//        LOGGER.info("Exporting data from table '{}' ({} of {} tables)", table.id(), tableOrder, tableCount);
+//
+//        Instant sourceTableSnapshotTimestamp = getSnapshotSourceTimestamp(jdbcConnection, offset, table.id());
+//
+//        List<String> columns = getPreparedColumnNames(snapshotContext.partition, schema.tableFor(table.id()));
+//
+//        // todo: find out if we can get the hash part of the primary key
+//        List<String> queries = getParallelSnapshotQueries(table.id(), columns);
+//
+//        for (int i = 0; i < queries.size(); ++i) {
+//            LOGGER.info("Executing snapshot query: {}", queries.get(i));
+//            try (Statement statement = readTableStatement(jdbcConnection, rowCount);
+//                    ResultSet rs = resultSetForDataEvents(queries.get(i), statement)) {
+//
+//                ColumnUtils.ColumnArray columnArray = ColumnUtils.toArray(rs, table);
+//                long rows = 0;
+//                Threads.Timer logTimer = getTableScanLogTimer();
+//                boolean hasNext = rs.next();
+//
+//                if (hasNext) {
+//                    while (hasNext) {
+//                        if (!sourceContext.isRunning()) {
+//                            throw new InterruptedException("Interrupted while snapshotting table " + table.id());
+//                        }
+//
+//                        rows++;
+//                        final Object[] row = jdbcConnection.rowToArray(table, rs, columnArray);
+//
+//                        if (logTimer.expired()) {
+//                            long stop = clock.currentTimeInMillis();
+//                            if (rowCount.isPresent()) {
+//                                LOGGER.info("\t Exported {} of {} records for table '{}' after {}", rows, rowCount.getAsLong(),
+//                                        table.id(), Strings.duration(stop - exportStart));
+//                            }
+//                            else {
+//                                LOGGER.info("\t Exported {} records for table '{}' after {}", rows, table.id(),
+//                                        Strings.duration(stop - exportStart));
+//                            }
+//                            //                        snapshotProgressListener.rowsScanned(snapshotContext.partition, table.id(), rows);
+//                            logTimer = getTableScanLogTimer();
+//                        }
+//
+//                        hasNext = rs.next();
+//                        setSnapshotMarker(offset, firstTable, lastTable, rows == 1, !hasNext);
+//
+//                        dispatcher.dispatchSnapshotEvent(snapshotContext.partition, table.id(),
+//                                getChangeRecordEmitter(snapshotContext.partition, offset, table.id(), row, sourceTableSnapshotTimestamp), snapshotReceiver);
+//                    }
+//                }
+//                else {
+//                                    setSnapshotMarker(offset, firstTable, lastTable, false, true);
+//                }
+//
+//                LOGGER.info("\t Finished exporting {} records for table '{}' ({} of {} tables); total duration '{}'",
+//                        rows, table.id(), tableOrder, tableCount, Strings.duration(clock.currentTimeInMillis() - exportStart));
+//                            snapshotProgressListener.dataCollectionSnapshotCompleted(snapshotContext.partition, table.id(), rows);
+//                notificationService.initialSnapshotNotificationService().notifyCompletedTableSuccessfully(snapshotContext.partition,
+//                        snapshotContext.offset, table.id().identifier(), rows, snapshotContext.capturedTables);
+//            }
+//            catch (SQLException e) {
+//                notificationService.initialSnapshotNotificationService().notifyCompletedTableWithError(snapshotContext.partition,
+//                        snapshotContext.offset,
+//                        table.id().identifier());
+//                throw new ConnectException("Snapshotting of table " + table.id() + " with query " + queries.get(i) + " failed", e);
+//            }
+//        }
+//    }
 
     protected List<String> getParallelSnapshotQueries(TableId tableId, List<String> columns) {
         int numTasks = 5;
