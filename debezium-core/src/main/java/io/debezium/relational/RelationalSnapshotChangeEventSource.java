@@ -84,7 +84,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
     private final RelationalDatabaseSchema schema;
     protected final EventDispatcher<P, TableId> dispatcher;
     protected final Clock clock;
-    private final SnapshotProgressListener<P> snapshotProgressListener;
+    protected final SnapshotProgressListener<P> snapshotProgressListener;
     protected Queue<JdbcConnection> connectionPool;
 
     public RelationalSnapshotChangeEventSource(RelationalDatabaseConnectorConfig connectorConfig,
@@ -528,7 +528,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
         };
     }
 
-    private void doCreateDataEventsForTable(ChangeEventSourceContext sourceContext, RelationalSnapshotContext<P, O> snapshotContext, O offset,
+    protected void doCreateDataEventsForTable(ChangeEventSourceContext sourceContext, RelationalSnapshotContext<P, O> snapshotContext, O offset,
                                             SnapshotReceiver<P> snapshotReceiver, Table table,
                                             boolean firstTable, boolean lastTable, int tableOrder, int tableCount, String selectStatement, OptionalLong rowCount,
                                             JdbcConnection jdbcConnection)
@@ -604,7 +604,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
         return CancellableResultSet.from(statement.executeQuery(selectStatement));
     }
 
-    private void setSnapshotMarker(OffsetContext offset, boolean firstTable, boolean lastTable, boolean firstRecordInTable,
+    protected void setSnapshotMarker(OffsetContext offset, boolean firstTable, boolean lastTable, boolean firstRecordInTable,
                                    boolean lastRecordInTable) {
         if (lastRecordInTable && lastTable) {
             offset.markSnapshotRecord(SnapshotRecord.LAST);
@@ -634,7 +634,7 @@ public abstract class RelationalSnapshotChangeEventSource<P extends Partition, O
         return OptionalLong.empty();
     }
 
-    private Timer getTableScanLogTimer() {
+    protected Timer getTableScanLogTimer() {
         return Threads.timer(clock, LOG_INTERVAL);
     }
 
