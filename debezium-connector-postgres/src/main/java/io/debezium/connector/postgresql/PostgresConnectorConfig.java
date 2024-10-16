@@ -375,7 +375,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     }
 
     public enum LsnType implements EnumeratedValue {
-        SEQUENCE("sequence") {
+        SEQUENCE("SEQUENCE") {
             @Override
             public String getLsnTypeName() {
                 return getValue();
@@ -391,7 +391,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                 return false;
             }
         },
-        HYBRID_TIME("hybrid_time") {
+        HYBRID_TIME("HYBRID_TIME") {
             @Override
             public String getLsnTypeName() {
                 return getValue();

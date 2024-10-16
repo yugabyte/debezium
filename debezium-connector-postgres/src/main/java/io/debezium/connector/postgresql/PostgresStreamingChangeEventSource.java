@@ -106,7 +106,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         this.snapshotter = snapshotter;
         this.replicationConnection = (PostgresReplicationConnection) replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
-
+        this.commitTimes = new ConcurrentLinkedQueue<>();
     }
 
     @Override
@@ -165,7 +165,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     LOGGER.info("Retrieved last committed LSN from stored offset '{}'", lsn);
 
                     final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
-                    walPosition = new WalPositionLocator(lsn, lsn, lastProcessedMessageType);
+                    walPosition = new WalPositionLocator(lsn, lsn, lastProcessedMessageType, this.connectorConfig.slotLsnType().isHybridTime());
                     replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
                     lastSentFeedback = lsn;
                 } else  {
@@ -175,13 +175,13 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                             : this.effectiveOffset.lsn();
                     final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
                     LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
-                    walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType);
+                    walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType, this.connectorConfig.slotLsnType().isHybridTime());
                     replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
                 }
             }
             else {
                 LOGGER.info("No previous LSN found in Kafka, streaming from the latest xlogpos or flushed LSN...");
-                walPosition = new WalPositionLocator();
+                walPosition = new WalPositionLocator(this.connectorConfig.slotLsnType().isHybridTime());
                 replicationStream.compareAndSet(null, replicationConnection.startStreaming(walPosition));
             }
             // for large dbs, the refresh of schema can take too much time
@@ -455,6 +455,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     }
 
     private void commitMessage(PostgresPartition partition, PostgresOffsetContext offsetContext, final Lsn lsn, ReplicationMessage message) throws SQLException, InterruptedException {
+        lastCompletelyProcessedLsn = lsn;
+        offsetContext.updateCommitPosition(lsn, lastCompletelyProcessedLsn);
+
         if (this.connectorConfig.slotLsnType().isHybridTime()) {
             if (message.getOperation() == Operation.COMMIT) {
                 LOGGER.info("Adding '{}' as lsn to the commit times queue", Lsn.valueOf(lsn.asLong() - 1));
@@ -462,8 +465,6 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             }
         }
 
-        lastCompletelyProcessedLsn = lsn;
-        offsetContext.updateCommitPosition(lsn, lastCompletelyProcessedLsn);
         maybeWarnAboutGrowingWalBacklog(false);
         dispatcher.dispatchHeartbeatEvent(partition, offsetContext);
     }
@@ -530,7 +531,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     LOGGER.info("Flushing LSN to server: {}", finalLsn);
                 }
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
-                replicationStream.flushLsn(lsn);
+                replicationStream.flushLsn(finalLsn);
 
                 if (this.connectorConfig.slotLsnType().isHybridTime()) {
                     lastSentFeedback = finalLsn;
