@@ -39,20 +39,29 @@ public class WalPositionLocator {
     private Lsn startStreamingLsn = null;
     private boolean storeLsnAfterLastEventStoredLsn = false;
     private Set<Lsn> lsnSeen = new HashSet<>(1_000);
+    private boolean isLsnTypeHybridTime = false;
 
-    public WalPositionLocator(Lsn lastCommitStoredLsn, Lsn lastEventStoredLsn, Operation lastProcessedMessageType) {
+    public WalPositionLocator(Lsn lastCommitStoredLsn, Lsn lastEventStoredLsn, Operation lastProcessedMessageType,
+                              boolean isLsnTypeHybridTime) {
         this.lastCommitStoredLsn = lastCommitStoredLsn;
         this.lastEventStoredLsn = lastEventStoredLsn;
+        // YB Note: lastEventStoredLsn and lastCommitStoredLsn will be the same in case of LSN type SEQUENCE.
         this.lastProcessedMessageType = lastProcessedMessageType;
+        this.isLsnTypeHybridTime = isLsnTypeHybridTime;
 
         LOGGER.info("Looking for WAL restart position for last commit LSN '{}' and last change LSN '{}'",
                 lastCommitStoredLsn, lastEventStoredLsn);
     }
 
     public WalPositionLocator() {
+        this(false);
+    }
+
+    public WalPositionLocator(boolean isLsnTypeHybridTime) {
         this.lastCommitStoredLsn = null;
         this.lastEventStoredLsn = null;
         this.lastProcessedMessageType = null;
+        this.isLsnTypeHybridTime = isLsnTypeHybridTime;
 
         LOGGER.info("WAL position will not be searched");
     }
@@ -82,6 +91,7 @@ public class WalPositionLocator {
                     startStreamingLsn = txStartLsn;
                     return Optional.of(startStreamingLsn);
                 }
+                LOGGER.info("Returning optional empty as resume LSN");
                 return Optional.empty();
             }
             lsnAfterLastEventStoredLsn = currentLsn;
@@ -91,12 +101,19 @@ public class WalPositionLocator {
             return Optional.of(startStreamingLsn);
         }
         if (currentLsn.equals(lastEventStoredLsn)) {
+            LOGGER.info("Current LSN is equal to the last event stored LSN {}", lastEventStoredLsn);
             storeLsnAfterLastEventStoredLsn = true;
         }
 
         if (lastCommitStoredLsn == null) {
             startStreamingLsn = firstLsnReceived;
+            LOGGER.info("Last commit stored LSN is null, returning firstLsnReceived {}", startStreamingLsn);
             return Optional.of(startStreamingLsn);
+        }
+
+        if (currentLsn.equals(lastCommitStoredLsn) && isLsnTypeHybridTime) {
+            LOGGER.info("Returning lastCommitStoredLsn {} for resuming", lastCommitStoredLsn);
+            return Optional.of(lastCommitStoredLsn);
         }
 
         switch (message.getOperation()) {
@@ -160,7 +177,7 @@ public class WalPositionLocator {
                     lsn,
                     lsnSeen));
         }
-        LOGGER.debug("Message with LSN '{}' filtered", lsn);
+        LOGGER.info("Message with LSN '{}' filtered", lsn);
         return true;
     }
 

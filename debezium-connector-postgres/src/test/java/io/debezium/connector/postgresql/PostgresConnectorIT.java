@@ -1010,6 +1010,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+                .with(PostgresConnectorConfig.SLOT_LSN_TYPE, "HYBRID_TIME")
                 .build();
         start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
