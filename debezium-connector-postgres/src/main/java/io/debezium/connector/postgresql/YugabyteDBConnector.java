@@ -78,6 +78,12 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 throw new DebeziumException("parallel snapshot consumption is only supported with one table at a time");
             }
 
+            // Publication auto create mode should now be for all tables.
+            if (props.containsKey("publication.autocreate.mode") && props.get("publication.autocreate.mode").equalsIgnoreCase("all_tables")) {
+                throw new DebeziumException("Snapshot mode parallel is not supported with publication.autocreate.mode all_tables, " +
+                                            "use publication.autocreate.mode=filtered");
+            }
+
             // Add configuration for select override.
             props.put("snapshot.select.statement.overrides", props.get("table.include.list"));
 
