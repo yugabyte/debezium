@@ -9,6 +9,7 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.kafka.connect.errors.ConnectException;
@@ -80,12 +81,16 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      */
     private long numberOfEventsSinceLastEventSentOrWalGrowingWarning = 0;
     private Lsn lastCompletelyProcessedLsn;
+    private Lsn lastSentFeedback = Lsn.valueOf(2L);
     private PostgresOffsetContext effectiveOffset;
+
+    protected ConcurrentLinkedQueue<Lsn> commitTimes;
 
     /**
      * For DEBUGGING
      */
     private OptionalLong lastTxnidForWhichCommitSeen = OptionalLong.empty();
+    private long recordCount = 0;
 
     public PostgresStreamingChangeEventSource(PostgresConnectorConfig connectorConfig, Snapshotter snapshotter,
                                               PostgresConnection connection, PostgresEventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
@@ -148,13 +153,31 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             }
 
             if (hasStartLsnStoredInContext) {
-                // start streaming from the last recorded position in the offset
-                final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
-                        : this.effectiveOffset.lsn();
-                final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
-                LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
-                walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType);
-                replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
+                if (connectorConfig.slotLsnType().isHybridTime()) {
+                    LOGGER.info("LSN is stored in context for type HT");
+                    final Lsn lsn = this.effectiveOffset.lastCommitLsn() == null ?
+                            lastSentFeedback : this.effectiveOffset.lastCommitLsn();
+
+                    if (this.effectiveOffset.lastCommitLsn() == null) {
+                        LOGGER.info("Last commit stored in offset is null");
+                    }
+
+                    LOGGER.info("Retrieved last committed LSN from stored offset '{}'", lsn);
+
+                    final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
+                    walPosition = new WalPositionLocator(lsn, lsn, lastProcessedMessageType);
+                    replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
+                    lastSentFeedback = lsn;
+                } else  {
+                    // This is the SEQUENCE LSN type
+                    // start streaming from the last recorded position in the offset
+                    final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
+                            : this.effectiveOffset.lsn();
+                    final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
+                    LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
+                    walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType);
+                    replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
+                }
             }
             else {
                 LOGGER.info("No previous LSN found in Kafka, streaming from the latest xlogpos or flushed LSN...");
@@ -198,7 +221,12 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                                 replicationConnection.getConnectedNodeIp());
                     }
 
-                    replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
+                    if (connectorConfig.slotLsnType().isHybridTime()) {
+                        replicationStream.set(replicationConnection.startStreaming(walPosition.getLastCommitStoredLsn(), walPosition));
+                    } else {
+                        // This is for lsn type SEQUENCE.
+                        replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
+                    }
                     stream = this.replicationStream.get();
                     stream.startKeepAlive(Threads.newSingleThreadExecutor(YugabyteDBConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
                 }
@@ -292,6 +320,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 LOGGER.debug("Processing BEGIN with end LSN {} and txnid {}", lsn, message.getTransactionId());
             } else {
                 LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
+                LOGGER.debug("Record count in the txn {} is {} with commit time {}", message.getTransactionId(), recordCount, lsn.asLong() - 1);
+                recordCount = 0;
             }
 
             OptionalLong currentTxnid = message.getTransactionId();
@@ -308,7 +338,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 // Don't skip on BEGIN message as it would flush LSN for the whole transaction
                 // too early
                 if (message.getOperation() == Operation.COMMIT) {
-                    commitMessage(partition, offsetContext, lsn);
+                    commitMessage(partition, offsetContext, lsn, message);
                 }
                 return;
             }
@@ -321,7 +351,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 dispatcher.dispatchTransactionStartedEvent(partition, toString(message.getTransactionId()), offsetContext, message.getCommitTime());
             }
             else if (message.getOperation() == Operation.COMMIT) {
-                commitMessage(partition, offsetContext, lsn);
+                commitMessage(partition, offsetContext, lsn, message);
                 dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext, message.getCommitTime());
             }
             maybeWarnAboutGrowingWalBacklog(true);
@@ -333,7 +363,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
             // non-transactional message that will not be followed by a COMMIT message
             if (message.isLastEventForLsn()) {
-                commitMessage(partition, offsetContext, lsn);
+                commitMessage(partition, offsetContext, lsn, message);
             }
 
             dispatcher.dispatchLogicalDecodingMessage(
@@ -346,6 +376,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         }
         // DML event
         else {
+            LOGGER.trace("Processing DML event with lsn {} and lastCompletelyProcessedLsn {}", lsn, lastCompletelyProcessedLsn);
+            ++recordCount;
+
             TableId tableId = null;
             if (message.getOperation() != Operation.NOOP) {
                 tableId = PostgresSchema.parse(message.getTable());
@@ -384,8 +417,17 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         while (context.isRunning() && resumeLsn.get() == null) {
 
             boolean receivedMessage = stream.readPending(message -> {
-                final Lsn lsn = stream.lastReceivedLsn();
+                final Lsn lsn;
+                if (connectorConfig.slotLsnType().isHybridTime()) {
+                    lsn = walPosition.getLastCommitStoredLsn() != null ? walPosition.getLastCommitStoredLsn() : lastSentFeedback;
+                } else {
+                    lsn = stream.lastReceivedLsn();
+                }
                 resumeLsn.set(walPosition.resumeFromLsn(lsn, message).orElse(null));
+
+                if (resumeLsn.get() == null) {
+                    LOGGER.info("Resume LSN is null");
+                }
             });
 
             if (receivedMessage) {
@@ -412,7 +454,14 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         }
     }
 
-    private void commitMessage(PostgresPartition partition, PostgresOffsetContext offsetContext, final Lsn lsn) throws SQLException, InterruptedException {
+    private void commitMessage(PostgresPartition partition, PostgresOffsetContext offsetContext, final Lsn lsn, ReplicationMessage message) throws SQLException, InterruptedException {
+        if (this.connectorConfig.slotLsnType().isHybridTime()) {
+            if (message.getOperation() == Operation.COMMIT) {
+                LOGGER.info("Adding '{}' as lsn to the commit times queue", Lsn.valueOf(lsn.asLong() - 1));
+                commitTimes.add(Lsn.valueOf(lsn.asLong() - 1));
+            }
+        }
+
         lastCompletelyProcessedLsn = lsn;
         offsetContext.updateCommitPosition(lsn, lastCompletelyProcessedLsn);
         maybeWarnAboutGrowingWalBacklog(false);
@@ -463,18 +512,30 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             final Lsn changeLsn = Lsn.valueOf((Long) offset.get(PostgresOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
             final Lsn lsn = (commitLsn != null) ? commitLsn : changeLsn;
 
-            LOGGER.debug("Received offset commit request on commit LSN '{}' and change LSN '{}'", commitLsn, changeLsn);
+            LOGGER.info("Received offset commit request on commit LSN '{}' and change LSN '{}'", commitLsn, changeLsn);
             if (replicationStream != null && lsn != null) {
                 if (!lsnFlushingAllowed) {
                     LOGGER.info("Received offset commit request on '{}', but ignoring it. LSN flushing is not allowed yet", lsn);
                     return;
                 }
 
+                Lsn finalLsn;
+                if (this.connectorConfig.slotLsnType().isHybridTime()) {
+                    finalLsn = getLsnToBeFlushed(lsn);
+                } else {
+                    finalLsn = lsn;
+                }
+
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Flushing LSN to server: {}", lsn);
+                    LOGGER.info("Flushing LSN to server: {}", finalLsn);
                 }
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
                 replicationStream.flushLsn(lsn);
+
+                if (this.connectorConfig.slotLsnType().isHybridTime()) {
+                    lastSentFeedback = finalLsn;
+                    cleanCommitTimeQueue(finalLsn);
+                }
             }
             else {
                 LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
@@ -482,6 +543,35 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         }
         catch (SQLException e) {
             throw new ConnectException(e);
+        }
+    }
+
+    protected Lsn getLsnToBeFlushed(Lsn lsn) {
+        if (commitTimes == null || commitTimes.isEmpty()) {
+            // This means that the queue has not been initialised and the task is still starting.
+            return lastSentFeedback;
+        }
+
+        Lsn result = lastSentFeedback;
+
+        LOGGER.info("Queue at this time: {}", commitTimes);
+
+        for (Lsn commitLsn : commitTimes) {
+            if (commitLsn.compareTo(lsn) < 0) {
+                LOGGER.debug("Assigning result as {}", commitLsn);
+                result = commitLsn;
+            } else {
+                // This will be the loop exit when we encounter any bigger element.
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    protected void cleanCommitTimeQueue(Lsn lsn) {
+        if (commitTimes != null) {
+            commitTimes.removeIf(ele -> ele.compareTo(lsn) < 1);
         }
     }
 
