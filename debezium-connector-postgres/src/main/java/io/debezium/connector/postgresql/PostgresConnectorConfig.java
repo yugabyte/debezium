@@ -1216,6 +1216,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     SNAPSHOT_MODE,
                     SNAPSHOT_MODE_CLASS,
                     YB_CONSISTENT_SNAPSHOT,
+                    PRIMARY_KEY_HASH_COLUMNS,
                     HSTORE_HANDLING_MODE,
                     BINARY_HANDLING_MODE,
                     SCHEMA_NAME_ADJUSTMENT_MODE,

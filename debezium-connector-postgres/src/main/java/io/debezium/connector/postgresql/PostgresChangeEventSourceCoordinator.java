@@ -74,7 +74,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
         final PostgresOffsetContext previousOffset = previousOffsets.getTheOnlyOffset();
 
         previousLogContext.set(taskContext.configureLoggingContext(
-                String.format("snapshot|{}", taskContext.getTaskId()), partition));
+                String.format("snapshot|%s", taskContext.getTaskId()), partition));
         SnapshotResult<PostgresOffsetContext> snapshotResult = doSnapshot(snapshotSource, context, partition, previousOffset);
 
         getSignalProcessor(previousOffsets).ifPresent(s -> s.setContext(snapshotResult.getOffset()));
@@ -96,7 +96,7 @@ public class PostgresChangeEventSourceCoordinator extends ChangeEventSourceCoord
             }
             LOGGER.info("Transitioning to streaming");
             previousLogContext.set(taskContext.configureLoggingContext(
-                    String.format("streaming|{}", taskContext.getTaskId()), partition));
+                    String.format("streaming|%s", taskContext.getTaskId()), partition));
             streamEvents(context, partition, snapshotResult.getOffset());
         }
     }
