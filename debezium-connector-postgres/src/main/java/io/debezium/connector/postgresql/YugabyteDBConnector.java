@@ -121,7 +121,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     }
 
     protected String getQueryForParallelSnapshotSelect(long lowerBound, long upperBound) {
-        return String.format("SELECT * FROM %s WHERE yb_hash_code(%s) >= %d AND yb_hash_code(%s) <= %s",
+        return String.format("SELECT * FROM %s WHERE yb_hash_code(%s) >= %d AND yb_hash_code(%s) <= %d",
                     props.get("table.include.list"), props.get("primary.keys"), lowerBound,
                     props.get("primary.keys"), upperBound);
     }
