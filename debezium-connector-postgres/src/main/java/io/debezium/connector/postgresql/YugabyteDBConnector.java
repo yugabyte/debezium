@@ -89,6 +89,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             return getConfigForParallelSnapshotConsumption(maxTasks);
         }
 
+        // YB Note: Only applicable when snapshot mode is not parallel.
         // this will always have just one task with the given list of properties
         return props == null ? Collections.emptyList() : Collections.singletonList(new HashMap<>(props));
     }
