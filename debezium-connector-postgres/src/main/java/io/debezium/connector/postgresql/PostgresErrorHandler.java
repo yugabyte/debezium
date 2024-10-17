@@ -21,7 +21,7 @@ import io.debezium.util.Collect;
 public class PostgresErrorHandler extends ErrorHandler {
 
     public PostgresErrorHandler(PostgresConnectorConfig connectorConfig, ChangeEventQueue<?> queue, ErrorHandler replacedErrorHandler) {
-        super(PostgresConnector.class, connectorConfig, queue, replacedErrorHandler);
+        super(YugabyteDBConnector.class, connectorConfig, queue, replacedErrorHandler);
     }
 
     @Override
@@ -33,5 +33,11 @@ public class PostgresErrorHandler extends ErrorHandler {
     @Override
     protected boolean isRetriable(Throwable throwable) {
         return super.isRetriable(throwable);
+    }
+
+    @Override
+    protected boolean isCustomRetriable(Throwable throwable) {
+        // YB Note: Yes, all the errors are custom retriable.
+        return true;
     }
 }

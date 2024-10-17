@@ -16,6 +16,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import io.debezium.config.Configuration;
@@ -43,6 +44,7 @@ public class PostgresMoneyIT extends AbstractConnectorTest {
         TestHelper.dropPublication();
     }
 
+    @Ignore("YB Note: Decimal handling mode precise unsupported")
     @Test
     @FixFor("DBZ-5991")
     public void shouldReceiveChangesForInsertsWithPreciseMode() throws Exception {
@@ -51,7 +53,7 @@ public class PostgresMoneyIT extends AbstractConnectorTest {
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
 
         // insert 2 records for testing
@@ -77,7 +79,7 @@ public class PostgresMoneyIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER)
                 .with(PostgresConnectorConfig.DECIMAL_HANDLING_MODE, "string")
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
 
         // insert 2 records for testing
@@ -89,9 +91,9 @@ public class PostgresMoneyIT extends AbstractConnectorTest {
         assertThat(recordsForTopic).hasSize(2);
 
         Struct after = ((Struct) recordsForTopic.get(0).value()).getStruct(Envelope.FieldName.AFTER);
-        assertThat(after.get("m")).isEqualTo("-92233720368547758.08");
+        assertThat(after.getStruct("m").get("value")).isEqualTo("-92233720368547758.08");
         after = ((Struct) recordsForTopic.get(1).value()).getStruct(Envelope.FieldName.AFTER);
-        assertThat(after.get("m")).isEqualTo("92233720368547758.07");
+        assertThat(after.getStruct("m").get("value")).isEqualTo("92233720368547758.07");
     }
 
     @Test
@@ -103,7 +105,7 @@ public class PostgresMoneyIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER)
                 .with(PostgresConnectorConfig.DECIMAL_HANDLING_MODE, "double")
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
 
         // insert 2 records for testing
@@ -115,11 +117,12 @@ public class PostgresMoneyIT extends AbstractConnectorTest {
         assertThat(recordsForTopic).hasSize(2);
 
         Struct after = ((Struct) recordsForTopic.get(0).value()).getStruct(Envelope.FieldName.AFTER);
-        assertThat(after.get("m")).isEqualTo(-92233720368547758.00);
+        assertThat(after.getStruct("m").get("value")).isEqualTo(-92233720368547758.00);
         after = ((Struct) recordsForTopic.get(1).value()).getStruct(Envelope.FieldName.AFTER);
-        assertThat(after.get("m")).isEqualTo(92233720368547758.00);
+        assertThat(after.getStruct("m").get("value")).isEqualTo(92233720368547758.00);
     }
 
+    @Ignore("YB Note: Decimal handling mode precise unsupported")
     @Test
     @FixFor("DBZ-6001")
     public void shouldReceiveChangesForInsertNullAndZeroMoney() throws Exception {
@@ -128,7 +131,7 @@ public class PostgresMoneyIT extends AbstractConnectorTest {
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         waitForStreamingRunning("postgres", TestHelper.TEST_SERVER);
 
         // insert 2 records for testing
