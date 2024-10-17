@@ -66,26 +66,25 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             return Collections.emptyList();
         }
 
-        if (props.containsKey("snapshot.mode") && props.get("snapshot.mode").equalsIgnoreCase("parallel")) {
+        if (props.containsKey(PostgresConnectorConfig.SNAPSHOT_MODE.name())
+                && props.get(PostgresConnectorConfig.SNAPSHOT_MODE.name())
+                    .equalsIgnoreCase(PostgresConnectorConfig.SnapshotMode.PARALLEL.getValue())) {
             LOGGER.info("Initialising parallel snapshot consumption");
 
-            final String tableIncludeList = props.get("table.include.list");
+            final String tableIncludeList = props.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name());
             // Perform basic validations.
-            if (tableIncludeList == null) {
-                throw new DebeziumException("No table provided, provide a table in the table.include.list");
-            } else if (tableIncludeList.contains(",")) {
-                // This might indicate the presence of multiple tables in the include list, we do not want that.
-                throw new DebeziumException("parallel snapshot consumption is only supported with one table at a time");
-            }
+            validateSingleTableProvidedForParallelSnapshot(tableIncludeList);
 
-            // Publication auto create mode should now be for all tables.
-            if (props.containsKey("publication.autocreate.mode") && props.get("publication.autocreate.mode").equalsIgnoreCase("all_tables")) {
+            // Publication auto create mode should not be for all tables.
+            if (props.containsKey(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE.name())
+                    && props.get(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE.name())
+                        .equalsIgnoreCase(PostgresConnectorConfig.AutoCreateMode.ALL_TABLES.getValue())) {
                 throw new DebeziumException("Snapshot mode parallel is not supported with publication.autocreate.mode all_tables, " +
                                             "use publication.autocreate.mode=filtered");
             }
 
             // Add configuration for select override.
-            props.put("snapshot.select.statement.overrides", props.get("table.include.list"));
+            props.put(PostgresConnectorConfig.SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE.name(), tableIncludeList);
 
             return getConfigForParallelSnapshotConsumption(maxTasks);
         }
@@ -94,23 +93,33 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         return props == null ? Collections.emptyList() : Collections.singletonList(new HashMap<>(props));
     }
 
+    protected void validateSingleTableProvidedForParallelSnapshot(String tableIncludeList) throws DebeziumException {
+        if (tableIncludeList == null) {
+            throw new DebeziumException("No table provided, provide a table in the table.include.list");
+        } else if (tableIncludeList.contains(",")) {
+            // This might indicate the presence of multiple tables in the include list, we do not want that.
+            throw new DebeziumException("parallel snapshot consumption is only supported with one table at a time");
+        }
+    }
+
     protected List<Map<String, String>> getConfigForParallelSnapshotConsumption(int maxTasks) {
         List<Map<String, String>> taskConfigs = new ArrayList<>();
 
-        final long rangeSize = (64 * 1024) / maxTasks;
+        final long upperBoundExclusive = 64 * 1024;
+        final long rangeSize = upperBoundExclusive / maxTasks;
 
         for (int i = 0; i < maxTasks; ++i) {
             Map<String, String> taskProps = new HashMap<>(this.props);
 
-            taskProps.put("task.id", String.valueOf(i));
+            taskProps.put(PostgresConnectorConfig.TASK_ID.name(), String.valueOf(i));
 
             long lowerBound = i * rangeSize;
-            long upperBound = lowerBound + rangeSize - 1;
+            long upperBound = (i == maxTasks - 1) ? upperBoundExclusive - 1 : (lowerBound + rangeSize - 1);
 
             LOGGER.info("Using query for task {}: {}", i, getQueryForParallelSnapshotSelect(lowerBound, upperBound));
 
             taskProps.put(
-              "snapshot.select.statement.overrides." + taskProps.get("table.include.list"),
+              PostgresConnectorConfig.SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE.name() + "." + taskProps.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name()),
               getQueryForParallelSnapshotSelect(lowerBound, upperBound)
             );
 
@@ -122,8 +131,9 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     protected String getQueryForParallelSnapshotSelect(long lowerBound, long upperBound) {
         return String.format("SELECT * FROM %s WHERE yb_hash_code(%s) >= %d AND yb_hash_code(%s) <= %d",
-                    props.get("table.include.list"), props.get("primary.keys"), lowerBound,
-                    props.get("primary.keys"), upperBound);
+                    props.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name()),
+                    props.get(PostgresConnectorConfig.PRIMARY_KEYS.name()), lowerBound,
+                    props.get(PostgresConnectorConfig.PRIMARY_KEYS.name()), upperBound);
     }
 
     @Override
