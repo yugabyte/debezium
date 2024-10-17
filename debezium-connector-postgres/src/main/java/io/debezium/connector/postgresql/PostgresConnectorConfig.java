@@ -992,6 +992,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field TASK_ID = Field.create("task.id")
             .withDisplayName("ID of the connector task")
             .withType(Type.INT)
+            .withDefault(0)
             .withImportance(Importance.LOW)
             .withDescription("Internal use only");
 
