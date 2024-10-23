@@ -21,15 +21,11 @@ public class PostgresPartition extends AbstractPartition implements Partition {
     private static final String SERVER_PARTITION_KEY = "server";
 
     private final String serverName;
-    private int taskId = 0;
-
-    public PostgresPartition(String serverName, String databaseName) {
-        super(databaseName);
-        this.serverName = serverName;
-    }
+    private final int taskId;
 
     public PostgresPartition(String serverName, String databaseName, int taskId) {
-        this(serverName, databaseName);
+        super(databaseName);
+        this.serverName = serverName;
         this.taskId = taskId;
     }
 
