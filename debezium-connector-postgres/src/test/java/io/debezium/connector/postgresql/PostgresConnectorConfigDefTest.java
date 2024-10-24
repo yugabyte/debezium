@@ -15,7 +15,7 @@ import io.debezium.config.Configuration;
 public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest {
 
     public PostgresConnectorConfigDefTest() {
-        super(new PostgresConnector());
+        super(new YugabyteDBConnector());
     }
 
     @Test
@@ -50,6 +50,59 @@ public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest
 
         int problemCount = PostgresConnectorConfig.validateReplicaAutoSetField(
                 configBuilder.build(), PostgresConnectorConfig.REPLICA_IDENTITY_AUTOSET_VALUES, (field, value, problemMessage) -> System.out.println(problemMessage));
+
+        assertThat((problemCount == 0)).isTrue();
+    }
+
+    @Test
+    public void shouldValidateWithCorrectSingleHostnamePattern() {
+        validateCorrectHostname(false);
+    }
+
+    @Test
+    public void shouldValidateWithCorrectMultiHostnamePattern() {
+        validateCorrectHostname(true);
+    }
+
+    @Test
+    public void shouldFailWithInvalidCharacterInHostname() {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.HOSTNAME, "*invalidCharacter");
+
+        int problemCount = PostgresConnectorConfig.validateYBHostname(
+          configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
+
+        assertThat((problemCount == 1)).isTrue();
+    }
+
+    @Test
+    public void shouldFailIfInvalidMultiHostFormatSpecified() {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.HOSTNAME, "127.0.0.1,127.0.0.2,127.0.0.3");
+
+        int problemCount = PostgresConnectorConfig.validateYBHostname(
+          configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
+
+        assertThat((problemCount == 1)).isTrue();
+    }
+
+    @Test
+    public void shouldFailIfInvalidMultiHostFormatSpecifiedWithInvalidCharacter() {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.HOSTNAME, "127.0.0.1,127.0.0.2,127.0.0.3+");
+
+        int problemCount = PostgresConnectorConfig.validateYBHostname(
+          configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
+
+        assertThat((problemCount == 2)).isTrue();
+    }
+
+    public void validateCorrectHostname(boolean multiNode) {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.HOSTNAME, multiNode ? "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433" : "127.0.0.1");
+
+        int problemCount = PostgresConnectorConfig.validateYBHostname(
+          configBuilder.build(), PostgresConnectorConfig.HOSTNAME, (field, value, problemMessage) -> System.out.println(problemMessage));
 
         assertThat((problemCount == 0)).isTrue();
     }
