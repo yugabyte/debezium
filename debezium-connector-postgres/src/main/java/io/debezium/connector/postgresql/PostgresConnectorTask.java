@@ -192,16 +192,6 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                     throw new DebeziumException(e);
                 }
 
-//                queue = new ChangeEventQueue.Builder<DataChangeEvent>()
-//                        .pollInterval(connectorConfig.getPollInterval())
-//                        .maxBatchSize(connectorConfig.getMaxBatchSize())
-//                        .maxQueueSize(connectorConfig.getMaxQueueSize())
-//                        .maxQueueSizeInBytes(connectorConfig.getMaxQueueSizeInBytes())
-//                        .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
-//                        .build();
-//
-//                errorHandler = new PostgresErrorHandler(connectorConfig, queue, errorHandler);
-
                 final PostgresEventMetadataProvider metadataProvider = new PostgresEventMetadataProvider();
 
                 SignalProcessor<PostgresPartition, PostgresOffsetContext> signalProcessor = new SignalProcessor<>(
@@ -277,6 +267,13 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
         catch (Exception exception) {
             LOGGER.warn("Received exception, will be setting producer throwable", exception);
             errorHandler.setProducerThrowable(new RetriableException(exception));
+
+            if (errorHandler.getRetries() == connectorConfig.getMaxRetriesOnError()) {
+                throw new ConnectException("Maximum number of retries attempted, manually restart "
+                    + "the connector after fixing the error", exception);
+            } else {
+                throw new RetriableException(exception);
+            }
         }
     }
 

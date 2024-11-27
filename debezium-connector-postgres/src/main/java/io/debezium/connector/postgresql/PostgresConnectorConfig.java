@@ -541,8 +541,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     protected static final int DEFAULT_PORT = 5_433;
     protected static final int DEFAULT_SNAPSHOT_FETCH_SIZE = 10_240;
     protected static final int DEFAULT_MAX_RETRIES = 6;
-    protected static final long DEFAULT_RETRIABLE_RESTART_EXPONENTIAL_DELAY_MIN_MS = 5_000;
-    protected static final long DEFAULT_RETRIABLE_RESTART_EXPONENTIAL_DELAY_MAX_MS = 120_000;
     public static final Pattern YB_HOSTNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9-_.,:]+$");
 
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
@@ -1012,19 +1010,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                 return 0;
             });
 
-    public static final Field RETRIABLE_RESTART_EXPONENTIAL_DELAY_MIN_MS = Field.create("retriable.restart.exponential.delay.min.ms")
-            .withDisplayName("Minimum delay in case of retries for exponential backoff")
-            .withType(Type.LONG)
-            .withImportance(Importance.LOW)
-            .withDescription("The minimum delay between retry when following exponential backoff")
-            .withDefault(DEFAULT_RETRIABLE_RESTART_EXPONENTIAL_DELAY_MIN_MS);
-    public static final Field RETRIABLE_RESTART_EXPONENTIAL_DELAY_MAX_MS = Field.create("retriable.restart.exponential.delay.max.ms")
-            .withDisplayName("Maximum delay in case of retries for exponential backoff")
-            .withType(Type.LONG)
-            .withImportance(Importance.LOW)
-            .withDescription("The maximum delay between retry when following exponential backoff")
-            .withDefault(DEFAULT_RETRIABLE_RESTART_EXPONENTIAL_DELAY_MAX_MS);
-
     private final LogicalDecodingMessageFilter logicalDecodingMessageFilter;
     private final HStoreHandlingMode hStoreHandlingMode;
     private final IntervalHandlingMode intervalHandlingMode;
@@ -1156,14 +1141,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public String primaryKeyHashColumns() {
         return getConfig().getString(PRIMARY_KEY_HASH_COLUMNS);
-    }
-
-    public long retriableRestartExponentialDelayMinMs() {
-        return getConfig().getLong(RETRIABLE_RESTART_EXPONENTIAL_DELAY_MIN_MS);
-    }
-
-    public long retriableRestartExponentialDelayMaxMs() {
-        return getConfig().getLong(RETRIABLE_RESTART_EXPONENTIAL_DELAY_MAX_MS);
     }
 
     @Override
