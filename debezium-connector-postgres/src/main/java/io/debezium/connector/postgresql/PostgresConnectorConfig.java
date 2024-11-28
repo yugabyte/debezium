@@ -542,8 +542,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     protected static final int DEFAULT_SNAPSHOT_FETCH_SIZE = 10_240;
     protected static final int DEFAULT_MAX_RETRIES = 6;
     public static final Pattern YB_HOSTNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9-_.,:]+$");
-    public static final int YB_DEFAULT_ERRORS_MAX_RETRIES = 90;
-    public static final long YB_DEFAULT_RETRIABLE_RESTART_WAIT = 20000L;
+    public static final int YB_DEFAULT_ERRORS_MAX_RETRIES = 60;
+    public static final long YB_DEFAULT_RETRIABLE_RESTART_WAIT = 30000L;
 
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
