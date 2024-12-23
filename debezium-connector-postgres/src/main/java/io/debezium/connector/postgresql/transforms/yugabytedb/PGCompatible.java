@@ -1,10 +1,8 @@
-package io.debezium.connector.postgresql.transforms;
+package io.debezium.connector.postgresql.transforms.yugabytedb;
 
 import java.util.Map;
 import java.util.Objects;
 
-import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
-import io.debezium.connector.postgresql.transforms.yugabytedb.SchemaUtil;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Field;
