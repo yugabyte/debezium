@@ -46,6 +46,7 @@ import java.util.stream.IntStream;
 
 import javax.management.InstanceNotFoundException;
 
+import io.debezium.embedded.EmbeddedEngineConfig;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
@@ -1115,6 +1116,85 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(updateRecordValue.get(Envelope.FieldName.BEFORE)).isNotNull();
         assertThat(updateRecordValue.getStruct(Envelope.FieldName.BEFORE).getStruct("aa").getInt32("value")).isEqualTo(1);
         assertThat(updateRecordValue.getStruct(Envelope.FieldName.AFTER).getStruct("aa").getInt32("value")).isEqualTo(404);
+    }
+
+    @Test
+    public void shouldFailIfNoPrimaryKeyHashColumnSpecifiedWithSnapshotModeParallel() throws Exception {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.PARALLEL.getValue())
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test")
+                .with(PostgresConnectorConfig.PRIMARY_KEY_HASH_COLUMNS, "");
+
+        start(YugabyteDBConnector.class, configBuilder.build(), (success, message, error) -> {
+            assertFalse(success);
+            assertThat(message.contains("primary.key.hash.columns cannot be empty when snapshot.mode is 'parallel'")).isTrue();
+        });
+    }
+
+    @Test
+    public void shouldFailIfParallelSnapshotRunWithMultipleTables() throws Exception {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.PARALLEL.getValue())
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test,public.test2")
+                .with(PostgresConnectorConfig.PRIMARY_KEY_HASH_COLUMNS, "id");
+
+        start(YugabyteDBConnector.class, configBuilder.build(), (success, message, error) -> {
+            assertFalse(success);
+
+            assertThat(error.getMessage().contains("parallel snapshot consumption is only supported with one table at a time")).isTrue();
+        });
+    }
+
+
+    @Test
+    public void shouldFailAfterConfiguredRetries() throws Exception {
+        // We will intentionally not let the connector start and see if it retries.
+        PostgresConnectorTask.TEST_THROW_ERROR_BEFORE_COORDINATOR_STARTUP = true;
+
+        // We have to set the errors max retries for the embedded engine as well otherwise it would
+        // keep retrying indefinitely. Specifying a 0 means it will never retry on any error.
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+            .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test")
+            .with(EmbeddedEngineConfig.ERRORS_MAX_RETRIES, 0)
+            .with(PostgresConnectorConfig.ERRORS_MAX_RETRIES, 0)
+            .with(PostgresConnectorConfig.RETRIABLE_RESTART_WAIT, 12000);
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+
+        TestHelper.waitFor(Duration.ofSeconds(80));
+
+        assertConnectorNotRunning();
+
+        PostgresConnectorTask.TEST_THROW_ERROR_BEFORE_COORDINATOR_STARTUP = false;
+    }
+
+    @Test
+    public void shouldFailWithSnapshotModeParallelIfNoTableIncludeListProvided() throws Exception {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.PARALLEL.getValue())
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "")
+                .with(PostgresConnectorConfig.PRIMARY_KEY_HASH_COLUMNS, "id");
+
+        start(YugabyteDBConnector.class, configBuilder.build(), (success, message, error) -> {
+            assertFalse(success);
+
+            assertThat(error.getMessage().contains("No table provided, provide a table in the table.include.list")).isTrue();
+        });
+    }
+
+    @Test
+    public void shouldFailIfSnapshotModeParallelHasPublicationAutoCreateModeAllTables() throws Exception {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.PARALLEL.getValue())
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test")
+                .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, PostgresConnectorConfig.AutoCreateMode.ALL_TABLES)
+                .with(PostgresConnectorConfig.PRIMARY_KEY_HASH_COLUMNS, "id");;
+
+        start(YugabyteDBConnector.class, configBuilder.build(), (success, message, error) -> {
+            assertFalse(success);
+
+            assertThat(error.getMessage().contains("Snapshot mode parallel is not supported with publication.autocreate.mode all_tables")).isTrue();
+        });
     }
 
     @Test

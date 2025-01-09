@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 import io.debezium.DebeziumException;
+import io.debezium.connector.postgresql.snapshot.ParallelSnapshotter;
 import io.debezium.data.Envelope;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.heartbeat.HeartbeatConnectionProvider;
@@ -211,6 +212,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
          * Perform a snapshot and then stop before attempting to receive any logical changes.
          */
         INITIAL_ONLY("initial_only", (c) -> new InitialOnlySnapshotter()),
+
+        /**
+         * Perform a snapshot using parallel tasks.
+         */
+        PARALLEL("parallel", (c) -> new ParallelSnapshotter()),
 
         /**
          * Inject a custom snapshotter, which allows for more control over snapshots.
@@ -592,6 +598,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     protected static final int DEFAULT_SNAPSHOT_FETCH_SIZE = 10_240;
     protected static final int DEFAULT_MAX_RETRIES = 6;
     public static final Pattern YB_HOSTNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9-_.,:]+$");
+    public static final int YB_DEFAULT_ERRORS_MAX_RETRIES = 60;
+    public static final long YB_DEFAULT_RETRIABLE_RESTART_WAIT = 30000L;
 
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
@@ -685,6 +693,28 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDescription("Whether or not to take a consistent snapshot of the tables." +
                            "Disabling this option may result in duplication of some already snapshot data in the streaming phase.");
+
+    public static final Field MAX_RETRIES_ON_ERROR = Field.create(ERRORS_MAX_RETRIES)
+            .withDisplayName("The maximum number of retries")
+            .withType(Type.INT)
+            .withGroup(Field.createGroupEntry(Field.Group.CONNECTOR_ADVANCED, 24))
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.LOW)
+            .withDefault(YB_DEFAULT_ERRORS_MAX_RETRIES)
+            .withValidation(Field::isInteger)
+            .withDescription(
+                    "The maximum number of retries on connection errors before failing (-1 = no limit, 0 = disabled, > 0 = num of retries).");
+
+    public static final Field RETRIABLE_RESTART_WAIT = Field.create("retriable.restart.connector.wait.ms")
+            .withDisplayName("Retriable restart wait (ms)")
+            .withType(Type.LONG)
+            .withGroup(Field.createGroupEntry(Field.Group.ADVANCED, 18))
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.LOW)
+            .withDefault(YB_DEFAULT_RETRIABLE_RESTART_WAIT)
+            .withDescription(
+                    "Time to wait before restarting connector after retriable exception occurs. Defaults to " + YB_DEFAULT_RETRIABLE_RESTART_WAIT + "ms.")
+            .withValidation(Field::isPositiveLong);
 
     public enum AutoCreateMode implements EnumeratedValue {
         /**
@@ -1047,6 +1077,27 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field SOURCE_INFO_STRUCT_MAKER = CommonConnectorConfig.SOURCE_INFO_STRUCT_MAKER
             .withDefault(PostgresSourceInfoStructMaker.class.getName());
 
+    public static final Field TASK_ID = Field.create("task.id")
+            .withDisplayName("ID of the connector task")
+            .withType(Type.INT)
+            .withDefault(0)
+            .withImportance(Importance.LOW)
+            .withDescription("Internal use only");
+
+    public static final Field PRIMARY_KEY_HASH_COLUMNS = Field.create("primary.key.hash.columns")
+            .withDisplayName("Comma separated primary key fields")
+            .withType(Type.STRING)
+            .withImportance(Importance.LOW)
+            .withDescription("A comma separated value having all the hash components of the primary key")
+            .withValidation((config, field, output) -> {
+                if (config.getString(SNAPSHOT_MODE).equalsIgnoreCase("parallel") && config.getString(field, "").isEmpty()) {
+                    output.accept(field, "", "primary.key.hash.columns cannot be empty when snapshot.mode is 'parallel'");
+                    return 1;
+                }
+
+                return 0;
+            });
+
     private final LogicalDecodingMessageFilter logicalDecodingMessageFilter;
     private final HStoreHandlingMode hStoreHandlingMode;
     private final IntervalHandlingMode intervalHandlingMode;
@@ -1176,6 +1227,14 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return flushLsnOnSource;
     }
 
+    public int taskId() {
+        return getConfig().getInteger(TASK_ID);
+    }
+
+    public String primaryKeyHashColumns() {
+        return getConfig().getString(PRIMARY_KEY_HASH_COLUMNS);
+    }
+
     @Override
     public byte[] getUnavailableValuePlaceholder() {
         String placeholder = getConfig().getString(UNAVAILABLE_VALUE_PLACEHOLDER);
@@ -1250,6 +1309,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     SNAPSHOT_MODE,
                     SNAPSHOT_MODE_CLASS,
                     YB_CONSISTENT_SNAPSHOT,
+                    PRIMARY_KEY_HASH_COLUMNS,
                     HSTORE_HANDLING_MODE,
                     BINARY_HANDLING_MODE,
                     SCHEMA_NAME_ADJUSTMENT_MODE,
