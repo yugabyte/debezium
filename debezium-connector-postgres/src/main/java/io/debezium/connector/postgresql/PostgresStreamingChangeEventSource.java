@@ -153,7 +153,16 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             }
 
             if (hasStartLsnStoredInContext) {
-                if (connectorConfig.slotLsnType().isHybridTime()) {
+                if (connectorConfig.slotLsnType().isSequence()) {
+                    // This is the SEQUENCE LSN type
+                    // start streaming from the last recorded position in the offset
+                    final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
+                            : this.effectiveOffset.lsn();
+                    final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
+                    LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
+                    walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType, false /* isLsnTypeHybridTime */);
+                    replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
+                } else {
                     LOGGER.info("LSN is stored in context for type HT");
                     final Lsn lsn = this.effectiveOffset.lastCommitLsn() == null ?
                             lastSentFeedback : this.effectiveOffset.lastCommitLsn();
@@ -165,18 +174,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     LOGGER.info("Retrieved last committed LSN from stored offset '{}'", lsn);
 
                     final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
-                    walPosition = new WalPositionLocator(lsn, lsn, lastProcessedMessageType, this.connectorConfig.slotLsnType().isHybridTime());
+                    walPosition = new WalPositionLocator(lsn, lsn, lastProcessedMessageType, true /* isLsnTypeHybridTime */);
                     replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
                     lastSentFeedback = lsn;
-                } else  {
-                    // This is the SEQUENCE LSN type
-                    // start streaming from the last recorded position in the offset
-                    final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
-                            : this.effectiveOffset.lsn();
-                    final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
-                    LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
-                    walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType, this.connectorConfig.slotLsnType().isHybridTime());
-                    replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
                 }
             }
             else {
@@ -221,12 +221,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                                 replicationConnection.getConnectedNodeIp());
                     }
 
-                    if (connectorConfig.slotLsnType().isHybridTime()) {
-                        replicationStream.set(replicationConnection.startStreaming(walPosition.getLastCommitStoredLsn(), walPosition));
-                    } else {
-                        // This is for lsn type SEQUENCE.
-                        replicationStream.set(replicationConnection.startStreaming(walPosition.getLastEventStoredLsn(), walPosition));
-                    }
+                    Lsn lastStoredLsn = connectorConfig.slotLsnType().isHybridTime() ? walPosition.getLastCommitStoredLsn() : walPosition.getLastEventStoredLsn();
+                    replicationStream.set(replicationConnection.startStreaming(lastStoredLsn, walPosition));
+
                     stream = this.replicationStream.get();
                     stream.startKeepAlive(Threads.newSingleThreadExecutor(YugabyteDBConnector.class, connectorConfig.getLogicalName(), KEEP_ALIVE_THREAD_NAME));
                 }
