@@ -163,7 +163,10 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType, false /* isLsnTypeHybridTime */);
                     replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
                 } else {
-                    LOGGER.info("LSN is stored in context for type HT");
+                    // We are in the block for HYBRID_TIME and last commit can be null for cases where
+                    // we have just started/restarted the connector, in that case, we simply sent the
+                    // initial value of lastSentFeedback and let the server handle the time we
+                    // should get the changes from.
                     final Lsn lsn = this.effectiveOffset.lastCommitLsn() == null ?
                             lastSentFeedback : this.effectiveOffset.lastCommitLsn();
 
@@ -416,6 +419,11 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             boolean receivedMessage = stream.readPending(message -> {
                 final Lsn lsn;
                 if (connectorConfig.slotLsnType().isHybridTime()) {
+                    // Last commit can be null for cases where
+                    // we have just started/restarted the connector, in that case, we simply sent the
+                    // initial value of lastSentFeedback and let the server handle the time we
+                    // should get the changes from.
+
                     lsn = walPosition.getLastCommitStoredLsn() != null ? walPosition.getLastCommitStoredLsn() : lastSentFeedback;
                 } else {
                     lsn = stream.lastReceivedLsn();
