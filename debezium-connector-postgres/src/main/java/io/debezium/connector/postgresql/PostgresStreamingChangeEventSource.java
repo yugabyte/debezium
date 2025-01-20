@@ -126,6 +126,20 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         }
     }
 
+    public Lsn getLsn(PostgresOffsetContext offsetContext, PostgresConnectorConfig.LsnType lsnType) {
+        if (lsnType.isSequence()) {
+            return this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
+                    : this.effectiveOffset.lsn();
+        } else {
+            // We are in the block for HYBRID_TIME lsn type and last commit can be null for cases
+            // where we have just started/restarted the connector, in that case, we simply sent the
+            // initial value of lastSentFeedback and let the server handle the time we
+            // should get the changes from.
+            return this.effectiveOffset.lastCommitLsn() == null ?
+                    lastSentFeedback : this.effectiveOffset.lastCommitLsn();
+        }
+    }
+
     @Override
     public void execute(ChangeEventSourceContext context, PostgresPartition partition, PostgresOffsetContext offsetContext)
             throws InterruptedException {
@@ -153,34 +167,20 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             }
 
             if (hasStartLsnStoredInContext) {
-                if (connectorConfig.slotLsnType().isSequence()) {
-                    // This is the SEQUENCE LSN type
-                    // start streaming from the last recorded position in the offset
-                    final Lsn lsn = this.effectiveOffset.lastCompletelyProcessedLsn() != null ? this.effectiveOffset.lastCompletelyProcessedLsn()
-                            : this.effectiveOffset.lsn();
-                    final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
-                    LOGGER.info("Retrieved latest position from stored offset '{}'", lsn);
-                    walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn, lastProcessedMessageType, false /* isLsnTypeHybridTime */);
-                    replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
-                } else {
-                    // We are in the block for HYBRID_TIME and last commit can be null for cases where
-                    // we have just started/restarted the connector, in that case, we simply sent the
-                    // initial value of lastSentFeedback and let the server handle the time we
-                    // should get the changes from.
-                    final Lsn lsn = this.effectiveOffset.lastCommitLsn() == null ?
-                            lastSentFeedback : this.effectiveOffset.lastCommitLsn();
+                final Lsn lsn = getLsn(this.effectiveOffset, connectorConfig.slotLsnType());
+                final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
 
-                    if (this.effectiveOffset.lastCommitLsn() == null) {
-                        LOGGER.info("Last commit stored in offset is null");
-                    }
-
-                    LOGGER.info("Retrieved last committed LSN from stored offset '{}'", lsn);
-
-                    final Operation lastProcessedMessageType = this.effectiveOffset.lastProcessedMessageType();
-                    walPosition = new WalPositionLocator(lsn, lsn, lastProcessedMessageType, true /* isLsnTypeHybridTime */);
-                    replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
-                    lastSentFeedback = lsn;
+                if (this.effectiveOffset.lastCommitLsn() == null) {
+                    LOGGER.info("Last commit stored in offset is null");
                 }
+
+                LOGGER.info("Retrieved last committed LSN from stored offset '{}'", lsn);
+
+                walPosition = new WalPositionLocator(this.effectiveOffset.lastCommitLsn(), lsn,
+                        lastProcessedMessageType, connectorConfig.slotLsnType().isHybridTime() /* isLsnTypeHybridTime */);
+
+                replicationStream.compareAndSet(null, replicationConnection.startStreaming(lsn, walPosition));
+                lastSentFeedback = lsn;
             }
             else {
                 LOGGER.info("No previous LSN found in Kafka, streaming from the latest xlogpos or flushed LSN...");
@@ -552,6 +552,14 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         }
     }
 
+    /**
+     * Returns the LSN that should be flushed to the service. The {@code commitTimes} list will have
+     * a list of all the commit times for which we have received a commit record. All we want now
+     * is that whenever we get a commit callback, we should be flushing a time just smaller than
+     * the one we have gotten the callback on.
+     * @param lsn the {@link Lsn} received in callback
+     * @return the {@link Lsn} to be flushed
+     */
     protected Lsn getLsnToBeFlushed(Lsn lsn) {
         if (commitTimes == null || commitTimes.isEmpty()) {
             // This means that the queue has not been initialised and the task is still starting.
