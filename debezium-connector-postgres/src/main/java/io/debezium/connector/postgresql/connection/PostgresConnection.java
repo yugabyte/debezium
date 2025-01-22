@@ -117,10 +117,10 @@ public class PostgresConnection extends JdbcConnection {
         }
 
         try {
-            LOGGER.info("Setting GUC yb_disable_catalog_version_check");
+            LOGGER.debug("Setting GUC to disable catalog version check");
             execute("SET yb_disable_catalog_version_check = true;");
         } catch (Exception e) {
-            LOGGER.info("Error while setting GUC yb_disable_catalog_version_check", e);
+            LOGGER.error("Error while setting GUC yb_disable_catalog_version_check", e);
         }
     }
 
