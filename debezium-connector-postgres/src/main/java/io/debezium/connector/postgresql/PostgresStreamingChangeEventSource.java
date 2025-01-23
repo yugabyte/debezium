@@ -214,7 +214,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     } catch (Exception e) {
                         LOGGER.info("Commit failed while preparing for reconnect", e);
                     }
-                    walPosition.enableFiltering();
+                    // Do not filter anything.
+                    // walPosition.enableFiltering();
                     stream.stopKeepAlive();
                     replicationConnection.reconnect();
 
