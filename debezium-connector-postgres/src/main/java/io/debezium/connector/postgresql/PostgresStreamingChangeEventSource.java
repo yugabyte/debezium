@@ -214,8 +214,13 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     } catch (Exception e) {
                         LOGGER.info("Commit failed while preparing for reconnect", e);
                     }
-                    // Do not filter anything.
-                    // walPosition.enableFiltering();
+                    
+                    // Do not filter anything when lsn type is hybrid time. This is to avoid the WalPositionLocator complaining
+                    // about the LSN not being present in the lsnSeen set.
+                    if (connectorConfig.slotLsnType().isSequence()) {
+                        walPosition.enableFiltering();
+                    }
+
                     stream.stopKeepAlive();
                     replicationConnection.reconnect();
 
