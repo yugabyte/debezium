@@ -284,7 +284,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         return snapshotter.buildSnapshotQuery(tableId, columns);
     }
 
-    protected void disableCatalogVersionCheckStatement() throws SQLException {
+    protected void disableCatalogVersionCheck() throws SQLException {
         final String disableCatalogVersionCheckStmt =
            "DO " +
            "LANGUAGE plpgsql $$ " +
@@ -303,7 +303,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         } catch (SQLException sqle) {
             if (sqle.getMessage().contains("GUC not found")) {
                 LOGGER.warn("GUC not present: yb_disable_catalog_version_check");
-                jdbcConnection.execute("COMMIT;");
+                jdbcConnection.execute("ABORT;");
             } else {
                 throw sqle;
             }
@@ -311,7 +311,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     }
     protected void setSnapshotTransactionIsolationLevel(boolean isOnDemand) throws SQLException {
         if (!YugabyteDBServer.isEnabled() || connectorConfig.isYbConsistentSnapshotEnabled()) {
-            disableCatalogVersionCheckStatement();
+            disableCatalogVersionCheck();
 
             LOGGER.info("Setting isolation level");
             String transactionStatement = snapshotter.snapshotTransactionIsolationLevelStatement(slotCreatedInfo, isOnDemand);
