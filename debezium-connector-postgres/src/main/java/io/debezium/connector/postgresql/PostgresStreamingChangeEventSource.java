@@ -230,6 +230,8 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                                 replicationConnection.getConnectedNodeIp());
                     }
 
+                    // For the HybridTime mode, we always want to resume from the position of last commit so that we
+                    // send complete transactions and do not resume from the last event stored LSN.
                     Lsn lastStoredLsn = connectorConfig.slotLsnType().isHybridTime() ? walPosition.getLastCommitStoredLsn() : walPosition.getLastEventStoredLsn();
                     replicationStream.set(replicationConnection.startStreaming(lastStoredLsn, walPosition));
 
