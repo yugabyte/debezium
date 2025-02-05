@@ -435,10 +435,6 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     lsn = stream.lastReceivedLsn();
                 }
                 resumeLsn.set(walPosition.resumeFromLsn(lsn, message).orElse(null));
-
-                if (resumeLsn.get() == null) {
-                    LOGGER.info("Resume LSN is null");
-                }
             });
 
             if (receivedMessage) {
@@ -471,7 +467,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         if (this.connectorConfig.slotLsnType().isHybridTime()) {
             if (message.getOperation() == Operation.COMMIT) {
-                LOGGER.info("Adding '{}' as lsn to the commit times queue", Lsn.valueOf(lsn.asLong() - 1));
+                LOGGER.debug("Adding '{}' as lsn to the commit times queue", Lsn.valueOf(lsn.asLong() - 1));
                 commitTimes.add(Lsn.valueOf(lsn.asLong() - 1));
             }
         }
@@ -524,7 +520,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             final Lsn changeLsn = Lsn.valueOf((Long) offset.get(PostgresOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
             final Lsn lsn = (commitLsn != null) ? commitLsn : changeLsn;
 
-            LOGGER.info("Received offset commit request on commit LSN '{}' and change LSN '{}'", commitLsn, changeLsn);
+            LOGGER.debug("Received offset commit request on commit LSN '{}' and change LSN '{}'", commitLsn, changeLsn);
             if (replicationStream != null && lsn != null) {
                 if (!lsnFlushingAllowed) {
                     LOGGER.info("Received offset commit request on '{}', but ignoring it. LSN flushing is not allowed yet", lsn);
@@ -539,7 +535,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 }
 
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.info("Flushing LSN to server: {}", finalLsn);
+                    LOGGER.debug("Flushing LSN to server: {}", finalLsn);
                 }
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
                 replicationStream.flushLsn(finalLsn);
@@ -574,7 +570,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         Lsn result = lastSentFeedback;
 
-        LOGGER.info("Queue at this time: {}", commitTimes);
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Queue at this time: {}", commitTimes);
+        }
 
         for (Lsn commitLsn : commitTimes) {
             if (commitLsn.compareTo(lsn) < 0) {
