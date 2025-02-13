@@ -161,11 +161,11 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         final ConfigValue hostnameValue = configValues.get(RelationalDatabaseConnectorConfig.HOSTNAME.name());
         // Try to connect to the database ...
         try (PostgresConnection connection = new PostgresConnection(postgresConfig.getJdbcConfig(),
-                PostgresConnection.CONNECTION_VALIDATE_CONNECTION, postgresConfig.isYbLoadBalanceConnections())) {
+                PostgresConnection.CONNECTION_VALIDATE_CONNECTION, postgresConfig.ybShouldLoadBalanceConnections())) {
             try {
                 // Prepare connection without initial statement execution
                 connection.connection(false);
-                testConnection(connection, postgresConfig.isYbLoadBalanceConnections());
+                testConnection(connection, postgresConfig.ybShouldLoadBalanceConnections());
 
                 // YB Note: This check validates that the WAL level is "logical" - skipping this
                 //          since it is not applicable to YugabyteDB.
@@ -177,7 +177,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             }
             catch (SQLException e) {
                 LOGGER.error("Failed testing connection for {} with user '{}'",
-                        connection.connectionString(postgresConfig.isYbLoadBalanceConnections()),
+                        connection.connectionString(postgresConfig.ybShouldLoadBalanceConnections()),
                                 connection.username(), e);
                 hostnameValue.addErrorMessage("Error while validating connector config: " + e.getMessage());
             }
@@ -238,9 +238,9 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
     }
 
-    private static void testConnection(PostgresConnection connection, Boolean load_balance) throws SQLException {
+    private static void testConnection(PostgresConnection connection, Boolean loadBalance) throws SQLException {
         connection.execute("SELECT version()");
-        LOGGER.info("Successfully tested connection for {} with user '{}'", connection.connectionString(load_balance),
+        LOGGER.info("Successfully tested connection for {} with user '{}'", connection.connectionString(loadBalance),
                 connection.username());
     }
 
@@ -254,7 +254,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     public List<TableId> getMatchingCollections(Configuration config) {
         PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
         try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(),
-                PostgresConnection.CONNECTION_GENERAL, connectorConfig.isYbLoadBalanceConnections())) {
+                PostgresConnection.CONNECTION_GENERAL, connectorConfig.ybShouldLoadBalanceConnections())) {
             return connection.readTableNames(connectorConfig.databaseName(), null, null, new String[]{ "TABLE" }).stream()
                     .filter(tableId -> connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId))
                     .collect(Collectors.toList());

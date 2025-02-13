@@ -132,9 +132,9 @@ public class PostgresConnection extends JdbcConnection {
     }
 
     public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder,
-            String connectionUsage, Boolean load_balance) {
+            String connectionUsage, Boolean loadBalance) {
         this(config, valueConverterBuilder, connectionUsage,
-                PostgresConnectorConfig.getConnectionFactory(config.getHostname(), load_balance));
+                PostgresConnectorConfig.getConnectionFactory(config.getHostname(), loadBalance));
     }
 
     /**
@@ -160,9 +160,9 @@ public class PostgresConnection extends JdbcConnection {
     }
 
     public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage,
-            Boolean load_balance) {
+            Boolean loadBalance) {
         this(config, typeRegistry, connectionUsage,
-                PostgresConnectorConfig.getConnectionFactory(config.getJdbcConfig().getHostname(), load_balance));
+                PostgresConnectorConfig.getConnectionFactory(config.getJdbcConfig().getHostname(), loadBalance));
     }
 
     /**
@@ -172,8 +172,8 @@ public class PostgresConnection extends JdbcConnection {
      * @param config {@link Configuration} instance, may not be null.
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
      */
-    public PostgresConnection(JdbcConfiguration config, String connectionUsage, Boolean load_balance) {
-        this(config, null, connectionUsage, load_balance);
+    public PostgresConnection(JdbcConfiguration config, String connectionUsage, Boolean loadBalance) {
+        this(config, null, connectionUsage, loadBalance);
     }
 
     static JdbcConfiguration addDefaultSettings(JdbcConfiguration configuration, String connectionUsage) {
@@ -189,9 +189,9 @@ public class PostgresConnection extends JdbcConnection {
      *
      * @return a {@code String} where the variables in {@code urlPattern} are replaced with values from the configuration
      */
-    public String connectionString(Boolean load_balance) {
+    public String connectionString(Boolean loadBalance) {
         Pair<String, String> urlPatterns = PostgresConnectorConfig
-                .findAndReplaceLoadBalancePropertyValues(load_balance);
+                .findAndReplaceLoadBalancePropertyValues(loadBalance);
         String hostName = jdbcConfig.getHostname();
         if (hostName.contains(":")) {
             return connectionString(urlPatterns.getFirst());

@@ -96,7 +96,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
             final Charset databaseCharset;
             try (PostgresConnection tempConnection = new PostgresConnection(connectorConfig.getJdbcConfig(),
-                    PostgresConnection.CONNECTION_GENERAL, connectorConfig.isYbLoadBalanceConnections())) {
+                    PostgresConnection.CONNECTION_GENERAL, connectorConfig.ybShouldLoadBalanceConnections())) {
                 databaseCharset = tempConnection.getDatabaseCharset();
             }
 
@@ -107,7 +107,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
             MainConnectionProvidingConnectionFactory<PostgresConnection> connectionFactory = new DefaultMainConnectionProvidingConnectionFactory<>(
                     () -> new PostgresConnection(connectorConfig.getJdbcConfig(), valueConverterBuilder,
-                            PostgresConnection.CONNECTION_GENERAL, connectorConfig.isYbLoadBalanceConnections()));
+                            PostgresConnection.CONNECTION_GENERAL, connectorConfig.ybShouldLoadBalanceConnections()));
             // Global JDBC connection used both for snapshotting and streaming.
             // Must be able to resolve datatypes.
             jdbcConnection = connectionFactory.mainConnection();
@@ -218,7 +218,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                                 schemaNameAdjuster,
                                 () -> new PostgresConnection(connectorConfig.getJdbcConfig(),
                                         PostgresConnection.CONNECTION_GENERAL,
-                                        connectorConfig.isYbLoadBalanceConnections()),
+                                        connectorConfig.ybShouldLoadBalanceConnections()),
                                         exception -> {
                                     String sqlErrorId = exception.getSQLState();
                                     switch (sqlErrorId) {
