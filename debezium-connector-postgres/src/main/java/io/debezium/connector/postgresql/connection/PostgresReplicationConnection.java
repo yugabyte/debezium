@@ -64,6 +64,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     private static Logger LOGGER = LoggerFactory.getLogger(PostgresReplicationConnection.class);
 
     private final String slotName;
+    private final PostgresConnectorConfig.LsnType lsnType;
     private final String publicationName;
     private final RelationalTableFilters tableFilter;
     private final PostgresConnectorConfig.AutoCreateMode publicationAutocreateMode;
@@ -114,6 +115,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
         this.connectorConfig = config;
         this.slotName = slotName;
+        this.lsnType = config.slotLsnType();
         this.publicationName = publicationName;
         this.tableFilter = tableFilter;
         this.publicationAutocreateMode = publicationAutocreateMode;
@@ -140,7 +142,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     }
 
     private ServerInfo.ReplicationSlot getSlotInfo() throws SQLException, InterruptedException {
-        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_SLOT_INFO)) {
+        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(),
+                PostgresConnection.CONNECTION_SLOT_INFO, connectorConfig.ybShouldLoadBalanceConnections())) {
             return connection.readReplicationSlotInfo(slotName, plugin.getPostgresPluginName());
         }
     }
@@ -522,10 +525,11 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
         try (Statement stmt = pgConnection().createStatement()) {
             String createCommand = String.format(
-                    "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s",
+                    "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s %s",
                     slotName,
                     tempPart,
-                    plugin.getPostgresPluginName());
+                    plugin.getPostgresPluginName(),
+                    lsnType.getLsnTypeName());
             LOGGER.info("Creating replication slot with command {}", createCommand);
             stmt.execute(createCommand);
             // when we are in Postgres 9.4+, we can parse the slot creation info,
@@ -804,7 +808,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
         if (dropSlotOnClose && dropSlot) {
             // we're dropping the replication slot via a regular - i.e. not a replication - connection
-            try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_DROP_SLOT)) {
+            try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(),
+                    PostgresConnection.CONNECTION_DROP_SLOT, connectorConfig.ybShouldLoadBalanceConnections())) {
                 connection.dropReplicationSlot(slotName);
             }
             catch (Throwable e) {

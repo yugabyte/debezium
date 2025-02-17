@@ -41,6 +41,7 @@ import io.debezium.connector.postgresql.PostgresValueConverter;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.YugabyteDBServer;
 import io.debezium.connector.postgresql.spi.SlotState;
+import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
 import io.debezium.data.SpecialValueDecimal;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.jdbc.JdbcConnection;
@@ -71,12 +72,18 @@ public class PostgresConnection extends JdbcConnection {
     private static final Pattern EXPRESSION_DEFAULT_PATTERN = Pattern.compile("\\(+(?:.+(?:[+ - * / < > = ~ ! @ # % ^ & | ` ?] ?.+)+)+\\)");
     private static Logger LOGGER = LoggerFactory.getLogger(PostgresConnection.class);
 
-    public static final String MULTI_HOST_URL_PATTERN = "jdbc:yugabytedb://${" + JdbcConfiguration.HOSTNAME + "}/${" + JdbcConfiguration.DATABASE + "}?load-balance=true";
+    public static final String MULTI_HOST_URL_PATTERN = "jdbc:yugabytedb://${" + JdbcConfiguration.HOSTNAME + "}/${"
+            + JdbcConfiguration.DATABASE + "}?load-balance=${" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS
+            + "}";
     public static final String URL_PATTERN = "jdbc:yugabytedb://${" + JdbcConfiguration.HOSTNAME + "}:${"
-            + JdbcConfiguration.PORT + "}/${" + JdbcConfiguration.DATABASE + "}";
+            + JdbcConfiguration.PORT + "}/${" + JdbcConfiguration.DATABASE + "}?load-balance=${"
+            + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS
+            + "}";
     protected static ConnectionFactory FACTORY = JdbcConnection.patternBasedFactory(URL_PATTERN,
             com.yugabyte.Driver.class.getName(),
-            PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
+            PostgresConnection.class.getClassLoader(),
+            JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()),
+            PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS);
 
     /**
      * Obtaining a replication slot may fail if there's a pending transaction. We're retrying to get a slot for 30 min.
@@ -115,10 +122,19 @@ public class PostgresConnection extends JdbcConnection {
             final PostgresValueConverter valueConverter = valueConverterBuilder.build(this.typeRegistry);
             this.defaultValueConverter = new PostgresDefaultValueConverter(valueConverter, this.getTimestampUtils(), typeRegistry);
         }
+
+        try {
+            LOGGER.debug("Setting GUC to disable catalog version check");
+            execute("SET yb_disable_catalog_version_check = true;");
+        } catch (Exception e) {
+            LOGGER.error("Error while setting GUC yb_disable_catalog_version_check", e);
+        }
     }
 
-    public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage) {
-        this(config, valueConverterBuilder, connectionUsage, PostgresConnectorConfig.getConnectionFactory(config.getHostname()));
+    public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder,
+            String connectionUsage, Boolean loadBalance) {
+        this(config, valueConverterBuilder, connectionUsage,
+                PostgresConnectorConfig.getConnectionFactory(config.getHostname(), loadBalance));
     }
 
     /**
@@ -143,8 +159,10 @@ public class PostgresConnection extends JdbcConnection {
         this.jdbcConfig = config.getJdbcConfig();
     }
 
-    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage) {
-        this(config, typeRegistry, connectionUsage, PostgresConnectorConfig.getConnectionFactory(config.getJdbcConfig().getHostname()));
+    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage,
+            Boolean loadBalance) {
+        this(config, typeRegistry, connectionUsage,
+                PostgresConnectorConfig.getConnectionFactory(config.getJdbcConfig().getHostname(), loadBalance));
     }
 
     /**
@@ -154,8 +172,8 @@ public class PostgresConnection extends JdbcConnection {
      * @param config {@link Configuration} instance, may not be null.
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
      */
-    public PostgresConnection(JdbcConfiguration config, String connectionUsage) {
-        this(config, null, connectionUsage);
+    public PostgresConnection(JdbcConfiguration config, String connectionUsage, Boolean loadBalance) {
+        this(config, null, connectionUsage, loadBalance);
     }
 
     static JdbcConfiguration addDefaultSettings(JdbcConfiguration configuration, String connectionUsage) {
@@ -171,12 +189,14 @@ public class PostgresConnection extends JdbcConnection {
      *
      * @return a {@code String} where the variables in {@code urlPattern} are replaced with values from the configuration
      */
-    public String connectionString() {
+    public String connectionString(Boolean loadBalance) {
+        Pair<String, String> urlPatterns = PostgresConnectorConfig
+                .findAndReplaceLoadBalancePropertyValues(loadBalance);
         String hostName = jdbcConfig.getHostname();
         if (hostName.contains(":")) {
-            return connectionString(MULTI_HOST_URL_PATTERN);
+            return connectionString(urlPatterns.getFirst());
         } else {
-            return connectionString(URL_PATTERN);
+            return connectionString(urlPatterns.getSecond());
         }
     }
 
