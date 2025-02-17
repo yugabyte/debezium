@@ -24,7 +24,8 @@ class YugabyteDBSnapshotTaskMetrics extends AbstractYugabyteDBTaskMetrics<Yugaby
                         Collect.linkMapOf(
                                 "server", taskContext.getConnectorName(),
                                 "task", taskContext.getTaskId(),
-                                "context", "snapshot"),
+                                "context", "snapshot",
+                                "partition", partition.getPartitionIdentificationKey()),
                         metadataProvider));
     }
 
