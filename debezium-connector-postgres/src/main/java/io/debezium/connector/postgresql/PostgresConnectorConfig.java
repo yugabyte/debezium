@@ -50,6 +50,7 @@ import io.debezium.connector.postgresql.snapshot.InitialOnlySnapshotter;
 import io.debezium.connector.postgresql.snapshot.InitialSnapshotter;
 import io.debezium.connector.postgresql.snapshot.NeverSnapshotter;
 import io.debezium.connector.postgresql.spi.Snapshotter;
+import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.relational.ColumnFilterMode;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
@@ -633,6 +634,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Pattern YB_HOSTNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9-_.,:]+$");
     public static final int YB_DEFAULT_ERRORS_MAX_RETRIES = 60;
     public static final long YB_DEFAULT_RETRIABLE_RESTART_WAIT = 30000L;
+    public static final boolean YB_DEFAULT_LOAD_BALANCE_CONNECTIONS = true;
 
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
@@ -738,17 +740,22 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDescription("Comma separated values for multiple slot names");
 
-    // TODO: Add validation that this is equal to the slot names.
     public static final Field PUBLICATION_NAMES = Field.create("publication.names")
             .withDisplayName("Publication names for parallel consumption")
             .withImportance(Importance.LOW)
             .withDescription("Comma separated values for multiple publication names");
 
-    // TODO: Add validation on the number of provided ranges.
-    public static final Field SLOT_RANGES = Field.create("slot.ranges")
+    public static final Field RANGES = Field.create("ranges")
             .withDisplayName("Ranges on which a slot is supposed to operate")
             .withImportance(Importance.LOW)
             .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.");
+
+    public static final Field YB_LOAD_BALANCE_CONNECTIONS = Field.create("yb.load.balance.connections")
+            .withDisplayName("YB load balance connections")
+            .withType(Type.BOOLEAN)
+            .withDefault(YB_DEFAULT_LOAD_BALANCE_CONNECTIONS)
+            .withImportance(Importance.LOW)
+            .withDescription("Whether or not to add load-balance property to connection url");
 
     public static final Field MAX_RETRIES_ON_ERROR = Field.create(ERRORS_MAX_RETRIES)
             .withDisplayName("The maximum number of retries")
@@ -1276,6 +1283,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return getConfig().getBoolean(YB_CONSISTENT_SNAPSHOT);
     }
 
+    public boolean ybShouldLoadBalanceConnections() {
+        return getConfig().getBoolean(YB_LOAD_BALANCE_CONNECTIONS);
+    }
+
     protected Snapshotter getSnapshotter() {
         return this.snapshotMode.getSnapshotter(getConfig());
     }
@@ -1309,7 +1320,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     }
 
     public List<String> getSlotRanges() {
-        return List.of(getConfig().getString(SLOT_RANGES).trim().split(";"));
+        return List.of(getConfig().getString(RANGES).trim().split(";"));
     }
 
     @Override
@@ -1386,6 +1397,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     SNAPSHOT_MODE,
                     SNAPSHOT_MODE_CLASS,
                     YB_CONSISTENT_SNAPSHOT,
+                    YB_LOAD_BALANCE_CONNECTIONS,
                     PRIMARY_KEY_HASH_COLUMNS,
                     HSTORE_HANDLING_MODE,
                     BINARY_HANDLING_MODE,
@@ -1440,17 +1452,37 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         }
         return 0;
     }
+    
+    public static Pair<String, String> findAndReplaceLoadBalancePropertyValues(Boolean loadBalance) {
+        String multiHostUrl = PostgresConnection.MULTI_HOST_URL_PATTERN;
+        String singleHostUrl = PostgresConnection.URL_PATTERN;
+        String value = loadBalance.toString();
+
+        if (multiHostUrl.contains("${" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "}")) {
+            multiHostUrl = multiHostUrl.replaceAll(
+                    "\\$\\{" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "\\}", value);
+        }
+
+        if (singleHostUrl.contains("${" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "}")) {
+            singleHostUrl = singleHostUrl.replaceAll(
+                    "\\$\\{" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "\\}", value);
+        }
+
+        return new Pair<>(multiHostUrl, singleHostUrl);
+    }
 
     /**
      * Method to get the connection factory depending on the provided hostname value.
      * @param hostName the host(s) for the PostgreSQL/YugabyteDB instance
      * @return a {@link io.debezium.jdbc.JdbcConnection.ConnectionFactory} instance
      */
-    public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName) {
+    public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName, Boolean loadBalance) {
+        // The first string in the pair contains multi host URL pattern while the second string contains single host URL pattern.
+        Pair<String,String> urlPatterns = findAndReplaceLoadBalancePropertyValues(loadBalance);
         return hostName.contains(":")
-                 ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                 ? JdbcConnection.patternBasedFactory(urlPatterns.getFirst(), com.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
-                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                 : JdbcConnection.patternBasedFactory(urlPatterns.getSecond(), com.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
     }
 

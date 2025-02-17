@@ -64,7 +64,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     protected List<Map<String, String>> getTaskConfigsForParallelStreaming(List<String> slotNames,
                                                                            List<String> publicationNames,
-                                                                           List<String> slotRanges) {
+                                                                           List<String> ranges) {
         List<Map<String, String>> taskConfigs = new ArrayList<>();
 
         for (int i = 0; i < slotNames.size(); ++i) {
@@ -73,7 +73,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             taskProps.put(PostgresConnectorConfig.TASK_ID.name(), String.valueOf(i));
             taskProps.put(PostgresConnectorConfig.SLOT_NAME.name(), slotNames.get(i));
             taskProps.put(PostgresConnectorConfig.PUBLICATION_NAME.name(), publicationNames.get(i));
-            taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(), "hash_range=" + slotRanges.get(i));
+            taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(), "hash_range=" + ranges.get(i));
 
             taskConfigs.add(taskProps);
         }
@@ -97,13 +97,13 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
             List<String> slotNames = connectorConfig.getSlotNames();
             List<String> publicationNames = connectorConfig.getPublicationNames();
-            List<String> slotRanges = connectorConfig.getSlotRanges();
+            List<String> ranges = connectorConfig.getSlotRanges();
 
             YBValidate.slotAndPublicationsAreEqual(slotNames, publicationNames);
-            YBValidate.slotRangesMatchSlotNames(slotNames, slotRanges);
-            YBValidate.completeRangesProvided(slotRanges);
+            YBValidate.slotRangesMatchSlotNames(slotNames, ranges);
+            YBValidate.completeRangesProvided(ranges);
 
-            return getTaskConfigsForParallelStreaming(slotNames, publicationNames, slotRanges);
+            return getTaskConfigsForParallelStreaming(slotNames, publicationNames, ranges);
         }
 
         if (props.containsKey(PostgresConnectorConfig.SNAPSHOT_MODE.name())
@@ -199,11 +199,12 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         final PostgresConnectorConfig postgresConfig = new PostgresConnectorConfig(config);
         final ConfigValue hostnameValue = configValues.get(RelationalDatabaseConnectorConfig.HOSTNAME.name());
         // Try to connect to the database ...
-        try (PostgresConnection connection = new PostgresConnection(postgresConfig.getJdbcConfig(), PostgresConnection.CONNECTION_VALIDATE_CONNECTION)) {
+        try (PostgresConnection connection = new PostgresConnection(postgresConfig.getJdbcConfig(),
+                PostgresConnection.CONNECTION_VALIDATE_CONNECTION, postgresConfig.ybShouldLoadBalanceConnections())) {
             try {
                 // Prepare connection without initial statement execution
                 connection.connection(false);
-                testConnection(connection);
+                testConnection(connection, postgresConfig.ybShouldLoadBalanceConnections());
 
                 // YB Note: This check validates that the WAL level is "logical" - skipping this
                 //          since it is not applicable to YugabyteDB.
@@ -214,8 +215,9 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
                 checkLoginReplicationRoles(connection);
             }
             catch (SQLException e) {
-                LOGGER.error("Failed testing connection for {} with user '{}'", connection.connectionString(),
-                        connection.username(), e);
+                LOGGER.error("Failed testing connection for {} with user '{}'",
+                        connection.connectionString(postgresConfig.ybShouldLoadBalanceConnections()),
+                                connection.username(), e);
                 hostnameValue.addErrorMessage("Error while validating connector config: " + e.getMessage());
             }
         }
@@ -275,9 +277,9 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         }
     }
 
-    private static void testConnection(PostgresConnection connection) throws SQLException {
+    private static void testConnection(PostgresConnection connection, Boolean loadBalance) throws SQLException {
         connection.execute("SELECT version()");
-        LOGGER.info("Successfully tested connection for {} with user '{}'", connection.connectionString(),
+        LOGGER.info("Successfully tested connection for {} with user '{}'", connection.connectionString(loadBalance),
                 connection.username());
     }
 
@@ -290,7 +292,8 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     @Override
     public List<TableId> getMatchingCollections(Configuration config) {
         PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
-        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_GENERAL)) {
+        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(),
+                PostgresConnection.CONNECTION_GENERAL, connectorConfig.ybShouldLoadBalanceConnections())) {
             return connection.readTableNames(connectorConfig.databaseName(), null, null, new String[]{ "TABLE" }).stream()
                     .filter(tableId -> connectorConfig.getTableFilters().dataCollectionFilter().isIncluded(tableId))
                     .collect(Collectors.toList());
