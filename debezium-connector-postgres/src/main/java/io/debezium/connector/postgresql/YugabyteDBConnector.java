@@ -89,9 +89,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
         final String tableIncludeList = props.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name());
 
-        if (props.containsKey(PostgresConnectorConfig.STREAMING_MODE.name())
-                && props.get(PostgresConnectorConfig.STREAMING_MODE.name())
-                    .equalsIgnoreCase(PostgresConnectorConfig.StreamingMode.PARALLEL.getValue())) {
+        if (connectorConfig.streamingMode().isParallel()) {
             LOGGER.info("Initialising parallel streaming mode");
 
             // Validate for a single table.
@@ -101,15 +99,9 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             List<String> publicationNames = connectorConfig.getPublicationNames();
             List<String> slotRanges = connectorConfig.getSlotRanges();
 
-            if (slotNames.size() != publicationNames.size()) {
-                throw new IllegalArgumentException("Number of slots do not match with number of publications provided");
-            }
-
-            if (slotNames.size() != slotRanges.size()) {
-                throw new IllegalArgumentException("Number of slot ranges should be equal to the number of slots provided");
-            }
-
-            // TODO: Add validation that the slots are already created.
+            YBValidate.slotAndPublicationsAreEqual(slotNames, publicationNames);
+            YBValidate.slotRangesMatchSlotNames(slotNames, slotRanges);
+            YBValidate.completeRangesProvided(slotRanges);
 
             return getTaskConfigsForParallelStreaming(slotNames, publicationNames, slotRanges);
         }
