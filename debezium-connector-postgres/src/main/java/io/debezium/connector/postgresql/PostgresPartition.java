@@ -22,11 +22,13 @@ public class PostgresPartition extends AbstractPartition implements Partition {
 
     private final String serverName;
     private final int taskId;
+    private final String slotName;
 
-    public PostgresPartition(String serverName, String databaseName, int taskId) {
+    public PostgresPartition(String serverName, String databaseName, int taskId, String slotName) {
         super(databaseName);
         this.serverName = serverName;
         this.taskId = taskId;
+        this.slotName = slotName;
     }
 
     @Override
@@ -57,7 +59,7 @@ public class PostgresPartition extends AbstractPartition implements Partition {
     }
 
     public String getPartitionIdentificationKey() {
-        return String.format("%s_%d", serverName, taskId);
+        return String.format("%s_%d_%s", serverName, taskId, slotName);
     }
 
     static class Provider implements Partition.Provider<PostgresPartition> {
@@ -73,7 +75,7 @@ public class PostgresPartition extends AbstractPartition implements Partition {
         public Set<PostgresPartition> getPartitions() {
             return Collections.singleton(new PostgresPartition(
                     connectorConfig.getLogicalName(), taskConfig.getString(DATABASE_NAME.name()),
-                    connectorConfig.taskId()));
+                    connectorConfig.taskId(), connectorConfig.slotName()));
         }
     }
 }

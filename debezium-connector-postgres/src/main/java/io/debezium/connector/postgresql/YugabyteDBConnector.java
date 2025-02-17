@@ -41,6 +41,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBConnector.class);
     private Map<String, String> props;
+    private PostgresConnectorConfig connectorConfig;
 
     public YugabyteDBConnector() {
     }
@@ -58,6 +59,26 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
+        this.connectorConfig = new PostgresConnectorConfig(Configuration.from(props));
+    }
+
+    protected List<Map<String, String>> getTaskConfigsForParallelStreaming(List<String> slotNames,
+                                                                           List<String> publicationNames,
+                                                                           List<String> slotRanges) {
+        List<Map<String, String>> taskConfigs = new ArrayList<>();
+
+        for (int i = 0; i < slotNames.size(); ++i) {
+            Map<String, String> taskProps = new HashMap<>(this.props);
+
+            taskProps.put(PostgresConnectorConfig.TASK_ID.name(), String.valueOf(i));
+            taskProps.put(PostgresConnectorConfig.SLOT_NAME.name(), slotNames.get(i));
+            taskProps.put(PostgresConnectorConfig.PUBLICATION_NAME.name(), publicationNames.get(i));
+            taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(), "hash_range=" + slotRanges.get(i));
+
+            taskConfigs.add(taskProps);
+        }
+
+        return taskConfigs;
     }
 
     @Override
@@ -66,14 +87,40 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             return Collections.emptyList();
         }
 
+        final String tableIncludeList = props.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name());
+
+        if (props.containsKey(PostgresConnectorConfig.STREAMING_MODE.name())
+                && props.get(PostgresConnectorConfig.STREAMING_MODE.name())
+                    .equalsIgnoreCase(PostgresConnectorConfig.StreamingMode.PARALLEL.getValue())) {
+            LOGGER.info("Initialising parallel streaming mode");
+
+            // Validate for a single table.
+            validateSingleTableProvided(tableIncludeList, false /* isSnapshot */);
+
+            List<String> slotNames = connectorConfig.getSlotNames();
+            List<String> publicationNames = connectorConfig.getPublicationNames();
+            List<String> slotRanges = connectorConfig.getSlotRanges();
+
+            if (slotNames.size() != publicationNames.size()) {
+                throw new IllegalArgumentException("Number of slots do not match with number of publications provided");
+            }
+
+            if (slotNames.size() != slotRanges.size()) {
+                throw new IllegalArgumentException("Number of slot ranges should be equal to the number of slots provided");
+            }
+
+            // TODO: Add validation that the slots are already created.
+
+            return getTaskConfigsForParallelStreaming(slotNames, publicationNames, slotRanges);
+        }
+
         if (props.containsKey(PostgresConnectorConfig.SNAPSHOT_MODE.name())
                 && props.get(PostgresConnectorConfig.SNAPSHOT_MODE.name())
                     .equalsIgnoreCase(PostgresConnectorConfig.SnapshotMode.PARALLEL.getValue())) {
             LOGGER.info("Initialising parallel snapshot consumption");
 
-            final String tableIncludeList = props.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name());
             // Perform basic validations.
-            validateSingleTableProvidedForParallelSnapshot(tableIncludeList);
+            validateSingleTableProvided(tableIncludeList, true);
 
             // Publication auto create mode should not be for all tables.
             if (props.containsKey(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE.name())
@@ -94,12 +141,12 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         return props == null ? Collections.emptyList() : Collections.singletonList(new HashMap<>(props));
     }
 
-    protected void validateSingleTableProvidedForParallelSnapshot(String tableIncludeList) throws DebeziumException {
+    protected void validateSingleTableProvided(String tableIncludeList, boolean isSnapshot) throws DebeziumException {
         if (tableIncludeList == null) {
             throw new DebeziumException("No table provided, provide a table in the table.include.list");
         } else if (tableIncludeList.contains(",")) {
             // This might indicate the presence of multiple tables in the include list, we do not want that.
-            throw new DebeziumException("parallel snapshot consumption is only supported with one table at a time");
+            throw new DebeziumException("parallel " + (isSnapshot ? "snapshot" : "streaming") + " consumption is only supported with one table at a time");
         }
     }
 
