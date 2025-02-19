@@ -27,10 +27,10 @@ public class YBValidateTest {
     @Test
     public void shouldThrowExceptionWhenSlotsAndSlotRangesDoNotMatch() {
         List<String> slots = List.of("a", "b", "c");
-        List<String> ranges = List.of("0,10", "10,1000");
+        List<String> slotRanges = List.of("0,10", "10,1000");
 
         try {
-            YBValidate.slotRangesMatchSlotNames(slots, ranges);
+            YBValidate.slotRangesMatchSlotNames(slots, slotRanges);
         } catch (DebeziumException ex) {
             assertTrue(ex.getMessage().contains("Number of provided slots does not match the number of provided slot ranges"));
         }
@@ -38,10 +38,10 @@ public class YBValidateTest {
 
     @Test
     public void shouldThrowExceptionWhenEndBoundaryIsMissing() {
-        List<String> ranges = List.of("0,10", "10,1000");
+        List<String> slotRanges = List.of("0,10", "10,1000");
 
         try {
-            YBValidate.completeRangesProvided(ranges);
+            YBValidate.completeRangesProvided(slotRanges);
         } catch (DebeziumException ex) {
             assertTrue(ex.getMessage().contains("Incomplete ranges provided"));
         }
@@ -49,10 +49,10 @@ public class YBValidateTest {
 
     @Test
     public void shouldThrowExceptionWhenMidRangeIsMissing() {
-        List<String> ranges = List.of("0,10", "10,1000", "32768,65536");
+        List<String> slotRanges = List.of("0,10", "10,1000", "32768,65536");
 
         try {
-            YBValidate.completeRangesProvided(ranges);
+            YBValidate.completeRangesProvided(slotRanges);
         } catch (DebeziumException ex) {
             assertTrue(ex.getMessage().contains("Tablet range starting from hash_code"));
         }

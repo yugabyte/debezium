@@ -64,7 +64,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     protected List<Map<String, String>> getTaskConfigsForParallelStreaming(List<String> slotNames,
                                                                            List<String> publicationNames,
-                                                                           List<String> ranges) {
+                                                                           List<String> slotRanges) {
         List<Map<String, String>> taskConfigs = new ArrayList<>();
 
         if (connectorConfig.getSnapshotter().shouldSnapshot()) {
@@ -77,10 +77,10 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             taskProps.put(PostgresConnectorConfig.TASK_ID.name(), String.valueOf(i));
             taskProps.put(PostgresConnectorConfig.SLOT_NAME.name(), slotNames.get(i));
             taskProps.put(PostgresConnectorConfig.PUBLICATION_NAME.name(), publicationNames.get(i));
-            taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(), "hash_range=" + ranges.get(i));
+            taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(), "hash_range=" + slotRanges.get(i));
 
             if (connectorConfig.getSnapshotter().shouldSnapshot()) {
-                String[] splitRange = ranges.get(i).split(",");
+                String[] splitRange = slotRanges.get(i).split(",");
                 String query = getParallelSnapshotQuery(splitRange[0], splitRange[1]);
                 taskProps.put(
                     PostgresConnectorConfig.SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE.name() + "." + taskProps.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name()),
@@ -110,13 +110,13 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
             List<String> slotNames = connectorConfig.getSlotNames();
             List<String> publicationNames = connectorConfig.getPublicationNames();
-            List<String> ranges = connectorConfig.getSlotRanges();
+            List<String> slotRanges = connectorConfig.getSlotRanges();
 
             YBValidate.slotAndPublicationsAreEqual(slotNames, publicationNames);
-            YBValidate.slotRangesMatchSlotNames(slotNames, ranges);
-            YBValidate.completeRangesProvided(ranges);
+            YBValidate.slotRangesMatchSlotNames(slotNames, slotRanges);
+            YBValidate.completeRangesProvided(slotRanges);
 
-            return getTaskConfigsForParallelStreaming(slotNames, publicationNames, ranges);
+            return getTaskConfigsForParallelStreaming(slotNames, publicationNames, slotRanges);
         }
 
         // TODO Vaibhav (#26106): The following code block is not needed now, remove in a separate PR.
