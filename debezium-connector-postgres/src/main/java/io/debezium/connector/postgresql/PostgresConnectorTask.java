@@ -189,11 +189,14 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                     }
                 }
 
-                try {
-                    jdbcConnection.commit();
-                }
-                catch (SQLException e) {
-                    throw new DebeziumException(e);
+                // TODO Vaibhav: Connector works without committing here as well, read more in https://issues.redhat.com/browse/DBZ-2118
+                if (!connectorConfig.streamingMode().isParallel()) {
+                    try {
+                        jdbcConnection.commit();
+                    }
+                    catch (SQLException e) {
+                        throw new DebeziumException(e);
+                    }
                 }
 
                 final PostgresEventMetadataProvider metadataProvider = new PostgresEventMetadataProvider();
