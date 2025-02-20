@@ -533,6 +533,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                     plugin.getPostgresPluginName(),
                     lsnType.getLsnTypeName(),
                     streamingMode.isParallel() ? "USE_SNAPSHOT" : "");
+            LOGGER.info("executing: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+            stmt.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
             LOGGER.info("Creating replication slot with command {}", createCommand);
             stmt.execute(createCommand);
             // when we are in Postgres 9.4+, we can parse the slot creation info,

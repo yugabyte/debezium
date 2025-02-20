@@ -165,6 +165,16 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                     snapshotter.init(connectorConfig, previousOffset.asOffsetState(), slotInfo);
                 }
 
+                // TODO Vaibhav: Read more in https://issues.redhat.com/browse/DBZ-2118
+                if (connectorConfig.streamingMode().isParallel()) {
+                    try {
+                        jdbcConnection.commit();
+                    }
+                    catch (SQLException e) {
+                        throw new DebeziumException(e);
+                    }
+                }
+
                 SlotCreationResult slotCreatedInfo = null;
                 if (snapshotter.shouldStream() || (YugabyteDBServer.isEnabled() && (slotInfo == null))) {
                     replicationConnection = createReplicationConnection(this.taskContext,
@@ -189,7 +199,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                     }
                 }
 
-                // TODO Vaibhav: Connector works without committing here as well, read more in https://issues.redhat.com/browse/DBZ-2118
+                // TODO Vaibhav: Read more in https://issues.redhat.com/browse/DBZ-2118
                 if (!connectorConfig.streamingMode().isParallel()) {
                     try {
                         jdbcConnection.commit();
