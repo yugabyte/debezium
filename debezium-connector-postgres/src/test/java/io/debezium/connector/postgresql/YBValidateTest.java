@@ -49,7 +49,7 @@ public class YBValidateTest {
 
     @Test
     public void shouldThrowExceptionWhenMidRangeIsMissing() {
-        List<String> slotRanges = List.of("0,10", "10,1000", "32768,65536");
+        List<String> slotRanges = List.of("0,6553", "13107,19660", "19660,26214", "26214,32768", "32768,39321", "39321,45875", "45875,52428", "52428,58982", "58982,65536");
 
         try {
             YBValidate.completeRangesProvided(slotRanges);

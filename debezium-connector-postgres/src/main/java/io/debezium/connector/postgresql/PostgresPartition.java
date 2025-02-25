@@ -23,7 +23,6 @@ public class PostgresPartition extends AbstractPartition implements Partition {
     private final String serverName;
     private final String taskId;
     private final String slotName;
-    private final String taskId;
 
     public PostgresPartition(String serverName, String databaseName, String taskId, String slotName) {
         super(databaseName);

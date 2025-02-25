@@ -731,6 +731,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public static final Field STREAMING_MODE = Field.create("streaming.mode")
             .withDisplayName("Streaming mode")
+            .withType(Type.STRING)
             .withImportance(Importance.LOW)
             .withEnum(StreamingMode.class, StreamingMode.DEFAULT)
             .withDescription("Streaming mode the connector should follow");
@@ -738,17 +739,20 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field SLOT_NAMES = Field.create("slot.names")
             .withDisplayName("Slot names for parallel consumption")
             .withImportance(Importance.LOW)
-            .withDescription("Comma separated values for multiple slot names");
+            .withDescription("Comma separated values for multiple slot names")
+            .withValidation(PostgresConnectorConfig::validateUsageWithParallelStreamingMode);
 
     public static final Field PUBLICATION_NAMES = Field.create("publication.names")
             .withDisplayName("Publication names for parallel consumption")
             .withImportance(Importance.LOW)
-            .withDescription("Comma separated values for multiple publication names");
+            .withDescription("Comma separated values for multiple publication names")
+            .withValidation(PostgresConnectorConfig::validateUsageWithParallelStreamingMode);
 
     public static final Field SLOT_RANGES = Field.create("slot.ranges")
             .withDisplayName("Ranges on which a slot is supposed to operate")
             .withImportance(Importance.LOW)
-            .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.");
+            .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.")
+            .withValidation(PostgresConnectorConfig::validateUsageWithParallelStreamingMode);
 
     public static final Field YB_LOAD_BALANCE_CONNECTIONS = Field.create("yb.load.balance.connections")
             .withDisplayName("YB load balance connections")
@@ -1396,7 +1400,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     INCREMENTAL_SNAPSHOT_CHUNK_SIZE,
                     UNAVAILABLE_VALUE_PLACEHOLDER,
                     LOGICAL_DECODING_MESSAGE_PREFIX_INCLUDE_LIST,
-                    LOGICAL_DECODING_MESSAGE_PREFIX_EXCLUDE_LIST)
+                    LOGICAL_DECODING_MESSAGE_PREFIX_EXCLUDE_LIST,
+                    STREAMING_MODE,
+                    SLOT_NAMES,
+                    PUBLICATION_NAMES,
+                    SLOT_RANGES)
             .excluding(INCLUDE_SCHEMA_CHANGES)
             .create();
 
@@ -1573,8 +1581,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return problemCount;
     }
 
-    protected static int validateWithOnlyParallelStreamingMode(Configuration config, Field field, Field.ValidationOutput problems) {
-        String mode = config.getString(STREAMING_MODE.name());
+    protected static int validateUsageWithParallelStreamingMode(Configuration config, Field field, Field.ValidationOutput problems) {
+        String mode = config.getString(STREAMING_MODE);
         int problemCount = 0;
 
         if (!Strings.isNullOrBlank(mode)) {

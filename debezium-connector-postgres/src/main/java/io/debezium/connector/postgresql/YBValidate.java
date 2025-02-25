@@ -2,6 +2,8 @@ package io.debezium.connector.postgresql;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Comparator;
 import java.util.List;
@@ -13,33 +15,36 @@ import java.util.stream.Collectors;
  * @author Vaibhav Kushwaha (vkushwaha@yugabyte.com)
  */
 public class YBValidate {
+    private static final Logger LOGGER = LoggerFactory.getLogger(YBValidate.class);
     private static final String RANGE_BEGIN = "0";
     private static final String RANGE_END = "65536";
 
     public static void completeRangesProvided(List<String> slotRanges) {
-        List<Pair<String, String>> pairList = slotRanges.stream()
+        List<Pair<Integer, Integer>> pairList = slotRanges.stream()
                 .map(entry -> {
                     String[] parts = entry.split(",");
-                    return new Pair<>(parts[0], parts[1]);
+                    return new Pair<>(Integer.valueOf(parts[0]), Integer.valueOf(parts[1]));
                 })
                 .sorted(Comparator.comparing(Pair::getFirst))
                 .collect(Collectors.toList());
 
-        String rangeBegin = RANGE_BEGIN;
+        int rangeBegin = Integer.valueOf(RANGE_BEGIN);
 
-        for (Pair<String, String> pair : pairList) {
-            if (!rangeBegin.equals(pair.getFirst())) {
+        for (Pair<Integer, Integer> pair : pairList) {
+            if (rangeBegin != pair.getFirst()) {
+                LOGGER.error("Error while validating ranges: {}", pairList);
                 throw new DebeziumException(
-                    String.format("Tablet range starting from hash_code %s is missing", rangeBegin));
+                    String.format("Tablet range starting from hash_code %d is missing", rangeBegin));
             }
 
             rangeBegin = pair.getSecond();
         }
 
         // At this point, if the range is complete, rangeBegin will be pointing to the RANGE_END value.
-        if (!rangeBegin.equals(RANGE_END)) {
+        if (rangeBegin != Integer.valueOf(RANGE_END)) {
+            LOGGER.error("Error while validating ranges: {}", pairList);
             throw new DebeziumException(
-                String.format("Incomplete ranges provided. Range starting from hash_code %s is missing", rangeBegin));
+                String.format("Incomplete ranges provided. Range starting from hash_code %d is missing", rangeBegin));
         }
     }
 

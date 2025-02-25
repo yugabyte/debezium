@@ -74,7 +74,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         for (int i = 0; i < slotNames.size(); ++i) {
             Map<String, String> taskProps = new HashMap<>(this.props);
 
-            taskProps.put(PostgresConnectorConfig.TASK_ID.name(), String.valueOf(i));
+            taskProps.put(PostgresConnectorConfig.TASK_ID, String.valueOf(i));
             taskProps.put(PostgresConnectorConfig.SLOT_NAME.name(), slotNames.get(i));
             taskProps.put(PostgresConnectorConfig.PUBLICATION_NAME.name(), publicationNames.get(i));
             taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(), "hash_range=" + slotRanges.get(i));
