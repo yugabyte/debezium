@@ -1585,11 +1585,9 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         String mode = config.getString(STREAMING_MODE);
         int problemCount = 0;
 
-        if (!Strings.isNullOrBlank(mode)) {
-            if (!StreamingMode.parse(mode).isParallel()) {
-                problems.accept(field, config.getString(field), "Configuration is only valid with parallel streaming mode");
-                ++problemCount;
-            }
+        if (!StreamingMode.parse(mode).isParallel()) {
+            problems.accept(field, config.getString(field), "Configuration is only valid with parallel streaming mode");
+            ++problemCount;
         }
 
         return problemCount;
