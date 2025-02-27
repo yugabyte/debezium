@@ -7,7 +7,6 @@ package io.debezium.connector.postgresql;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.debezium.config.Field;
 import org.junit.Test;
 
 import io.debezium.config.ConfigDefinitionMetadataTest;
