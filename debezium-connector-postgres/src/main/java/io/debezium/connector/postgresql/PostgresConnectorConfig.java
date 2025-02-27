@@ -741,7 +741,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDescription("Comma separated values for multiple slot names")
             .withValidation((config, field, output) -> {
-                if (!config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
+                if (!config.getString(field, "").isEmpty() && !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
                     output.accept(field, "", "slot.names is only valid with streaming.mode 'parallel'");
                     return 1;
                 }
@@ -753,7 +753,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDescription("Comma separated values for multiple publication names")
             .withValidation((config, field, output) -> {
-                if (!config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
+                if (!config.getString(field, "").isEmpty() && !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
                     output.accept(field, "", "publication.names is only valid with streaming.mode 'parallel'");
                     return 1;
                 }
@@ -765,7 +765,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.")
             .withValidation((config, field, output) -> {
-                if (!config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
+                if (!config.getString(field, "").isEmpty() && !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
                     output.accept(field, "", "slot.ranges is only valid with streaming.mode 'parallel'");
                     return 1;
                 }
