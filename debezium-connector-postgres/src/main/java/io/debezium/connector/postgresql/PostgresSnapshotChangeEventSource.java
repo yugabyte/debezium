@@ -274,9 +274,9 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     @Override
     protected void aborted(SnapshotContext<PostgresPartition, PostgresOffsetContext> snapshotContext) {
         try {
-            jdbcConnection.commit();
+            jdbcConnection.rollback();
         } catch (SQLException sqle) {
-            LOGGER.error("Exception while committing prior to reporting snapshot abortion {}", sqle);
+            LOGGER.error("Exception while rolling back prior to reporting snapshot abortion {}", sqle);
             throw new DebeziumException(sqle);
         }
 
