@@ -393,6 +393,12 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             public boolean isParallel() {
                 return true;
             }
+        },
+        PARALLEL_SLOT("PARALLEL_SLOT") {
+            @Override
+            public boolean isParallel() {
+                return false;
+            }
         };
 
 
@@ -765,8 +771,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.")
             .withValidation((config, field, output) -> {
-                if (!config.getString(field, "").isEmpty() && !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
-                    output.accept(field, "", "slot.ranges is only valid with streaming.mode 'parallel'");
+                if (!config.getString(field, "").isEmpty()
+                        && (!config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")
+                                || !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel_slot"))) {
+                    output.accept(field, "", "slot.ranges is only valid with streaming.mode 'parallel' or 'parallel_slot'");
                     return 1;
                 }
                 return 0;

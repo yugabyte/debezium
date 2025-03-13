@@ -94,6 +94,34 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         return taskConfigs;
     }
 
+    protected List<Map<String, String>> getTaskConfigsForParallelSlot(List<String> slotRanges) {
+        List<Map<String, String>> taskConfigs = new ArrayList<>();
+
+//        if (connectorConfig.getSnapshotter().shouldSnapshot()) {
+//            props.put(PostgresConnectorConfig.SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE.name(), props.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name()));
+//        }
+
+        for (int i = 0; i < slotRanges.size(); ++i) {
+            Map<String, String> taskProps = new HashMap<>(this.props);
+
+            taskProps.put(PostgresConnectorConfig.TASK_ID, String.valueOf(i));
+            taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(), "hash_range=" + slotRanges.get(i));
+
+//            if (connectorConfig.getSnapshotter().shouldSnapshot()) {
+//                String[] splitRange = slotRanges.get(i).split(",");
+//                String query = getParallelSnapshotQuery(splitRange[0], splitRange[1]);
+//                taskProps.put(
+//                        PostgresConnectorConfig.SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE.name() + "." + taskProps.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name()),
+//                        query
+//                );
+//            }
+
+            taskConfigs.add(taskProps);
+        }
+
+        return taskConfigs;
+    }
+
     @Override
     public List<Map<String, String>> taskConfigs(int maxTasks) {
         if (props == null) {
@@ -117,6 +145,11 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             YBValidate.completeRangesProvided(slotRanges);
 
             return getTaskConfigsForParallelStreaming(slotNames, publicationNames, slotRanges);
+        } else if (connectorConfig.streamingMode().equals(PostgresConnectorConfig.StreamingMode.PARALLEL_SLOT)) {
+            LOGGER.info("Initialising parallel slot streaming mode");
+            validateSingleTableProvided(tableIncludeList, false /* isSnapshot */);
+
+            return getTaskConfigsForParallelSlot(connectorConfig.getSlotRanges());
         }
 
         // TODO Vaibhav (#26106): The following code block is not needed now, remove in a separate PR.
