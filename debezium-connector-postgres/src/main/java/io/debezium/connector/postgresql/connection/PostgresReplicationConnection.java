@@ -531,7 +531,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                     slotName,
                     tempPart,
                     plugin.getPostgresPluginName(),
-                    lsnType.getLsnTypeName(),
+                    lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
                     streamingMode.isParallel() ? "USE_SNAPSHOT" : "");
 
             // Begin a read-only transaction when it is the parallel streaming mode because
