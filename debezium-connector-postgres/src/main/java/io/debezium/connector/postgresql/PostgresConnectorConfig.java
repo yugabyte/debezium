@@ -8,9 +8,12 @@ package io.debezium.connector.postgresql;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import io.debezium.DebeziumException;
@@ -1239,6 +1242,29 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public StreamingMode streamingMode() {
         return StreamingMode.parse(getConfig().getString(STREAMING_MODE));
+    }
+
+    /**
+     * Reads the stream params specified and returns the slot boundaries.
+     * @return a {@link List} where the list represents the range of a
+     * tablet i.e. {@code [startHashCode, endHashCode)}
+     */
+    public List<Integer> getSlotBounds() {
+        String regex = "hash_range=(\\d+),(\\d+)";
+
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(streamParams());
+
+        if (matcher.find()) {
+            // Extract the numbers
+            String start = matcher.group(1);
+            String end = matcher.group(2);
+
+            return List.of(Integer.valueOf(start), Integer.valueOf(end));
+        }
+
+        // Return the full list assuming that we are in the old model.
+        return List.of(0, 65536);
     }
 
     protected boolean dropSlotOnStop() {

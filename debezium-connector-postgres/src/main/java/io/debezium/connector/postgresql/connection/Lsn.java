@@ -5,6 +5,7 @@
  */
 package io.debezium.connector.postgresql.connection;
 
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 
 import com.yugabyte.replication.LogSequenceNumber;
@@ -97,6 +98,23 @@ public class Lsn implements Comparable<Lsn> {
     }
 
     /**
+     * Return a BigInteger equal to the unsigned value of the argument.
+     * Code taken from <a href="https://github.com/AdoptOpenJDK/openjdk-jdk11/blob/master/src/java.base/share/classes/java/lang/Long.java#L241">Long.java</a>
+     */
+    public BigInteger asUnsignedBigInteger() {
+        if (i >= 0L)
+            return BigInteger.valueOf(value);
+        else {
+            int upper = (int) (value >>> 32);
+            int lower = (int) value;
+
+            // return (upper << 32) + lower
+            return (BigInteger.valueOf(Integer.toUnsignedLong(upper))).shiftLeft(32).
+                    add(BigInteger.valueOf(Integer.toUnsignedLong(lower)));
+        }
+    }
+
+    /**
      * @return PostgreSQL JDBC driver representation of position in the write-ahead log stream
      */
     public LogSequenceNumber asLogSequenceNumber() {
@@ -144,7 +162,7 @@ public class Lsn implements Comparable<Lsn> {
 
     @Override
     public String toString() {
-        return "LSN{" + asLong() + '}';
+        return "LSN{" + asUnsignedBigInteger().toString() + '}';
     }
 
     @Override
