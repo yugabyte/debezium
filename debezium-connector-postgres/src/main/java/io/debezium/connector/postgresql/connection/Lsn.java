@@ -102,7 +102,7 @@ public class Lsn implements Comparable<Lsn> {
      * Code taken from <a href="https://github.com/AdoptOpenJDK/openjdk-jdk11/blob/master/src/java.base/share/classes/java/lang/Long.java#L241">Long.java</a>
      */
     public BigInteger asUnsignedBigInteger() {
-        if (i >= 0L)
+        if (value >= 0L)
             return BigInteger.valueOf(value);
         else {
             int upper = (int) (value >>> 32);
