@@ -772,16 +772,16 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field SLOT_RANGES = Field.create("slot.ranges")
             .withDisplayName("Ranges on which a slot is supposed to operate")
             .withImportance(Importance.LOW)
-            .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.")
-            .withValidation((config, field, output) -> {
-                if (!config.getString(field, "").isEmpty()
-                        && (!config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")
-                                || !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel_slot"))) {
-                    output.accept(field, "", "slot.ranges is only valid with streaming.mode 'parallel' or 'parallel_slot'");
-                    return 1;
-                }
-                return 0;
-            });
+            .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.");
+            // .withValidation((config, field, output) -> {
+            //     if (!config.getString(field, "").isEmpty()
+            //             && (!config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")
+            //                     || !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel_slot"))) {
+            //         output.accept(field, "", "slot.ranges is only valid with streaming.mode 'parallel' or 'parallel_slot'");
+            //         return 1;
+            //     }
+            //     return 0;
+            // });
 
     public static final Field YB_LOAD_BALANCE_CONNECTIONS = Field.create("yb.load.balance.connections")
             .withDisplayName("YB load balance connections")
