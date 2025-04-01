@@ -62,7 +62,7 @@ public class PostgresPartition extends AbstractPartition implements Partition {
     }
 
     public String getPartitionIdentificationKey() {
-        return String.format("%s_%s_%s_%s", serverName, taskId, slotName, startHashCode);
+        return String.format("%s_%s_%s", serverName, slotName, startHashCode);
     }
 
     static class Provider implements Partition.Provider<PostgresPartition> {
