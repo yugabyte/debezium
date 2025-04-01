@@ -94,27 +94,25 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         return taskConfigs;
     }
 
-    protected List<Map<String, String>> getTaskConfigsForParallelSlot(List<String> slotRanges) {
+    protected List<Map<String, String>> getTaskConfigsForParallelSlot(int maxTasks) {
         List<Map<String, String>> taskConfigs = new ArrayList<>();
 
-//        if (connectorConfig.getSnapshotter().shouldSnapshot()) {
-//            props.put(PostgresConnectorConfig.SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE.name(), props.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name()));
-//        }
+        final long upperBoundExclusive = 64 * 1024;
+        final long rangeSize = upperBoundExclusive / maxTasks;
 
-        for (int i = 0; i < slotRanges.size(); ++i) {
+        for (int i = 0; i < maxTasks; ++i) {
             Map<String, String> taskProps = new HashMap<>(this.props);
 
-            taskProps.put(PostgresConnectorConfig.TASK_ID, String.valueOf(i));
-            taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(), "hash_range=" + slotRanges.get(i));
+            // The range defined here will be [lowerBound, upperBound) and for the last range,
+            // we will ensure that we are covering the final boundary.
+            long lowerBound = i * rangeSize;
+            long upperBound = (i == maxTasks - 1) ? upperBoundExclusive : (lowerBound + rangeSize);
 
-//            if (connectorConfig.getSnapshotter().shouldSnapshot()) {
-//                String[] splitRange = slotRanges.get(i).split(",");
-//                String query = getParallelSnapshotQuery(splitRange[0], splitRange[1]);
-//                taskProps.put(
-//                        PostgresConnectorConfig.SNAPSHOT_SELECT_STATEMENT_OVERRIDES_BY_TABLE.name() + "." + taskProps.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name()),
-//                        query
-//                );
-//            }
+            LOGGER.info("Creating task {} with range [{}, {})", i, lowerBound, upperBound);
+
+            taskProps.put(PostgresConnectorConfig.TASK_ID, String.valueOf(i));
+            taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(),
+                          String.format("hash_range=%d,%d", lowerBound, upperBound));
 
             taskConfigs.add(taskProps);
         }
@@ -149,7 +147,7 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             LOGGER.info("Initialising parallel slot streaming mode");
             validateSingleTableProvided(tableIncludeList, false /* isSnapshot */);
 
-            return getTaskConfigsForParallelSlot(connectorConfig.getSlotRanges());
+            return getTaskConfigsForParallelSlot(maxTasks);
         }
 
         // TODO Vaibhav (#26106): The following code block is not needed now, remove in a separate PR.
