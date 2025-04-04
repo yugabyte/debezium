@@ -3638,7 +3638,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
-        // snapshot record s1.part
+        // Snapshot record s1.part.
         consumeRecordsByTopic(1);
 
         String insertStmt = "INSERT INTO s1.part (pk, aa) VALUES (1, 1);" +
@@ -3662,17 +3662,15 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(actualRecords.topics()).hasSize(2);
         assertThat(actualRecords.allRecordsInOrder()).hasSize(3);
 
-        // there should be no records for s1.part
-        // and there will be records for the partition tables s1.part1 and s1.part2
+        // There should be no records for s1.part
+        // and there will be records for the partition tables s1.part1 and s1.part2.
         List<SourceRecord> recs = actualRecords.recordsForTopic(topicName("s1.part"));
         List<SourceRecord> part1recs = actualRecords.recordsForTopic(topicName("s1.part1"));
         List<SourceRecord> part2recs = actualRecords.recordsForTopic(topicName("s1.part2"));
         assertThat(recs).isNull();
-        assertThat(part1recs).isNotNull();
-        assertThat(part2recs).isNotNull();
 
-        assertThat(part1recs.size()).isEqualTo(1);
-        assertThat(part2recs.size()).isEqualTo(2);
+        assertThat(part1recs).hasSize(1);
+        assertThat(part2recs).hasSize(2);
 
         YBVerifyRecord.isValidInsert(part1recs.get(0), PK_FIELD, 1);
         YBVerifyRecord.isValidInsert(part2recs.get(0), PK_FIELD, 501);
@@ -3704,7 +3702,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
 
-        // snapshot record s1.part
+        // Snapshot record s1.part.
         consumeRecordsByTopic(1);
 
         String insertStmt = "INSERT INTO s1.part (pk, aa) VALUES (1, 1);" +
@@ -3726,20 +3724,17 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         assertThat(actualRecords.topics()).hasSize(3);
         assertThat(actualRecords.allRecordsInOrder()).hasSize(5);
 
-        // there should be no records for s1.part
-        // and there will be records for s1.part1, s1.part2 and s1.part3
+        // There should be no records for s1.part
+        // and there will be records for s1.part1, s1.part2 and s1.part3.
         List<SourceRecord> recs = actualRecords.recordsForTopic(topicName("s1.part"));
         List<SourceRecord> part1recs = actualRecords.recordsForTopic(topicName("s1.part1"));
         List<SourceRecord> part2recs = actualRecords.recordsForTopic(topicName("s1.part2"));
         List<SourceRecord> part3recs = actualRecords.recordsForTopic(topicName("s1.part3"));
         assertThat(recs).isNull();
-        assertThat(part1recs).isNotNull();
-        assertThat(part2recs).isNotNull();
-        assertThat(part3recs).isNotNull();
 
-        assertThat(part1recs.size()).isEqualTo(2);
-        assertThat(part2recs.size()).isEqualTo(2);
-        assertThat(part3recs.size()).isEqualTo(1);
+        assertThat(part1recs).hasSize(2);
+        assertThat(part2recs).hasSize(2);
+        assertThat(part3recs).hasSize(1);
 
         YBVerifyRecord.isValidInsert(part1recs.get(0), PK_FIELD, 1);
         YBVerifyRecord.isValidInsert(part1recs.get(1), PK_FIELD, 100);
