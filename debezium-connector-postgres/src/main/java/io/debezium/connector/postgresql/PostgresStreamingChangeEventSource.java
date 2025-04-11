@@ -5,6 +5,7 @@
  */
 package io.debezium.connector.postgresql;
 
+import java.math.BigInteger;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.Objects;
@@ -313,10 +314,18 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         }
     }
 
+    public static Short getTabletStartHashCode(Lsn lsn) {
+        return (short) ((lsn.asLong() >> 48) & 0xFFFF);
+    }
+
     private void processReplicationMessages(PostgresPartition partition, PostgresOffsetContext offsetContext, ReplicationStream stream, ReplicationMessage message)
             throws SQLException, InterruptedException {
 
         final Lsn lsn = stream.lastReceivedLsn();
+        final PostgresPartition messagePartition =
+            new PostgresPartition(connectorConfig.getConnectorName(), connectorConfig.databaseName(),
+                                  connectorConfig.getTaskId(), connectorConfig.slotName(),
+                                  String.valueOf(getTabletStartHashCode((lsn))));
 
         if (message.isLastEventForLsn()) {
             lastCompletelyProcessedLsn = lsn;
@@ -346,7 +355,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 // Don't skip on BEGIN message as it would flush LSN for the whole transaction
                 // too early
                 if (message.getOperation() == Operation.COMMIT) {
-                    commitMessage(partition, offsetContext, lsn, message);
+                    commitMessage(messagePartition, offsetContext, lsn, message);
                 }
                 return;
             }
@@ -356,11 +365,11 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     null,
                     message.getOperation());
             if (message.getOperation() == Operation.BEGIN) {
-                dispatcher.dispatchTransactionStartedEvent(partition, toString(message.getTransactionId()), offsetContext, message.getCommitTime());
+                dispatcher.dispatchTransactionStartedEvent(messagePartition, toString(message.getTransactionId()), offsetContext, message.getCommitTime());
             }
             else if (message.getOperation() == Operation.COMMIT) {
-                commitMessage(partition, offsetContext, lsn, message);
-                dispatcher.dispatchTransactionCommittedEvent(partition, offsetContext, message.getCommitTime());
+                commitMessage(messagePartition, offsetContext, lsn, message);
+                dispatcher.dispatchTransactionCommittedEvent(messagePartition, offsetContext, message.getCommitTime());
             }
             maybeWarnAboutGrowingWalBacklog(true);
         }
@@ -371,11 +380,11 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
             // non-transactional message that will not be followed by a COMMIT message
             if (message.isLastEventForLsn()) {
-                commitMessage(partition, offsetContext, lsn, message);
+                commitMessage(messagePartition, offsetContext, lsn, message);
             }
 
             dispatcher.dispatchLogicalDecodingMessage(
-                    partition,
+                    messagePartition,
                     offsetContext,
                     clock.currentTimeAsInstant().toEpochMilli(),
                     (LogicalDecodingMessage) message);
@@ -399,10 +408,10 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     message.getOperation());
 
             boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
-                    partition,
+                    messagePartition,
                     tableId,
                     new PostgresChangeRecordEmitter(
-                            partition,
+                            messagePartition,
                             offsetContext,
                             clock,
                             connectorConfig,
