@@ -176,20 +176,21 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             ctx.offset = offset;
         }
 
-        updateOffsetForSnapshot(offset);
+        updateOffsetForSnapshot(ctx.partition, offset);
     }
 
-    private void updateOffsetForSnapshot(PostgresOffsetContext offset) throws SQLException {
+    private void updateOffsetForSnapshot(PostgresPartition partition, PostgresOffsetContext offset) throws SQLException {
         final Lsn xlogStart = getTransactionStartLsn();
         final Long txId = jdbcConnection.currentTransactionId();
         LOGGER.info("Read xlogStart at '{}' from transaction '{}'", xlogStart, txId);
 
         // use the old xmin, as we don't want to update it if in xmin recovery
-        offset.updateWalPosition(xlogStart, offset.lastCompletelyProcessedLsn(), clock.currentTime(), txId, offset.xmin(), null, null);
+        offset.updateWalPosition(partition, xlogStart, offset.lastCompletelyProcessedLsn(), clock.currentTime(), txId, offset.xmin(), null, null);
     }
 
     protected void updateOffsetForPreSnapshotCatchUpStreaming(PostgresOffsetContext offset) throws SQLException {
-        updateOffsetForSnapshot(offset);
+        // TODO Vaibhav: Comment out temporarily for testing since we do not use this method anyway.
+        // updateOffsetForSnapshot(offset);
         offset.setStreamingStoppingLsn(Lsn.valueOf(jdbcConnection.currentXLogLocation()));
     }
 

@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -86,6 +87,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private PostgresOffsetContext effectiveOffset;
 
     protected ConcurrentLinkedQueue<Lsn> commitTimes;
+    protected ConcurrentHashMap<Long, Long> commitLsnMap;
 
     /**
      * For DEBUGGING
@@ -108,6 +110,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         this.replicationConnection = (PostgresReplicationConnection) replicationConnection;
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
         this.commitTimes = new ConcurrentLinkedQueue<>();
+        this.commitLsnMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -202,7 +205,17 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 connection.commit();
             }
 
+            // TODO Vaibhav: Can we initialize all of our partition LSN values to this?
             this.lastCompletelyProcessedLsn = replicationStream.get().startLsn();
+            // Lsn lastLsn = this.replicationStream.get().lastReceivedLsn();
+
+            LOGGER.info("Start LSN for partition with hash code {} is {}", getTabletStartHashCode(this.lastCompletelyProcessedLsn.asLong()), getLsnValue(this.lastCompletelyProcessedLsn.asLong()));
+            // LOGGER.info("Last LSN for partition with hash code {} is {}", getTabletStartHashCode(lastLsn.asLong()), getLsnValue(lastLsn.asLong()));
+
+            // if (connectorConfig.streamingMode().isParallelSlot()) {
+            //     LOGGER.info("Searching WAL position for parallel slot");
+            //     searchWalPosition(context, partition, this.effectiveOffset, stream, walPosition);
+            // }
 
             // Against YB, filtering of records based on Wal position is only enabled when connector config provide.transaction.metadata is set to false.
             if (!YugabyteDBServer.isEnabled() || (YugabyteDBServer.isEnabled() && !connectorConfig.shouldProvideTransactionMetadata())) {
@@ -314,8 +327,12 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         }
     }
 
-    public static Short getTabletStartHashCode(Lsn lsn) {
-        return (short) ((lsn.asLong() >> 48) & 0xFFFF);
+    public static long getTabletStartHashCode(long lsnLongValue) {
+        return ((lsnLongValue >> 48) & 0xFFFF);
+    }
+
+    public static long getLsnValue(long lsnLongValue) {
+        return (lsnLongValue & 0x0000FFFFFFFFFFFFL);
     }
 
     private void processReplicationMessages(PostgresPartition partition, PostgresOffsetContext offsetContext, ReplicationStream stream, ReplicationMessage message)
@@ -325,7 +342,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         final PostgresPartition messagePartition =
             new PostgresPartition(connectorConfig.getConnectorName(), connectorConfig.databaseName(),
                                   connectorConfig.getTaskId(), connectorConfig.slotName(),
-                                  String.valueOf(getTabletStartHashCode((lsn))));
+                                  String.valueOf(getTabletStartHashCode((lsn.asLong()))));
 
         if (message.isLastEventForLsn()) {
             lastCompletelyProcessedLsn = lsn;
@@ -360,7 +377,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 return;
             }
 
-            offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
+            offsetContext.updateWalPosition(messagePartition, lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
                     taskContext.getSlotXmin(connection),
                     null,
                     message.getOperation());
@@ -374,7 +391,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             maybeWarnAboutGrowingWalBacklog(true);
         }
         else if (message.getOperation() == Operation.MESSAGE) {
-            offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
+            offsetContext.updateWalPosition(messagePartition, lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
                     taskContext.getSlotXmin(connection),
                     message.getOperation());
 
@@ -402,11 +419,6 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                 Objects.requireNonNull(tableId);
             }
 
-            offsetContext.updateWalPosition(lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
-                    taskContext.getSlotXmin(connection),
-                    tableId,
-                    message.getOperation());
-
             boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
                     messagePartition,
                     tableId,
@@ -419,6 +431,11 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                             connection,
                             tableId,
                             message));
+            
+            offsetContext.updateWalPosition(messagePartition, lsn, lastCompletelyProcessedLsn, message.getCommitTime(), toLong(message.getTransactionId()),
+                                            taskContext.getSlotXmin(connection),
+                                            tableId,
+                                            message.getOperation());
 
             maybeWarnAboutGrowingWalBacklog(dispatched);
         }
@@ -474,7 +491,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
     private void commitMessage(PostgresPartition partition, PostgresOffsetContext offsetContext, final Lsn lsn, ReplicationMessage message) throws SQLException, InterruptedException {
         lastCompletelyProcessedLsn = lsn;
-        offsetContext.updateCommitPosition(lsn, lastCompletelyProcessedLsn);
+        offsetContext.updateCommitPosition(partition, lsn, lastCompletelyProcessedLsn);
 
         if (this.connectorConfig.slotLsnType().isHybridTime()) {
             if (message.getOperation() == Operation.COMMIT) {
@@ -527,37 +544,66 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     public void commitOffset(Map<String, ?> partition, Map<String, ?> offset) {
         try {
             ReplicationStream replicationStream = this.replicationStream.get();
-            final Lsn commitLsn = Lsn.valueOf((Long) offset.get(PostgresOffsetContext.LAST_COMMIT_LSN_KEY));
-            final Lsn changeLsn = Lsn.valueOf((Long) offset.get(PostgresOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
-            final Lsn lsn = (commitLsn != null) ? commitLsn : changeLsn;
-
-            LOGGER.debug("Received offset commit request on commit LSN '{}' and change LSN '{}'", commitLsn, changeLsn);
-            if (replicationStream != null && lsn != null) {
-                if (!lsnFlushingAllowed) {
-                    LOGGER.info("Received offset commit request on '{}', but ignoring it. LSN flushing is not allowed yet", lsn);
+            if (this.connectorConfig.streamingMode().isParallelSlot()) {
+                // In parallel mode, we don't have a single offset to commit, but rather
+                // a set of offsets for each partition. We need to commit the offset for
+                // the partition that is being processed.
+                if (replicationStream == null) {
+                    LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
+                } else if (!lsnFlushingAllowed) {
+                    LOGGER.info("Received offset commit request but ignoring it. LSN flushing is not allowed yet");
                     return;
-                }
-
-                Lsn finalLsn;
-                if (this.connectorConfig.slotLsnType().isHybridTime()) {
-                    finalLsn = getLsnToBeFlushed(lsn);
                 } else {
-                    finalLsn = lsn;
-                }
+                    for (Map.Entry<String, ?> entry : offset.entrySet()) {
+                        final long lsnAck = (Long) entry.getValue();
+                        final long startHash = getTabletStartHashCode(lsnAck);
+                        final long lsnValue = getLsnValue(lsnAck);
+                        if (this.commitLsnMap.contains(startHash) && this.commitLsnMap.get(startHash) > lsnValue) {
+                            // Current offset is less than the last flushed offset for this partition.
+                            LOGGER.info("{} | Skipping commit LSN {} for partition with start hash {}", taskContext.getTaskId(), lsnValue, startHash);
+                            continue;
+                        }
 
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Flushing LSN to server: {}", finalLsn);
-                }
-                // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
-                replicationStream.flushLsn(finalLsn);
-
-                if (this.connectorConfig.slotLsnType().isHybridTime()) {
-                    lastSentFeedback = finalLsn;
-                    cleanCommitTimeQueue(finalLsn);
+                        // TODO Vaibhav: This log is only at info level during testing.
+                        LOGGER.info("{} | Flushing lsn {} for partition with start hash {}", taskContext.getTaskId(), lsnValue, startHash);
+                        this.commitLsnMap.put(startHash, lsnValue);
+                        replicationStream.flushLsn(Lsn.valueOf(lsnAck));
+                    }
                 }
             }
             else {
-                LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
+                final Lsn commitLsn = Lsn.valueOf((Long) offset.get(PostgresOffsetContext.LAST_COMMIT_LSN_KEY));
+                final Lsn changeLsn = Lsn.valueOf((Long) offset.get(PostgresOffsetContext.LAST_COMPLETELY_PROCESSED_LSN_KEY));
+                final Lsn lsn = (commitLsn != null) ? commitLsn : changeLsn;
+
+                LOGGER.debug("Received offset commit request on commit LSN '{}' and change LSN '{}'", commitLsn, changeLsn);
+                if (replicationStream != null && lsn != null) {
+                    if (!lsnFlushingAllowed) {
+                        LOGGER.info("Received offset commit request on '{}', but ignoring it. LSN flushing is not allowed yet", lsn);
+                        return;
+                    }
+
+                    Lsn finalLsn;
+                    if (this.connectorConfig.slotLsnType().isHybridTime()) {
+                        finalLsn = getLsnToBeFlushed(lsn);
+                    } else {
+                        finalLsn = lsn;
+                    }
+
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("Flushing LSN to server: {}", finalLsn);
+                    }
+                    // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
+                    replicationStream.flushLsn(finalLsn);
+
+                    if (this.connectorConfig.slotLsnType().isHybridTime()) {
+                        lastSentFeedback = finalLsn;
+                        cleanCommitTimeQueue(finalLsn);
+                    }
+                }
+                else {
+                    LOGGER.debug("Streaming has already stopped, ignoring commit callback...");
+                }
             }
         }
         catch (SQLException e) {

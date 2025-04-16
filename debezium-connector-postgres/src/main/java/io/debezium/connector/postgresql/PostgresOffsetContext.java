@@ -9,6 +9,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -43,6 +44,8 @@ public class PostgresOffsetContext extends CommonOffsetContext<SourceInfo> {
     private Lsn streamingStoppingLsn = null;
     private final TransactionContext transactionContext;
     private final IncrementalSnapshotContext<TableId> incrementalSnapshotContext;
+    private final Map<String, SourceInfo> partitionSourceInfo;
+    private final PostgresConnectorConfig connectorConfig;
 
     private PostgresOffsetContext(PostgresConnectorConfig connectorConfig, Lsn lsn, Lsn lastCompletelyProcessedLsn, Lsn lastCommitLsn, Long txId, Operation messageType,
                                   Instant time,
@@ -66,37 +69,48 @@ public class PostgresOffsetContext extends CommonOffsetContext<SourceInfo> {
         }
         this.transactionContext = transactionContext;
         this.incrementalSnapshotContext = incrementalSnapshotContext;
+        this.connectorConfig = connectorConfig;
+        this.partitionSourceInfo = new ConcurrentHashMap<>();
     }
 
     @Override
     public Map<String, ?> getOffset() {
+        // Map<String, Object> result = new HashMap<>();
+        // if (sourceInfo.timestamp() != null) {
+        //     result.put(SourceInfo.TIMESTAMP_USEC_KEY, Conversions.toEpochMicros(sourceInfo.timestamp()));
+        // }
+        // if (sourceInfo.txId() != null) {
+        //     result.put(SourceInfo.TXID_KEY, sourceInfo.txId());
+        // }
+        // if (sourceInfo.lsn() != null) {
+        //     result.put(SourceInfo.LSN_KEY, sourceInfo.lsn().asLong());
+        // }
+        // if (sourceInfo.xmin() != null) {
+        //     result.put(SourceInfo.XMIN_KEY, sourceInfo.xmin());
+        // }
+        // if (sourceInfo.isSnapshot()) {
+        //     result.put(SourceInfo.SNAPSHOT_KEY, true);
+        //     result.put(SourceInfo.LAST_SNAPSHOT_RECORD_KEY, lastSnapshotRecord);
+        // }
+        // if (lastCompletelyProcessedLsn != null) {
+        //     result.put(LAST_COMPLETELY_PROCESSED_LSN_KEY, lastCompletelyProcessedLsn.asLong());
+        // }
+        // if (lastCommitLsn != null) {
+        //     result.put(LAST_COMMIT_LSN_KEY, lastCommitLsn.asLong());
+        // }
+        // if (sourceInfo.messageType() != null) {
+        //     result.put(SourceInfo.MSG_TYPE_KEY, sourceInfo.messageType().toString());
+        // }
+        // return sourceInfo.isSnapshot() ? result : incrementalSnapshotContext.store(transactionContext.store(result));
+
         Map<String, Object> result = new HashMap<>();
-        if (sourceInfo.timestamp() != null) {
-            result.put(SourceInfo.TIMESTAMP_USEC_KEY, Conversions.toEpochMicros(sourceInfo.timestamp()));
+
+        for (Map.Entry<String, SourceInfo> entry : this.partitionSourceInfo.entrySet()) {
+            // Key here is the identification key of the partition.
+            result.put(entry.getKey(), entry.getValue().lsn().asLong());
         }
-        if (sourceInfo.txId() != null) {
-            result.put(SourceInfo.TXID_KEY, sourceInfo.txId());
-        }
-        if (sourceInfo.lsn() != null) {
-            result.put(SourceInfo.LSN_KEY, sourceInfo.lsn().asLong());
-        }
-        if (sourceInfo.xmin() != null) {
-            result.put(SourceInfo.XMIN_KEY, sourceInfo.xmin());
-        }
-        if (sourceInfo.isSnapshot()) {
-            result.put(SourceInfo.SNAPSHOT_KEY, true);
-            result.put(SourceInfo.LAST_SNAPSHOT_RECORD_KEY, lastSnapshotRecord);
-        }
-        if (lastCompletelyProcessedLsn != null) {
-            result.put(LAST_COMPLETELY_PROCESSED_LSN_KEY, lastCompletelyProcessedLsn.asLong());
-        }
-        if (lastCommitLsn != null) {
-            result.put(LAST_COMMIT_LSN_KEY, lastCommitLsn.asLong());
-        }
-        if (sourceInfo.messageType() != null) {
-            result.put(SourceInfo.MSG_TYPE_KEY, sourceInfo.messageType().toString());
-        }
-        return sourceInfo.isSnapshot() ? result : incrementalSnapshotContext.store(transactionContext.store(result));
+
+        return result;
     }
 
     @Override
@@ -120,21 +134,33 @@ public class PostgresOffsetContext extends CommonOffsetContext<SourceInfo> {
         lastSnapshotRecord = true;
     }
 
-    public void updateWalPosition(Lsn lsn, Lsn lastCompletelyProcessedLsn, Instant commitTime, Long txId, Long xmin, TableId tableId, Operation messageType) {
+    public void updateWalPosition(PostgresPartition partition, Lsn lsn, Lsn lastCompletelyProcessedLsn, Instant commitTime, Long txId, Long xmin, TableId tableId, Operation messageType) {
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
-        sourceInfo.update(lsn, commitTime, txId, xmin, tableId, messageType);
+        SourceInfo info = this.partitionSourceInfo.get(partition.getPartitionIdentificationKey());
+        if (info == null) {
+            info = new SourceInfo(this.connectorConfig);
+            this.partitionSourceInfo.put(partition.getPartitionIdentificationKey(), info);
+        }
+        info.update(lsn, commitTime, txId, xmin, tableId, messageType);
     }
 
     /**
      * update wal position for lsn events that do not have an associated table or schema
      */
-    public void updateWalPosition(Lsn lsn, Lsn lastCompletelyProcessedLsn, Instant commitTime, Long txId, Long xmin, Operation messageType) {
-        updateWalPosition(lsn, lastCompletelyProcessedLsn, commitTime, txId, xmin, null, messageType);
+    public void updateWalPosition(PostgresPartition partition, Lsn lsn, Lsn lastCompletelyProcessedLsn, Instant commitTime, Long txId, Long xmin, Operation messageType) {
+        updateWalPosition(partition, lsn, lastCompletelyProcessedLsn, commitTime, txId, xmin, null, messageType);
     }
 
-    public void updateCommitPosition(Lsn lsn, Lsn lastCompletelyProcessedLsn) {
+    public void updateCommitPosition(PostgresPartition partition, Lsn lsn, Lsn lastCompletelyProcessedLsn) {
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
         this.lastCommitLsn = lsn;
+
+        SourceInfo info = this.partitionSourceInfo.get(partition.getPartitionIdentificationKey());
+        if (info == null) {
+            info = new SourceInfo(this.connectorConfig);
+            this.partitionSourceInfo.put(partition.getPartitionIdentificationKey(), info);
+        }
+
         sourceInfo.updateLastCommit(lsn);
     }
 

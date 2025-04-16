@@ -390,17 +390,32 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             public boolean isParallel() {
                 return false;
             }
+
+            @Override
+            public boolean isParallelSlot() {
+                return false;
+            }
         },
         PARALLEL("PARALLEL") {
             @Override
             public boolean isParallel() {
                 return true;
             }
+
+            @Override
+            public boolean isParallelSlot() {
+                return false;
+            }
         },
         PARALLEL_SLOT("PARALLEL_SLOT") {
             @Override
             public boolean isParallel() {
                 return false;
+            }
+
+            @Override
+            public boolean isParallelSlot() {
+                return true;
             }
         };
 
@@ -421,6 +436,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         }
 
         public abstract boolean isParallel();
+        public abstract boolean isParallelSlot();
     }
 
     public enum LsnType implements EnumeratedValue {
