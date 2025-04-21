@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import io.debezium.connector.postgresql.metrics.YugabyteDBMetricsFactory;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -67,13 +68,25 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
     private volatile PostgresConnection beanRegistryJdbcConnection;
     private volatile ReplicationConnection replicationConnection = null;
 
-    private volatile ErrorHandler errorHandler;
+    private volatile PostgresErrorHandler errorHandler;
     private volatile PostgresSchema schema;
+
+    public static boolean TEST_THROW_ERROR_BEFORE_COORDINATOR_STARTUP = false;
 
     @Override
     public ChangeEventSourceCoordinator<PostgresPartition, PostgresOffsetContext> start(Configuration config) {
+        final PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
+        queue = new ChangeEventQueue.Builder<DataChangeEvent>()
+                .pollInterval(connectorConfig.getPollInterval())
+                .maxBatchSize(connectorConfig.getMaxBatchSize())
+                .maxQueueSize(connectorConfig.getMaxQueueSize())
+                .maxQueueSizeInBytes(connectorConfig.getMaxQueueSizeInBytes())
+                .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
+                .build();
+
+        errorHandler = new PostgresErrorHandler(connectorConfig, queue, errorHandler);
+
         try {
-            final PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
             final TopicNamingStrategy<TableId> topicNamingStrategy = connectorConfig.getTopicNamingStrategy(CommonConnectorConfig.TOPIC_NAMING_STRATEGY);
             final Snapshotter snapshotter = connectorConfig.getSnapshotter();
             final SchemaNameAdjuster schemaNameAdjuster = connectorConfig.schemaNameAdjuster();
@@ -83,7 +96,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             }
 
             final Charset databaseCharset;
-            try (PostgresConnection tempConnection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_GENERAL)) {
+            try (PostgresConnection tempConnection = new PostgresConnection(connectorConfig.getJdbcConfig(),
+                    PostgresConnection.CONNECTION_GENERAL, connectorConfig.ybShouldLoadBalanceConnections())) {
                 databaseCharset = tempConnection.getDatabaseCharset();
             }
 
@@ -93,7 +107,8 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                     typeRegistry);
 
             MainConnectionProvidingConnectionFactory<PostgresConnection> connectionFactory = new DefaultMainConnectionProvidingConnectionFactory<>(
-                    () -> new PostgresConnection(connectorConfig.getJdbcConfig(), valueConverterBuilder, PostgresConnection.CONNECTION_GENERAL));
+                    () -> new PostgresConnection(connectorConfig.getJdbcConfig(), valueConverterBuilder,
+                            PostgresConnection.CONNECTION_GENERAL, connectorConfig.ybShouldLoadBalanceConnections()));
             // Global JDBC connection used both for snapshotting and streaming.
             // Must be able to resolve datatypes.
             jdbcConnection = connectionFactory.mainConnection();
@@ -109,9 +124,10 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             final PostgresValueConverter valueConverter = valueConverterBuilder.build(typeRegistry);
 
             schema = new PostgresSchema(connectorConfig, defaultValueConverter, topicNamingStrategy, valueConverter);
-            this.taskContext = new PostgresTaskContext(connectorConfig, schema, topicNamingStrategy, connectorConfig.taskId());
+            this.taskContext = new PostgresTaskContext(connectorConfig, schema, topicNamingStrategy, connectorConfig.getTaskId());
+            final PostgresPartition.Provider partitionProvider = new PostgresPartition.Provider(connectorConfig, config);
             final Offsets<PostgresPartition, PostgresOffsetContext> previousOffsets = getPreviousOffsets(
-                    new PostgresPartition.Provider(connectorConfig, config), new PostgresOffsetContext.Loader(connectorConfig));
+                    partitionProvider, new PostgresOffsetContext.Loader(connectorConfig));
             final Clock clock = Clock.system();
             final PostgresOffsetContext previousOffset = previousOffsets.getTheOnlyOffset();
 
@@ -149,6 +165,26 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                 else {
                     LOGGER.info("Found previous offset {}", previousOffset);
                     snapshotter.init(connectorConfig, previousOffset.asOffsetState(), slotInfo);
+
+                    // If previous offset is present that means that the connector is being restarted.
+                    if (snapshotter.shouldSnapshot() && connectorConfig.streamingMode().isParallel()) {
+                        // Drop existing slot so that a new slot can be created.
+                        LOGGER.info("Dropping existing replication slot '{}' since task restarted before snapshot was completed", connectorConfig.slotName());
+                        jdbcConnection.execute(String.format("SELECT * FROM pg_drop_replication_slot('%s')", connectorConfig.slotName()));
+
+                        // Set slotInfo to null so that slot can be created again.
+                        slotInfo = null;
+                    }
+                }
+
+                // TODO Vaibhav: Read more in https://issues.redhat.com/browse/DBZ-2118
+                if (connectorConfig.streamingMode().isParallel()) {
+                    try {
+                        jdbcConnection.commit();
+                    }
+                    catch (SQLException e) {
+                        throw new DebeziumException(e);
+                    }
                 }
 
                 SlotCreationResult slotCreatedInfo = null;
@@ -175,22 +211,15 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                     }
                 }
 
-                try {
-                    jdbcConnection.commit();
+                // TODO Vaibhav: Read more in https://issues.redhat.com/browse/DBZ-2118
+                if (!connectorConfig.streamingMode().isParallel()) {
+                    try {
+                        jdbcConnection.commit();
+                    }
+                    catch (SQLException e) {
+                        throw new DebeziumException(e);
+                    }
                 }
-                catch (SQLException e) {
-                    throw new DebeziumException(e);
-                }
-
-                queue = new ChangeEventQueue.Builder<DataChangeEvent>()
-                        .pollInterval(connectorConfig.getPollInterval())
-                        .maxBatchSize(connectorConfig.getMaxBatchSize())
-                        .maxQueueSize(connectorConfig.getMaxQueueSize())
-                        .maxQueueSizeInBytes(connectorConfig.getMaxQueueSizeInBytes())
-                        .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
-                        .build();
-
-                errorHandler = new PostgresErrorHandler(connectorConfig, queue, errorHandler);
 
                 final PostgresEventMetadataProvider metadataProvider = new PostgresEventMetadataProvider();
 
@@ -212,8 +241,10 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                         connectorConfig.createHeartbeat(
                                 topicNamingStrategy,
                                 schemaNameAdjuster,
-                                () -> new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_GENERAL),
-                                exception -> {
+                                () -> new PostgresConnection(connectorConfig.getJdbcConfig(),
+                                        PostgresConnection.CONNECTION_GENERAL,
+                                        connectorConfig.ybShouldLoadBalanceConnections()),
+                                        exception -> {
                                     String sqlErrorId = exception.getSQLState();
                                     switch (sqlErrorId) {
                                         case "57P01":
@@ -249,13 +280,17 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                                 replicationConnection,
                                 slotCreatedInfo,
                                 slotInfo),
-                        new DefaultChangeEventSourceMetricsFactory<>(),
+                        new YugabyteDBMetricsFactory(partitionProvider.getPartitions()),
                         dispatcher,
                         schema,
                         snapshotter,
                         slotInfo,
                         signalProcessor,
                         notificationService);
+
+                if (TEST_THROW_ERROR_BEFORE_COORDINATOR_STARTUP) {
+                    throw new RuntimeException("[Test Only] Throwing error before starting coordinator");
+                }
 
                 coordinator.start(taskContext, this.queue, metadataProvider);
 
@@ -265,11 +300,16 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
             }
         }
         catch (Exception exception) {
-            // YB Note: Catch all the exceptions and retry.
-            LOGGER.warn("Received exception, will be retrying", exception);
-            throw new RetriableException(exception);
-        }
+            LOGGER.warn("Received exception, will be setting producer throwable", exception);
+            errorHandler.setProducerThrowable(new RetriableException(exception));
 
+            if (!errorHandler.isRetryRemaining()) {
+                throw new ConnectException("Maximum number of retries attempted, manually restart "
+                    + "the connector after fixing the error", exception);
+            } else {
+                throw new RetriableException(exception);
+            }
+        }
     }
 
     public ReplicationConnection createReplicationConnection(PostgresTaskContext taskContext, int maxRetries, Duration retryDelay)

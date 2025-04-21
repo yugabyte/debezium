@@ -50,6 +50,7 @@ import io.debezium.connector.postgresql.snapshot.InitialOnlySnapshotter;
 import io.debezium.connector.postgresql.snapshot.InitialSnapshotter;
 import io.debezium.connector.postgresql.snapshot.NeverSnapshotter;
 import io.debezium.connector.postgresql.spi.Snapshotter;
+import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.relational.ColumnFilterMode;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
@@ -380,6 +381,95 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         }
     }
 
+    public enum StreamingMode implements EnumeratedValue {
+        DEFAULT("DEFAULT") {
+            @Override
+            public boolean isParallel() {
+                return false;
+            }
+        },
+        PARALLEL("PARALLEL") {
+            @Override
+            public boolean isParallel() {
+                return true;
+            }
+        };
+
+
+        private final String streamingMode;
+
+        StreamingMode(String streamingMode) {
+            this.streamingMode = streamingMode;
+        }
+
+        public static StreamingMode parse(String s) {
+            return valueOf(s.trim().toUpperCase());
+        }
+
+        @Override
+        public String getValue() {
+            return streamingMode;
+        }
+
+        public abstract boolean isParallel();
+    }
+
+    public enum LsnType implements EnumeratedValue {
+        SEQUENCE("SEQUENCE") {
+            @Override
+            public String getLsnTypeName() {
+                return getValue();
+            }
+
+            @Override
+            public boolean isSequence() {
+                return true;
+            }
+
+            @Override
+            public boolean isHybridTime() {
+                return false;
+            }
+        },
+        HYBRID_TIME("HYBRID_TIME") {
+            @Override
+            public String getLsnTypeName() {
+                return getValue();
+            }
+
+            @Override
+            public boolean isSequence() {
+                return false;
+            }
+
+            @Override
+            public boolean isHybridTime() {
+                return true;
+            }
+        };
+
+        private final String lsnTypeName;
+
+        LsnType(String lsnTypeName) {
+            this.lsnTypeName = lsnTypeName;
+        }
+
+        public static LsnType parse(String s) {
+            return valueOf(s.trim().toUpperCase());
+        }
+
+        @Override
+        public String getValue() {
+            return lsnTypeName;
+        }
+
+        public abstract boolean isSequence();
+
+        public abstract boolean isHybridTime();
+
+        public abstract String getLsnTypeName();
+    }
+
     public enum LogicalDecoder implements EnumeratedValue {
         PGOUTPUT("pgoutput") {
             @Override
@@ -542,6 +632,9 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     protected static final int DEFAULT_SNAPSHOT_FETCH_SIZE = 10_240;
     protected static final int DEFAULT_MAX_RETRIES = 6;
     public static final Pattern YB_HOSTNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9-_.,:]+$");
+    public static final int YB_DEFAULT_ERRORS_MAX_RETRIES = 60;
+    public static final long YB_DEFAULT_RETRIABLE_RESTART_WAIT = 30000L;
+    public static final boolean YB_DEFAULT_LOAD_BALANCE_CONNECTIONS = true;
 
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
@@ -577,6 +670,14 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     + "' and '" + LogicalDecoder.YBOUTPUT.getValue()
                     + "'. " +
                     "Defaults to '" + LogicalDecoder.YBOUTPUT.getValue() + "'.");
+
+    public static final Field SLOT_LSN_TYPE = Field.create("slot.lsn.type")
+            .withDisplayName("Slot LSN type")
+            .withType(Type.STRING)
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.MEDIUM)
+            .withEnum(LsnType.class, LsnType.SEQUENCE)
+            .withDescription("LSN type being used with the replication slot");
 
     public static final Field SLOT_NAME = Field.create("slot.name")
             .withDisplayName("Slot")
@@ -627,6 +728,78 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDescription("Whether or not to take a consistent snapshot of the tables." +
                            "Disabling this option may result in duplication of some already snapshot data in the streaming phase.");
+
+    public static final Field STREAMING_MODE = Field.create("streaming.mode")
+            .withDisplayName("Streaming mode")
+            .withType(Type.STRING)
+            .withImportance(Importance.LOW)
+            .withEnum(StreamingMode.class, StreamingMode.DEFAULT)
+            .withDescription("Streaming mode the connector should follow");
+
+    public static final Field SLOT_NAMES = Field.create("slot.names")
+            .withDisplayName("Slot names for parallel consumption")
+            .withImportance(Importance.LOW)
+            .withDescription("Comma separated values for multiple slot names")
+            .withValidation((config, field, output) -> {
+                if (!config.getString(field, "").isEmpty() && !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
+                    output.accept(field, "", "slot.names is only valid with streaming.mode 'parallel'");
+                    return 1;
+                }
+                return 0;
+            });
+
+    public static final Field PUBLICATION_NAMES = Field.create("publication.names")
+            .withDisplayName("Publication names for parallel consumption")
+            .withImportance(Importance.LOW)
+            .withDescription("Comma separated values for multiple publication names")
+            .withValidation((config, field, output) -> {
+                if (!config.getString(field, "").isEmpty() && !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
+                    output.accept(field, "", "publication.names is only valid with streaming.mode 'parallel'");
+                    return 1;
+                }
+                return 0;
+            });
+
+    public static final Field SLOT_RANGES = Field.create("slot.ranges")
+            .withDisplayName("Ranges on which a slot is supposed to operate")
+            .withImportance(Importance.LOW)
+            .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.")
+            .withValidation((config, field, output) -> {
+                if (!config.getString(field, "").isEmpty() && !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
+                    output.accept(field, "", "slot.ranges is only valid with streaming.mode 'parallel'");
+                    return 1;
+                }
+                return 0;
+            });
+
+    public static final Field YB_LOAD_BALANCE_CONNECTIONS = Field.create("yb.load.balance.connections")
+            .withDisplayName("YB load balance connections")
+            .withType(Type.BOOLEAN)
+            .withDefault(YB_DEFAULT_LOAD_BALANCE_CONNECTIONS)
+            .withImportance(Importance.LOW)
+            .withDescription("Whether or not to add load-balance property to connection url");
+
+    public static final Field MAX_RETRIES_ON_ERROR = Field.create(ERRORS_MAX_RETRIES)
+            .withDisplayName("The maximum number of retries")
+            .withType(Type.INT)
+            .withGroup(Field.createGroupEntry(Field.Group.CONNECTOR_ADVANCED, 24))
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.LOW)
+            .withDefault(YB_DEFAULT_ERRORS_MAX_RETRIES)
+            .withValidation(Field::isInteger)
+            .withDescription(
+                    "The maximum number of retries on connection errors before failing (-1 = no limit, 0 = disabled, > 0 = num of retries).");
+
+    public static final Field RETRIABLE_RESTART_WAIT = Field.create("retriable.restart.connector.wait.ms")
+            .withDisplayName("Retriable restart wait (ms)")
+            .withType(Type.LONG)
+            .withGroup(Field.createGroupEntry(Field.Group.ADVANCED, 18))
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.LOW)
+            .withDefault(YB_DEFAULT_RETRIABLE_RESTART_WAIT)
+            .withDescription(
+                    "Time to wait before restarting connector after retriable exception occurs. Defaults to " + YB_DEFAULT_RETRIABLE_RESTART_WAIT + "ms.")
+            .withValidation(Field::isPositiveLong);
 
     public enum AutoCreateMode implements EnumeratedValue {
         /**
@@ -989,13 +1162,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field SOURCE_INFO_STRUCT_MAKER = CommonConnectorConfig.SOURCE_INFO_STRUCT_MAKER
             .withDefault(PostgresSourceInfoStructMaker.class.getName());
 
-    public static final Field TASK_ID = Field.create("task.id")
-            .withDisplayName("ID of the connector task")
-            .withType(Type.INT)
-            .withDefault(0)
-            .withImportance(Importance.LOW)
-            .withDescription("Internal use only");
-
     public static final Field PRIMARY_KEY_HASH_COLUMNS = Field.create("primary.key.hash.columns")
             .withDisplayName("Comma separated primary key fields")
             .withType(Type.STRING)
@@ -1059,6 +1225,14 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return getConfig().getString(SLOT_NAME);
     }
 
+    public LsnType slotLsnType() {
+        return LsnType.parse(getConfig().getString(SLOT_LSN_TYPE));
+    }
+
+    public StreamingMode streamingMode() {
+        return StreamingMode.parse(getConfig().getString(STREAMING_MODE));
+    }
+
     protected boolean dropSlotOnStop() {
         if (getConfig().hasKey(DROP_SLOT_ON_STOP.name())) {
             return getConfig().getBoolean(DROP_SLOT_ON_STOP);
@@ -1085,6 +1259,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public int maxRetries() {
         return getConfig().getInteger(MAX_RETRIES);
+    }
+
+    @Override
+    public int getMaxRetriesOnError() {
+        return getConfig().getInteger(MAX_RETRIES_ON_ERROR);
     }
 
     public Duration retryDelay() {
@@ -1119,6 +1298,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return getConfig().getBoolean(YB_CONSISTENT_SNAPSHOT);
     }
 
+    public boolean ybShouldLoadBalanceConnections() {
+        return getConfig().getBoolean(YB_LOAD_BALANCE_CONNECTIONS);
+    }
+
     protected Snapshotter getSnapshotter() {
         return this.snapshotMode.getSnapshotter(getConfig());
     }
@@ -1135,12 +1318,20 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return flushLsnOnSource;
     }
 
-    public int taskId() {
-        return getConfig().getInteger(TASK_ID);
-    }
-
     public String primaryKeyHashColumns() {
         return getConfig().getString(PRIMARY_KEY_HASH_COLUMNS);
+    }
+
+    public List<String> getSlotNames() {
+        return List.of(getConfig().getString(SLOT_NAMES).trim().split(","));
+    }
+
+    public List<String> getPublicationNames() {
+        return List.of(getConfig().getString(PUBLICATION_NAMES).trim().split(","));
+    }
+
+    public List<String> getSlotRanges() {
+        return List.of(getConfig().getString(SLOT_RANGES).trim().split(";"));
     }
 
     @Override
@@ -1189,6 +1380,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     DATABASE_NAME,
                     PLUGIN_NAME,
                     SLOT_NAME,
+                    SLOT_LSN_TYPE,
                     PUBLICATION_NAME,
                     PUBLICATION_AUTOCREATE_MODE,
                     REPLICA_IDENTITY_AUTOSET_VALUES,
@@ -1216,6 +1408,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     SNAPSHOT_MODE,
                     SNAPSHOT_MODE_CLASS,
                     YB_CONSISTENT_SNAPSHOT,
+                    YB_LOAD_BALANCE_CONNECTIONS,
                     PRIMARY_KEY_HASH_COLUMNS,
                     HSTORE_HANDLING_MODE,
                     BINARY_HANDLING_MODE,
@@ -1225,7 +1418,11 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     INCREMENTAL_SNAPSHOT_CHUNK_SIZE,
                     UNAVAILABLE_VALUE_PLACEHOLDER,
                     LOGICAL_DECODING_MESSAGE_PREFIX_INCLUDE_LIST,
-                    LOGICAL_DECODING_MESSAGE_PREFIX_EXCLUDE_LIST)
+                    LOGICAL_DECODING_MESSAGE_PREFIX_EXCLUDE_LIST,
+                    STREAMING_MODE,
+                    SLOT_NAMES,
+                    PUBLICATION_NAMES,
+                    SLOT_RANGES)
             .excluding(INCLUDE_SCHEMA_CHANGES)
             .create();
 
@@ -1270,17 +1467,37 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         }
         return 0;
     }
+    
+    public static Pair<String, String> findAndReplaceLoadBalancePropertyValues(Boolean loadBalance) {
+        String multiHostUrl = PostgresConnection.MULTI_HOST_URL_PATTERN;
+        String singleHostUrl = PostgresConnection.URL_PATTERN;
+        String value = loadBalance.toString();
+
+        if (multiHostUrl.contains("${" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "}")) {
+            multiHostUrl = multiHostUrl.replaceAll(
+                    "\\$\\{" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "\\}", value);
+        }
+
+        if (singleHostUrl.contains("${" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "}")) {
+            singleHostUrl = singleHostUrl.replaceAll(
+                    "\\$\\{" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "\\}", value);
+        }
+
+        return new Pair<>(multiHostUrl, singleHostUrl);
+    }
 
     /**
      * Method to get the connection factory depending on the provided hostname value.
      * @param hostName the host(s) for the PostgreSQL/YugabyteDB instance
      * @return a {@link io.debezium.jdbc.JdbcConnection.ConnectionFactory} instance
      */
-    public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName) {
+    public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName, Boolean loadBalance) {
+        // The first string in the pair contains multi host URL pattern while the second string contains single host URL pattern.
+        Pair<String,String> urlPatterns = findAndReplaceLoadBalancePropertyValues(loadBalance);
         return hostName.contains(":")
-                 ? JdbcConnection.patternBasedFactory(PostgresConnection.MULTI_HOST_URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                 ? JdbcConnection.patternBasedFactory(urlPatterns.getFirst(), com.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()))
-                 : JdbcConnection.patternBasedFactory(PostgresConnection.URL_PATTERN, com.yugabyte.Driver.class.getName(),
+                 : JdbcConnection.patternBasedFactory(urlPatterns.getSecond(), com.yugabyte.Driver.class.getName(),
                     PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
     }
 
@@ -1381,6 +1598,4 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
         return problemCount;
     }
-
-
 }

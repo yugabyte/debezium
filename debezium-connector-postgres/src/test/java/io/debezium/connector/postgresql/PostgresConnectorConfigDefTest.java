@@ -97,6 +97,30 @@ public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest
         assertThat((problemCount == 2)).isTrue();
     }
 
+    @Test
+    public void shouldFailIfSlotRangesSpecifiedWithoutParallelStreamingMode() {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.STREAMING_MODE, PostgresConnectorConfig.StreamingMode.DEFAULT)
+                .with(PostgresConnectorConfig.SLOT_RANGES, "0,10;10,65536");
+
+        boolean valid = PostgresConnectorConfig.SLOT_RANGES.validate(
+                configBuilder.build(), (field, value, problemMessage) -> System.out.println(problemMessage));
+
+        assertThat(valid).isFalse();
+    }
+
+    @Test
+    public void ensureNoErrorWhenProperParallelStreamingConfigSpecified() {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.STREAMING_MODE, PostgresConnectorConfig.StreamingMode.PARALLEL)
+                .with(PostgresConnectorConfig.SLOT_RANGES, "0,10;10,65536");
+
+        boolean valid = PostgresConnectorConfig.SLOT_RANGES.validate(
+                configBuilder.build(), (field, value, problemMessage) -> System.out.println(problemMessage));
+
+        assertThat(valid).isTrue();
+    }
+
     public void validateCorrectHostname(boolean multiNode) {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.HOSTNAME, multiNode ? "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433" : "127.0.0.1");
