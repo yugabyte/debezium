@@ -3050,12 +3050,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.waitFor(Duration.ofSeconds(5));
 
         final int iterations = 20000;
+        final int batchSize = 500;
 
         // Launch insertion thread here.
-        ExecutorService exec = Executors.newFixedThreadPool(1);
+        ExecutorService exec = Executors.newFixedThreadPool(2);
         Future<?> future = exec.submit(() -> {
             long idBegin = 1;
-            final int batchSize = 500;
             LOGGER.info("Starting the insertion thread");
             try (PostgresConnection pgConn = TestHelper.create()) {
                 Statement st = pgConn.connection().createStatement();
@@ -3071,12 +3071,33 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             }
         });
 
+        Future<?> indexCreationFuture = exec.submit(() -> {
+            try (PostgresConnection pgConn = TestHelper.create()) {
+                Statement st = pgConn.connection().createStatement();
+                st.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON s2.orders (status);");
+            } catch (Exception ex) {
+                LOGGER.error("Exception in the index creation thread: ", ex);
+                throw new RuntimeException(ex);
+            }
+        });
+
+        Future<?> indexDropFuture = exec.submit(() -> {
+            try (PostgresConnection pgConn = TestHelper.create()) {
+                Statement st = pgConn.connection().createStatement();
+                st.execute("DROP INDEX IF EXISTS idx_orders_status;");
+            } catch (Exception ex) {
+                LOGGER.error("Exception in the index drop thread: ", ex);
+                throw new RuntimeException(ex);
+            }
+        });
+
         long lastLoggedTime = 0;
         long lastReadValue = 0;
 
         final MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+        long consumed = 0;
         while (!future.isDone()) {
-            int consumed = consumeRecordsWithDrain();
+            consumed += consumeRecordsWithDrain();
 
             long timeDifference = System.currentTimeMillis() - lastLoggedTime;
             if (timeDifference >= 10_000) {
@@ -3087,6 +3108,11 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             }
         }
 
+        assertEquals(consumed, iterations * batchSize);
+
+        // If we have reached here, we should kill the index creation and drop thread.
+        indexCreationFuture.cancel(true);
+        indexDropFuture.cancel(true);
     }
 
     private int consumeRecordsWithDrain() {
