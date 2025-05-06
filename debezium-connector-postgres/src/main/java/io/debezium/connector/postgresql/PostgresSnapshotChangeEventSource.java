@@ -254,6 +254,12 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         String transactionStatement = snapshotter.snapshotTransactionIsolationLevelStatement(slotCreatedInfo, isOnDemand);
         LOGGER.info("Opening transaction with statement {}", transactionStatement);
         jdbcConnection.executeWithoutCommitting(transactionStatement);
+        
+        if (slotCreatedInfo != null && !isOnDemand) {
+            // Setting transaction snapshot separately otherwise we will get an exception with the error message:
+            // ERROR: cannot export/import a snapshot in Batch Execution.
+            jdbcConnection.executeWithoutCommitting("SET TRANSACTION SNAPSHOT '" + slotCreatedInfo.snapshotName() + "';");
+        }
     }
 
     /**
