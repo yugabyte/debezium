@@ -7,9 +7,11 @@ package io.debezium.connector.postgresql;
 
 import java.math.BigInteger;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
@@ -20,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
+import io.debezium.config.Configuration;
 import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
@@ -44,6 +47,8 @@ import io.debezium.util.Threads;
  * @author Horia Chiorean (hchiorea@redhat.com), Jiri Pechanec
  */
 public class PostgresStreamingChangeEventSource implements StreamingChangeEventSource<PostgresPartition, PostgresOffsetContext> {
+    public static boolean TEST_maintainMapForFlushedLsn = false;
+    public static Map<Long, Long> TEST_commitLsnMap;
 
     private static final String KEEP_ALIVE_THREAD_NAME = "keep-alive";
 
@@ -111,12 +116,20 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         this.connectionProbeTimer = ElapsedTimeStrategy.constant(Clock.system(), connectorConfig.statusUpdateInterval());
         this.commitTimes = new ConcurrentLinkedQueue<>();
         this.commitLsnMap = new ConcurrentHashMap<>();
+
+        if (TEST_maintainMapForFlushedLsn) {
+            TEST_commitLsnMap = new HashMap<>();
+        }
     }
 
     @Override
     public void init(PostgresOffsetContext offsetContext) {
-
-        this.effectiveOffset = offsetContext == null ? PostgresOffsetContext.initialContext(connectorConfig, connection, clock) : offsetContext;
+        try {
+            Set<PostgresPartition> partitions = new PostgresPartition.Provider(connectorConfig, (Configuration) connectorConfig).getPartitionsFromConfig();
+            this.effectiveOffset = offsetContext == null ? PostgresOffsetContext.initialContext(connectorConfig, connection, clock, partitions) : offsetContext;
+        } catch (Exception e) {
+            throw new DebeziumException("Error while initializing the offset context", e);
+        }
         // refresh the schema so we have a latest view of the DB tables
         initSchema();
     }
@@ -567,6 +580,11 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                         // TODO Vaibhav: This log is only at info level during testing.
                         LOGGER.info("{} | Flushing lsn {} for partition with start hash {}", taskContext.getTaskId(), lsnValue, startHash);
                         this.commitLsnMap.put(startHash, lsnValue);
+                        
+                        if (TEST_maintainMapForFlushedLsn) {
+                            TEST_commitLsnMap.put(startHash, lsnValue);
+                        }
+
                         replicationStream.flushLsn(Lsn.valueOf(lsnAck));
                     }
                 }

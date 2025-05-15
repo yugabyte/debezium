@@ -3098,6 +3098,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
+    public void shouldValidateWorkingWithParallelSlotMode() {
+        TestHelper.dropDefaultReplicationSlot();
+        
+    }
+
+    @Test
     public void shouldNotWorkWithReplicaIdentityChangeAndPgOutput() throws Exception {
         final Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)

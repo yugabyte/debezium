@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import io.debezium.DebeziumException;
+import io.debezium.config.Configuration;
 import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -161,6 +162,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
     protected void determineSnapshotOffset(RelationalSnapshotContext<PostgresPartition, PostgresOffsetContext> ctx, PostgresOffsetContext previousOffset)
             throws Exception {
         PostgresOffsetContext offset = ctx.offset;
+        Set<PostgresPartition> partitions = new PostgresPartition.Provider(connectorConfig, (Configuration) connectorConfig).getPartitionsFromConfig();
         if (offset == null) {
             if (previousOffset != null && !snapshotter.shouldStreamEventsStartingFromSnapshot()) {
                 // The connect framework, not the connector, manages triggering committing offset state so the
@@ -168,10 +170,10 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
                 // The previousOffset variable is shared between the catch up streaming and snapshot phases and
                 // has the latest known offset state.
                 offset = PostgresOffsetContext.initialContext(connectorConfig, jdbcConnection, getClock(),
-                        previousOffset.lastCommitLsn(), previousOffset.lastCompletelyProcessedLsn());
+                        previousOffset.lastCommitLsn(), previousOffset.lastCompletelyProcessedLsn(), partitions);
             }
             else {
-                offset = PostgresOffsetContext.initialContext(connectorConfig, jdbcConnection, getClock());
+                offset = PostgresOffsetContext.initialContext(connectorConfig, jdbcConnection, getClock(), partitions);
             }
             ctx.offset = offset;
         }

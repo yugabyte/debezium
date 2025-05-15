@@ -9,6 +9,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.kafka.connect.data.Schema;
@@ -134,6 +135,16 @@ public class PostgresOffsetContext extends CommonOffsetContext<SourceInfo> {
         lastSnapshotRecord = true;
     }
 
+    public void initSourceInfo(PostgresPartition partition, Lsn lsn, Instant commitTime, Long txId, Long xmin, TableId tableId) {
+        SourceInfo info = this.partitionSourceInfo.get(partition.getPartitionIdentificationKey());
+        if (info == null) {
+            info = new SourceInfo(this.connectorConfig);
+            this.partitionSourceInfo.put(partition.getPartitionIdentificationKey(), info);
+        }
+        info.update(lsn, commitTime, txId, xmin, tableId, null);
+        info.updateLastCommit(lsn);
+    }
+
     public void updateWalPosition(PostgresPartition partition, Lsn lsn, Lsn lastCompletelyProcessedLsn, Instant commitTime, Long txId, Long xmin, TableId tableId, Operation messageType) {
         this.lastCompletelyProcessedLsn = lastCompletelyProcessedLsn;
         SourceInfo info = this.partitionSourceInfo.get(partition.getPartitionIdentificationKey());
@@ -249,18 +260,18 @@ public class PostgresOffsetContext extends CommonOffsetContext<SourceInfo> {
                 + ", incrementalSnapshotContext=" + incrementalSnapshotContext + "]";
     }
 
-    public static PostgresOffsetContext initialContext(PostgresConnectorConfig connectorConfig, PostgresConnection jdbcConnection, Clock clock) {
-        return initialContext(connectorConfig, jdbcConnection, clock, null, null);
+    public static PostgresOffsetContext initialContext(PostgresConnectorConfig connectorConfig, PostgresConnection jdbcConnection, Clock clock, Set<PostgresPartition> partitions) {
+        return initialContext(connectorConfig, jdbcConnection, clock, null, null, partitions);
     }
 
     public static PostgresOffsetContext initialContext(PostgresConnectorConfig connectorConfig, PostgresConnection jdbcConnection, Clock clock, Lsn lastCommitLsn,
-                                                       Lsn lastCompletelyProcessedLsn) {
+                                                       Lsn lastCompletelyProcessedLsn, Set<PostgresPartition> partitions) {
         try {
             LOGGER.info("Creating initial offset context");
             final Lsn lsn = Lsn.valueOf(jdbcConnection.currentXLogLocation());
             final Long txId = jdbcConnection.currentTransactionId();
             LOGGER.info("Read xlogStart at '{}' from transaction '{}'", lsn, txId);
-            return new PostgresOffsetContext(
+            PostgresOffsetContext offsetContext = new PostgresOffsetContext(
                     connectorConfig,
                     lsn,
                     lastCompletelyProcessedLsn,
@@ -272,6 +283,12 @@ public class PostgresOffsetContext extends CommonOffsetContext<SourceInfo> {
                     false,
                     new TransactionContext(),
                     new SignalBasedIncrementalSnapshotContext<>(false));
+            
+            for (PostgresPartition partition : partitions) {
+                offsetContext.initSourceInfo(partition, lastCommitLsn, clock.currentTimeAsInstant(), txId, null, null);
+            }
+
+            return offsetContext;
         }
         catch (SQLException e) {
             throw new ConnectException("Database processing error", e);
