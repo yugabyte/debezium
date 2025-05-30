@@ -45,6 +45,12 @@ public abstract class QueryingSnapshotter implements Snapshotter {
              * the same snapshot from the existing exported transaction as for the initial snapshot.
              */
             String snapSet = String.format("SET TRANSACTION SNAPSHOT '%s';", newSlotInfo.snapshotName());
+
+            // YB Change: We can either reset the string or comment out the above logic.
+            // By resetting it to an empty string, we are effectively disabling the setting of snapshot
+            // in the same statement as that of setting the isolation level.
+            snapSet = "";
+
             return "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; \n" + snapSet;
         }
         return Snapshotter.super.snapshotTransactionIsolationLevelStatement(newSlotInfo, isOnDemand);

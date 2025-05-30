@@ -510,14 +510,18 @@ public class PostgresConnection extends JdbcConnection {
      * @throws SQLException if anything fails.
      */
     public Long currentTransactionId() throws SQLException {
-        AtomicLong txId = new AtomicLong(0);
-        query("select (case pg_is_in_recovery() when 't' then 0 else txid_current() end) AS pg_current_txid", rs -> {
-            if (rs.next()) {
-                txId.compareAndSet(0, rs.getLong(1));
-            }
-        });
-        long value = txId.get();
-        return value > 0 ? value : null;
+        // YB changes: Returning a dummy default value here as transaction ID is not being used
+        // anywhere to make any difference.
+        return 2L;
+
+        // AtomicLong txId = new AtomicLong(0);
+        // query("select (case pg_is_in_recovery() when 't' then 0 else txid_current() end) AS pg_current_txid", rs -> {
+        //     if (rs.next()) {
+        //         txId.compareAndSet(0, rs.getLong(1));
+        //     }
+        // });
+        // long value = txId.get();
+        // return value > 0 ? value : null;
     }
 
     /**
