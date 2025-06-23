@@ -8,6 +8,8 @@ package io.debezium.connector.postgresql;
 import static io.debezium.relational.RelationalDatabaseConnectorConfig.DATABASE_NAME;
 
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -23,12 +25,15 @@ public class PostgresPartition extends AbstractPartition implements Partition {
     private final String serverName;
     private final String taskId;
     private final String slotName;
+    private final String startHashCode;
 
-    public PostgresPartition(String serverName, String databaseName, String taskId, String slotName) {
+    public PostgresPartition(String serverName, String databaseName, String taskId, String slotName,
+                             String startHashCode) {
         super(databaseName);
         this.serverName = serverName;
         this.taskId = taskId;
         this.slotName = slotName;
+        this.startHashCode = startHashCode;
     }
 
     @Override
@@ -59,7 +64,7 @@ public class PostgresPartition extends AbstractPartition implements Partition {
     }
 
     public String getPartitionIdentificationKey() {
-        return String.format("%s_%s_%s", serverName, taskId, slotName);
+        return String.format("%s_%s_%s", serverName, slotName, startHashCode);
     }
 
     static class Provider implements Partition.Provider<PostgresPartition> {
@@ -75,7 +80,30 @@ public class PostgresPartition extends AbstractPartition implements Partition {
         public Set<PostgresPartition> getPartitions() {
             return Collections.singleton(new PostgresPartition(
                     connectorConfig.getLogicalName(), taskConfig.getString(DATABASE_NAME.name()),
-                    connectorConfig.getTaskId(), connectorConfig.slotName()));
+                    connectorConfig.getTaskId(), connectorConfig.slotName(), String.valueOf(connectorConfig.getSlotBounds().get(0))));
+        }
+
+        // Todo Vaibhav: This SLOT_BOUNDS_INTERNAL should be populated by the yb_get_tablets_to_poll method in YugabyteDBConnector
+        //   before distributing the partitions to the tasks.
+        public Set<PostgresPartition> getPartitionsFromConfig() throws Exception {
+            String hashRangesSerializedString = taskConfig.getString(PostgresConnectorConfig.SLOT_BOUNDS_INTERNAL.name());
+            List<String> hashRanges = (List<String>) ObjectUtil.deserializeObjectFromString(hashRangesSerializedString);
+
+            Set<PostgresPartition> partitions = new HashSet<>();
+
+            for (String hashRange : hashRanges) {
+                String[] parts = hashRange.split("_");
+                String startHashCode = parts[0];
+                String endHashCode = parts[1]; // We are not interested in this value.
+
+                PostgresPartition partition = new PostgresPartition(
+                        connectorConfig.getLogicalName(), taskConfig.getString(DATABASE_NAME.name()),
+                        connectorConfig.getTaskId(), connectorConfig.slotName(), startHashCode);
+
+                partitions.add(partition);
+            }
+
+            return partitions;
         }
     }
 }

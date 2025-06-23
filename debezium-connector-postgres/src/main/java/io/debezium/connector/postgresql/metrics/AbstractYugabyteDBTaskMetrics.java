@@ -11,6 +11,8 @@ import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.spi.schema.DataCollectionId;
 import io.debezium.util.Collect;
 import org.apache.kafka.connect.data.Struct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -20,9 +22,11 @@ import java.util.function.Function;
 
 abstract class AbstractYugabyteDBTaskMetrics<B extends AbstractYugabyteDBPartitionMetrics> extends YugabyteDBMetrics
     implements ChangeEventSourceMetrics<PostgresPartition>, YugabyteDBTaskMetricsMXBean {
+    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractYugabyteDBTaskMetrics.class);
 
     private final ChangeEventQueueMetrics changeEventQueueMetrics;
     private final Map<PostgresPartition, B> beans = new HashMap<>();
+    private final Function<PostgresPartition, B> beanFactory;
 
     AbstractYugabyteDBTaskMetrics(CdcSourceTaskContext taskContext,
                                   String contextName,
@@ -34,6 +38,8 @@ abstract class AbstractYugabyteDBTaskMetrics<B extends AbstractYugabyteDBPartiti
                 "task", taskContext.getTaskId(),
                 "context", contextName));
         this.changeEventQueueMetrics = changeEventQueueMetrics;
+
+        this.beanFactory = beanFactory;
 
         for (PostgresPartition partition : partitions) {
             beans.put(partition, beanFactory.apply(partition));
@@ -111,7 +117,10 @@ abstract class AbstractYugabyteDBTaskMetrics<B extends AbstractYugabyteDBPartiti
     protected void onPartitionEvent(PostgresPartition partition, Consumer<B> handler) {
         B bean = beans.get(partition);
         if (bean == null) {
-            throw new IllegalArgumentException("MBean for partition " + partition + " are not registered");
+            LOGGER.info("MBean for partition {} are not registered, registering them now", partition);
+            beans.put(partition, beanFactory.apply(partition));
+            bean = beans.get(partition);
+            bean.register();
         }
         handler.accept(bean);
     }

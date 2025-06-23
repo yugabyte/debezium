@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.common.config.ConfigDef;
@@ -21,10 +22,16 @@ import org.apache.kafka.connect.source.ExactlyOnceSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.debezium.DebeziumException;
 import io.debezium.config.Configuration;
 import io.debezium.connector.common.RelationalBaseSourceConnector;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
+import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.TableId;
 
@@ -94,6 +101,94 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
         return taskConfigs;
     }
 
+    // TODO:  Refactor method into utility class while cleaning up code.
+    protected List<Pair<Long, Long>> getHashRanges() {
+        String[] tableNameParts = props.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name()).split("\\.");
+        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(),
+                PostgresConnection.CONNECTION_GENERAL, connectorConfig.ybShouldLoadBalanceConnections())) {
+            final String oidQuery = String.format("SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = '$s' AND n.nspname = '%s' AND c.relkind = 'r';", tableNameParts[1], tableNameParts[0]);
+            int tableOid = connection.queryAndMap(
+                    oidQuery,
+                    connection.singleResultMapper(rs -> rs.getInt("oid"), "Could not fetch table OID"));
+            
+            // Now that we have the table OID, we can get the hash ranges.
+            final String hashRangeQuery = String.format("SELECT * from yb_get_tablets_to_poll('%s');", props.get(PostgresConnectorConfig.TABLE_INCLUDE_LIST.name()));
+            String hashRangeString = connection.queryAndMap(
+                    hashRangeQuery,
+                    connection.singleResultMapper(rs -> rs.getString("yb_get_tablets_to_poll"), "Could not fetch hash ranges"));
+            
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode json;
+
+            try {
+                json = objectMapper.readTree(hashRangeString);
+            } catch (JsonProcessingException e) {
+                throw new DebeziumException("Error parsing JSON response from YSQL", e);
+            }
+
+            List<Pair<Long, Long>> hashRanges = new ArrayList<>();
+            JsonNode arrayNode = json.get(String.valueOf(tableOid));
+            if (arrayNode != null && arrayNode.isArray()) {
+                for (JsonNode node : arrayNode) {
+                    long start = node.get(0).asLong();
+                    long end = node.get(1).asLong();
+                    hashRanges.add(new Pair<>(start, end));
+                }
+            } else {
+                throw new DebeziumException("Invalid JSON response from YSQL");
+            }
+            LOGGER.info("Returning the ranges: {}", hashRanges);
+            return hashRanges;
+        }
+        catch (SQLException e) {
+            throw new DebeziumException(e);
+        }
+    }
+
+    protected List<Map<String, String>> getTaskConfigsForParallelSlot(int maxTasks) {
+        List<Map<String, String>> taskConfigs = new ArrayList<>();
+
+        final long upperBoundExclusive = 64 * 1024;
+        final long rangeSize = upperBoundExclusive / maxTasks;
+
+        // TODO: Currently the code will only work when hash ranges are equal 
+        //  to the number of tasks.
+        List<Pair<Long, Long>> hashRanges = getHashRanges();
+
+        if (hashRanges.size() != maxTasks) {
+            throw new DebeziumException("Number of hash ranges is not equal to the number of tasks");
+        }
+
+        for (int i = 0; i < maxTasks; ++i) {
+            Map<String, String> taskProps = new HashMap<>(this.props);
+
+            // The range defined here will be [lowerBound, upperBound) and for the last range,
+            // we will ensure that we are covering the final boundary.
+            // long lowerBound = i * rangeSize;
+            // long upperBound = (i == maxTasks - 1) ? upperBoundExclusive : (lowerBound + rangeSize);
+
+            long lowerBound = hashRanges.get(i).getFirst();
+            long upperBound = hashRanges.get(i).getSecond();
+
+            LOGGER.info("Creating task {} with range [{}, {})", i, lowerBound, upperBound);
+
+            taskProps.put(PostgresConnectorConfig.TASK_ID, String.valueOf(i));
+            taskProps.put(PostgresConnectorConfig.STREAM_PARAMS.name(),
+                          String.format("hash_range=%d,%d", lowerBound, upperBound));
+            
+            try {
+                taskProps.put(PostgresConnectorConfig.SLOT_BOUNDS_INTERNAL.name(),
+                          ObjectUtil.serializeObjectToString(List.of(hashRanges.get(i))));
+            } catch (Exception e) {
+                throw new DebeziumException("Error serializing slot bounds", e);
+            }
+
+            taskConfigs.add(taskProps);
+        }
+
+        return taskConfigs;
+    }
+
     @Override
     public List<Map<String, String>> taskConfigs(int maxTasks) {
         if (props == null) {
@@ -117,6 +212,11 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             YBValidate.completeRangesProvided(slotRanges);
 
             return getTaskConfigsForParallelStreaming(slotNames, publicationNames, slotRanges);
+        } else if (connectorConfig.streamingMode().equals(PostgresConnectorConfig.StreamingMode.PARALLEL_SLOT)) {
+            LOGGER.info("Initialising parallel slot streaming mode");
+            validateSingleTableProvided(tableIncludeList, false /* isSnapshot */);
+
+            return getTaskConfigsForParallelSlot(maxTasks);
         }
 
         // TODO Vaibhav (#26106): The following code block is not needed now, remove in a separate PR.

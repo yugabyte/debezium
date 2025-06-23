@@ -155,6 +155,13 @@
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.yugabyte</groupId>
+            <artifactId>java-driver-core</artifactId>
+            <version>4.15.0-yb-1</version>
+            <scope>test</scope>
+        </dependency>
+
 
         <!-- Used for unit testing with Kafka -->
         <dependency>
