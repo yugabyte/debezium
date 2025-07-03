@@ -21,15 +21,19 @@ public class PostgresPartition extends AbstractPartition implements Partition {
     private static final String SERVER_PARTITION_KEY = "server";
 
     private final String serverName;
+    private final String taskId;
+    private final String slotName;
 
-    public PostgresPartition(String serverName, String databaseName) {
+    public PostgresPartition(String serverName, String databaseName, String taskId, String slotName) {
         super(databaseName);
         this.serverName = serverName;
+        this.taskId = taskId;
+        this.slotName = slotName;
     }
 
     @Override
     public Map<String, String> getSourcePartition() {
-        return Collect.hashMapOf(SERVER_PARTITION_KEY, serverName);
+        return Collect.hashMapOf(SERVER_PARTITION_KEY, getPartitionIdentificationKey());
     }
 
     @Override
@@ -54,6 +58,10 @@ public class PostgresPartition extends AbstractPartition implements Partition {
         return "PostgresPartition [sourcePartition=" + getSourcePartition() + "]";
     }
 
+    public String getPartitionIdentificationKey() {
+        return String.format("%s_%s_%s", serverName, taskId, slotName);
+    }
+
     static class Provider implements Partition.Provider<PostgresPartition> {
         private final PostgresConnectorConfig connectorConfig;
         private final Configuration taskConfig;
@@ -66,7 +74,8 @@ public class PostgresPartition extends AbstractPartition implements Partition {
         @Override
         public Set<PostgresPartition> getPartitions() {
             return Collections.singleton(new PostgresPartition(
-                    connectorConfig.getLogicalName(), taskConfig.getString(DATABASE_NAME.name())));
+                    connectorConfig.getLogicalName(), taskConfig.getString(DATABASE_NAME.name()),
+                    connectorConfig.getTaskId(), connectorConfig.slotName()));
         }
     }
 }

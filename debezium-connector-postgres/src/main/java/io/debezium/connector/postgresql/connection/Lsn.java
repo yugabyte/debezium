@@ -7,11 +7,11 @@ package io.debezium.connector.postgresql.connection;
 
 import java.nio.ByteBuffer;
 
-import org.postgresql.replication.LogSequenceNumber;
+import com.yugabyte.replication.LogSequenceNumber;
 
 /**
  * Abstraction of PostgreSQL log sequence number, adapted from
- * {@link org.postgresql.replication.LogSequenceNumber}.
+ * {@link com.yugabyte.replication.LogSequenceNumber}.
  *
  * @author Jiri Pechanec
  *
@@ -144,7 +144,7 @@ public class Lsn implements Comparable<Lsn> {
 
     @Override
     public String toString() {
-        return "LSN{" + asString() + '}';
+        return "LSN{" + asLong() + '}';
     }
 
     @Override

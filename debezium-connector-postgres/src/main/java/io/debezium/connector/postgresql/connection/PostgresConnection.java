@@ -22,12 +22,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.core.BaseConnection;
-import org.postgresql.jdbc.PgConnection;
-import org.postgresql.jdbc.TimestampUtils;
-import org.postgresql.replication.LogSequenceNumber;
-import org.postgresql.util.PGmoney;
-import org.postgresql.util.PSQLState;
+import com.yugabyte.core.BaseConnection;
+import com.yugabyte.jdbc.PgConnection;
+import com.yugabyte.jdbc.TimestampUtils;
+import com.yugabyte.replication.LogSequenceNumber;
+import com.yugabyte.util.PGmoney;
+import com.yugabyte.util.PSQLState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +39,9 @@ import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresType;
 import io.debezium.connector.postgresql.PostgresValueConverter;
 import io.debezium.connector.postgresql.TypeRegistry;
+import io.debezium.connector.postgresql.YugabyteDBServer;
 import io.debezium.connector.postgresql.spi.SlotState;
+import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
 import io.debezium.data.SpecialValueDecimal;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.jdbc.JdbcConnection;
@@ -64,26 +66,35 @@ public class PostgresConnection extends JdbcConnection {
     public static final String CONNECTION_VALIDATE_CONNECTION = "Debezium Validate Connection";
     public static final String CONNECTION_HEARTBEAT = "Debezium Heartbeat";
     public static final String CONNECTION_GENERAL = "Debezium General";
+    public static final String CONNECTION_FETCH_REPLICA_IDENTITY = "Debezium YB Fetch Replica Identity";
 
     private static final Pattern FUNCTION_DEFAULT_PATTERN = Pattern.compile("^[(]?[A-Za-z0-9_.]+\\((?:.+(?:, ?.+)*)?\\)");
     private static final Pattern EXPRESSION_DEFAULT_PATTERN = Pattern.compile("\\(+(?:.+(?:[+ - * / < > = ~ ! @ # % ^ & | ` ?] ?.+)+)+\\)");
     private static Logger LOGGER = LoggerFactory.getLogger(PostgresConnection.class);
 
-    private static final String URL_PATTERN = "jdbc:postgresql://${" + JdbcConfiguration.HOSTNAME + "}:${"
-            + JdbcConfiguration.PORT + "}/${" + JdbcConfiguration.DATABASE + "}";
-    protected static final ConnectionFactory FACTORY = JdbcConnection.patternBasedFactory(URL_PATTERN,
-            org.postgresql.Driver.class.getName(),
-            PostgresConnection.class.getClassLoader(), JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()));
+    public static final String MULTI_HOST_URL_PATTERN = "jdbc:yugabytedb://${" + JdbcConfiguration.HOSTNAME + "}/${"
+            + JdbcConfiguration.DATABASE + "}?load-balance=${" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS
+            + "}";
+    public static final String URL_PATTERN = "jdbc:yugabytedb://${" + JdbcConfiguration.HOSTNAME + "}:${"
+            + JdbcConfiguration.PORT + "}/${" + JdbcConfiguration.DATABASE + "}?load-balance=${"
+            + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS
+            + "}";
+    protected static ConnectionFactory FACTORY = JdbcConnection.patternBasedFactory(URL_PATTERN,
+            com.yugabyte.Driver.class.getName(),
+            PostgresConnection.class.getClassLoader(),
+            JdbcConfiguration.PORT.withDefault(PostgresConnectorConfig.PORT.defaultValueAsString()),
+            PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS);
 
     /**
      * Obtaining a replication slot may fail if there's a pending transaction. We're retrying to get a slot for 30 min.
      */
-    private static final int MAX_ATTEMPTS_FOR_OBTAINING_REPLICATION_SLOT = 900;
+    private static final int MAX_ATTEMPTS_FOR_OBTAINING_REPLICATION_SLOT = 90;
 
     private static final Duration PAUSE_BETWEEN_REPLICATION_SLOT_RETRIEVAL_ATTEMPTS = Duration.ofSeconds(2);
 
     private final TypeRegistry typeRegistry;
     private final PostgresDefaultValueConverter defaultValueConverter;
+    private final JdbcConfiguration jdbcConfig;
 
     /**
      * Creates a Postgres connection using the supplied configuration.
@@ -94,9 +105,12 @@ public class PostgresConnection extends JdbcConnection {
      * @param config {@link Configuration} instance, may not be null.
      * @param valueConverterBuilder supplies a configured {@link PostgresValueConverter} for a given {@link TypeRegistry}
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
+     * @param factory a {@link io.debezium.jdbc.JdbcConnection.ConnectionFactory} instance
      */
-    public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage) {
-        super(addDefaultSettings(config, connectionUsage), FACTORY, PostgresConnection::validateServerVersion, "\"", "\"");
+    public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage, ConnectionFactory factory) {
+        super(addDefaultSettings(config, connectionUsage), factory, PostgresConnection::validateServerVersion, "\"", "\"");
+        this.jdbcConfig = config;
+        PostgresConnection.FACTORY = factory;
 
         if (Objects.isNull(valueConverterBuilder)) {
             this.typeRegistry = null;
@@ -110,14 +124,20 @@ public class PostgresConnection extends JdbcConnection {
         }
     }
 
+    public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder,
+            String connectionUsage, Boolean loadBalance) {
+        this(config, valueConverterBuilder, connectionUsage,
+                PostgresConnectorConfig.getConnectionFactory(config.getHostname(), loadBalance));
+    }
+
     /**
      * Create a Postgres connection using the supplied configuration and {@link TypeRegistry}
      * @param config {@link Configuration} instance, may not be null.
      * @param typeRegistry an existing/already-primed {@link TypeRegistry} instance
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
      */
-    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage) {
-        super(addDefaultSettings(config.getJdbcConfig(), connectionUsage), FACTORY, PostgresConnection::validateServerVersion, "\"", "\"");
+    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage, ConnectionFactory factory) {
+        super(addDefaultSettings(config.getJdbcConfig(), connectionUsage), factory, PostgresConnection::validateServerVersion, "\"", "\"");
         if (Objects.isNull(typeRegistry)) {
             this.typeRegistry = null;
             this.defaultValueConverter = null;
@@ -127,6 +147,15 @@ public class PostgresConnection extends JdbcConnection {
             final PostgresValueConverter valueConverter = PostgresValueConverter.of(config, this.getDatabaseCharset(), typeRegistry);
             this.defaultValueConverter = new PostgresDefaultValueConverter(valueConverter, this.getTimestampUtils(), typeRegistry);
         }
+
+        PostgresConnection.FACTORY = factory;
+        this.jdbcConfig = config.getJdbcConfig();
+    }
+
+    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage,
+            Boolean loadBalance) {
+        this(config, typeRegistry, connectionUsage,
+                PostgresConnectorConfig.getConnectionFactory(config.getJdbcConfig().getHostname(), loadBalance));
     }
 
     /**
@@ -136,8 +165,8 @@ public class PostgresConnection extends JdbcConnection {
      * @param config {@link Configuration} instance, may not be null.
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
      */
-    public PostgresConnection(JdbcConfiguration config, String connectionUsage) {
-        this(config, null, connectionUsage);
+    public PostgresConnection(JdbcConfiguration config, String connectionUsage, Boolean loadBalance) {
+        this(config, null, connectionUsage, loadBalance);
     }
 
     static JdbcConfiguration addDefaultSettings(JdbcConfiguration configuration, String connectionUsage) {
@@ -153,8 +182,15 @@ public class PostgresConnection extends JdbcConnection {
      *
      * @return a {@code String} where the variables in {@code urlPattern} are replaced with values from the configuration
      */
-    public String connectionString() {
-        return connectionString(URL_PATTERN);
+    public String connectionString(Boolean loadBalance) {
+        Pair<String, String> urlPatterns = PostgresConnectorConfig
+                .findAndReplaceLoadBalancePropertyValues(loadBalance);
+        String hostName = jdbcConfig.getHostname();
+        if (hostName.contains(":")) {
+            return connectionString(urlPatterns.getFirst());
+        } else {
+            return connectionString(urlPatterns.getSecond());
+        }
     }
 
     /**
@@ -291,7 +327,8 @@ public class PostgresConnection extends JdbcConnection {
                             return null;
                         }
                         final Long xmin = rs.getLong("catalog_xmin");
-                        return new ServerInfo.ReplicationSlot(active, confirmedFlushedLsn, restartLsn, xmin);
+                        final Long restartCommitHT = rs.getLong("yb_restart_commit_ht");
+                        return new ServerInfo.ReplicationSlot(active, confirmedFlushedLsn, restartLsn, xmin, restartCommitHT);
                     }
                     else {
                         LOGGER.debug("No replication slot '{}' is present for plugin '{}' and database '{}'", slotName,
@@ -510,6 +547,12 @@ public class PostgresConnection extends JdbcConnection {
      * @throws SQLException if anything fails.
      */
     public Long currentTransactionId() throws SQLException {
+        // YB Note: Returning a dummy value since the txid information is not being used to make
+        // any difference.
+        if (YugabyteDBServer.isEnabled()) {
+            return 2L;
+        }
+
         AtomicLong txId = new AtomicLong(0);
         query("select (case pg_is_in_recovery() when 't' then 0 else txid_current() end) AS pg_current_txid", rs -> {
             if (rs.next()) {
@@ -580,7 +623,7 @@ public class PostgresConnection extends JdbcConnection {
 
     public TimestampUtils getTimestampUtils() {
         try {
-            return ((PgConnection) this.connection()).getTimestampUtils();
+            return ((com.yugabyte.jdbc.PgConnection) this.connection()).getTimestampUtils();
         }
         catch (SQLException e) {
             throw new DebeziumException("Couldn't get timestamp utils from underlying connection", e);
