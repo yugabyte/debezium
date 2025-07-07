@@ -345,6 +345,32 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
+    public void testParallelSlot() throws Exception {
+        TestHelper.execute("DROP SCHEMA IF EXISTS parallel CASCADE;");
+        TestHelper.execute("CREATE SCHEMA parallel;");
+        TestHelper.execute("CREATE TABLE parallel.test_table (id INT PRIMARY KEY) SPLIT INTO 4 TABLETS;");
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
+                .with(PostgresConnectorConfig.SLOT_NAME, "test_slot")
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "parallel.test_table")
+                .with(PostgresConnectorConfig.STREAMING_MODE, PostgresConnectorConfig.StreamingMode.PARALLEL_SLOT.getValue());
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+
+        TestHelper.waitFor(Duration.ofSeconds(15));
+
+        // Insert 50 records.
+        for (int i = 0; i < 50; i++) {
+            TestHelper.execute("INSERT INTO parallel.test_table (id) VALUES (" + i + ");");
+        }
+
+        // Log that we are waiting and wait for 50 seconds for the records to be consumed.
+        LOGGER.info("Waiting for 50 seconds for the records to be consumed.");
+        TestHelper.waitFor(Duration.ofSeconds(50));
+    }
+
+    @Test
     public void initialSnapshotWithExistingSlot() throws Exception {
         TestHelper.execute(SETUP_TABLES_STMT);
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
@@ -3069,6 +3095,12 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         // Validate tombstone record.
         assertTombstone(records.get(3));
+    }
+
+    @Test
+    public void shouldValidateWorkingWithParallelSlotMode() {
+        TestHelper.dropDefaultReplicationSlot();
+        
     }
 
     @Test
