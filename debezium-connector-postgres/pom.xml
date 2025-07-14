@@ -7,7 +7,7 @@
         <relativePath>../debezium-parent/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>debezium-connector-yugabytedb</artifactId>
+    <artifactId>yugabytedb-source-connector</artifactId>
     <name>YugabyteDB Source Connector</name>
     <packaging>jar</packaging>
     <properties>
