@@ -3,12 +3,12 @@
     <parent>
         <groupId>io.debezium</groupId>
         <artifactId>debezium-parent</artifactId>
-        <version>2.5.2.Final</version>
+        <version>dz.2.5.2.yb.2024.1-SNAPSHOT</version>
         <relativePath>../debezium-parent/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>debezium-connector-postgres</artifactId>
-    <name>Debezium Connector for PostgreSQL</name>
+    <artifactId>yugabytedb-source-connector</artifactId>
+    <name>YugabyteDB Source Connector</name>
     <packaging>jar</packaging>
     <properties>
         <!-- 
@@ -17,15 +17,15 @@
           work on all platforms. We'll set some of these as system properties during integration testing.
       -->
         <version.postgres.server>10</version.postgres.server>
-        <postgres.host>${docker.host.address}</postgres.host>
-        <postgres.port>5432</postgres.port>
-        <postgres.user>postgres</postgres.user>
-        <postgres.password>postgres</postgres.password>
-        <postgres.db.name>postgres</postgres.db.name>
+        <postgres.host>127.0.0.1</postgres.host>
+        <postgres.port>5433</postgres.port>
+        <postgres.user>yugabyte</postgres.user>
+        <postgres.password>yugabyte</postgres.password>
+        <postgres.db.name>yugabyte</postgres.db.name>
         <postgres.encoding>UTF8</postgres.encoding>
         <postgres.system.lang>en_US.utf8</postgres.system.lang>
-        <postgres.image>quay.io/debezium/postgres:${version.postgres.server}</postgres.image>
-        <postgres.config.file>/usr/share/postgresql/postgresql.conf.sample</postgres.config.file>
+<!--        <postgres.image>quay.io/debezium/postgres:${version.postgres.server}</postgres.image>-->
+<!--        <postgres.config.file>/usr/share/postgresql/postgresql.conf.sample</postgres.config.file>-->
         <docker.skip>false</docker.skip>
         <docker.showLogs>true</docker.showLogs>
         <docker.initimage>ln -fs /usr/share/zoneinfo/US/Samoa /etc/localtime &amp;&amp; echo timezone=US/Samoa &gt;&gt; ${postgres.config.file}</docker.initimage>
@@ -50,6 +50,11 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.yugabyte</groupId>
+            <artifactId>jdbc-yugabytedb</artifactId>
+            <version>42.3.5-yb-4</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
@@ -162,6 +167,89 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>io.confluent</groupId>
+                <version>0.12.0</version>
+                <artifactId>kafka-connect-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>kafka-connect</goal>
+                        </goals>
+                        <configuration>
+                            <title>Kafka Connect YugabyteDB</title>
+                            <documentationUrl>https://docs.yugabyte.com/preview/explore/change-data-capture/using-logical-replication/yugabytedb-connector/</documentationUrl>
+                            <description>
+                                The YugabyteDB Connector is based on the Debezium API, and captures row-level changes in the schemas of a YugabyteDB database using the PostgreSQL replication protocol.
+
+                                The first time it connects to a YugabyteDB server, the connector takes a consistent snapshot of all schemas. After that snapshot is complete, the connector continuously captures row-level changes that insert, update, and delete database content, and that were committed to a YugabyteDB database.
+
+                                The connector generates data change event records and streams them to Kafka topics. For each table, the default behavior is that the connector streams all generated events to a separate Kafka topic for that table. Applications and services consume data change event records from that topic.
+                            </description>
+                            <logo>logos/yugabytedb.png</logo>
+
+                            <supportProviderName>Yugabyte Inc.</supportProviderName>
+                            <supportSummary>Yugabyte supports the YugabyteDB source connector.</supportSummary>
+                            <supportUrl>http://support.yugabyte.com/</supportUrl>
+                            <supportLogo>logos/yugabytedb.png</supportLogo>
+
+                            <ownerUsername>yugabyte</ownerUsername>
+                            <ownerType>organization</ownerType>
+                            <ownerName>Yugabyte Inc.</ownerName>
+                            <ownerUrl>https://www.yugabyte.com//</ownerUrl>
+                            <ownerLogo>logos/yugabytedb.png</ownerLogo>
+
+                            <dockerNamespace>quay.io/yugabyte</dockerNamespace>
+                            <dockerName>ybdb-debezium</dockerName>
+                            <dockerTag>${project.version}</dockerTag>
+
+                            <sourceUrl>https://github.com/yugabyte/debezium/tree/ybdb-debezium-2.5.2/debezium-connector-postgres</sourceUrl>
+
+                            <componentTypes>
+                                <componentType>source</componentType>
+                            </componentTypes>
+
+                            <tags>
+                                <tag>Yugabyte</tag>
+                                <tag>yugabytedb</tag>
+                                <tag>source</tag>
+                                <tag>cdc</tag>
+                                <tag>wal</tag>
+                                <tag>replication</tag>
+                            </tags>
+
+                            <requirements>
+                                <requirement>YugabyteDB 2024.1.x</requirement>
+                            </requirements>
+
+                            <deliveryGuarantee>
+                                <deliveryGuarantee>atLeastOnce</deliveryGuarantee>
+                            </deliveryGuarantee>
+
+                            <confluentControlCenterIntegration>true</confluentControlCenterIntegration>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.6.0</version>
+                <configuration>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>assemble-all</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>com.github.os72</groupId>
                 <artifactId>protoc-jar-maven-plugin</artifactId>
                 <executions>
@@ -201,7 +289,7 @@
                                     <LANG>${postgres.system.lang}</LANG>
                                 </env>
                                 <ports>
-                                    <port>${postgres.port}:5432</port>
+                                    <port>${postgres.port}:5433</port>
                                 </ports>
                                 <log>
                                     <prefix>postgres</prefix>

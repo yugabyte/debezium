@@ -28,12 +28,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.core.BaseConnection;
-import org.postgresql.core.ServerVersion;
-import org.postgresql.replication.PGReplicationStream;
-import org.postgresql.replication.fluent.logical.ChainedLogicalStreamBuilder;
-import org.postgresql.util.PSQLException;
-import org.postgresql.util.PSQLState;
+import com.yugabyte.core.BaseConnection;
+import com.yugabyte.core.ServerVersion;
+import com.yugabyte.replication.PGReplicationStream;
+import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
+import com.yugabyte.util.PSQLException;
+import com.yugabyte.util.PSQLState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,6 +64,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     private static Logger LOGGER = LoggerFactory.getLogger(PostgresReplicationConnection.class);
 
     private final String slotName;
+    private final PostgresConnectorConfig.LsnType lsnType;
+    private final PostgresConnectorConfig.StreamingMode streamingMode;
     private final String publicationName;
     private final RelationalTableFilters tableFilter;
     private final PostgresConnectorConfig.AutoCreateMode publicationAutocreateMode;
@@ -114,6 +116,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
         this.connectorConfig = config;
         this.slotName = slotName;
+        this.lsnType = config.slotLsnType();
+        this.streamingMode = config.streamingMode();
         this.publicationName = publicationName;
         this.tableFilter = tableFilter;
         this.publicationAutocreateMode = publicationAutocreateMode;
@@ -140,13 +144,14 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     }
 
     private ServerInfo.ReplicationSlot getSlotInfo() throws SQLException, InterruptedException {
-        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_SLOT_INFO)) {
+        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(),
+                PostgresConnection.CONNECTION_SLOT_INFO, connectorConfig.ybShouldLoadBalanceConnections())) {
             return connection.readReplicationSlotInfo(slotName, plugin.getPostgresPluginName());
         }
     }
 
     protected void initPublication() {
-        if (PostgresConnectorConfig.LogicalDecoder.PGOUTPUT.equals(plugin)) {
+        if (PostgresConnectorConfig.LogicalDecoder.PGOUTPUT.equals(plugin) || PostgresConnectorConfig.LogicalDecoder.YBOUTPUT.equals(plugin)) {
             LOGGER.info("Initializing PgOutput logical decoder publication");
             try {
                 // Unless the autocommit is disabled the SELECT publication query will stay running
@@ -520,12 +525,26 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         // For pgoutput specifically, the publication must be created prior to the slot.
         initPublication();
 
+        // YB Note: We will only be specifying the LSN type when it is HYBRID_TIME, for other case(s)
+        // i.e. SEQUENCE, we will let the service handle it with the default value. This is to ensure
+        // that we stay backward compatible as the syntax is not recognizable by initial versions
+        // of logical replication in YugabyteDB.
         try (Statement stmt = pgConnection().createStatement()) {
             String createCommand = String.format(
-                    "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s",
+                    "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s %s %s",
                     slotName,
                     tempPart,
-                    plugin.getPostgresPluginName());
+                    plugin.getPostgresPluginName(),
+                    lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
+                    streamingMode.isParallel() ? "USE_SNAPSHOT" : "");
+
+            // Begin a read-only transaction when it is the parallel streaming mode because
+            // we will be using this read-only transaction to take the snapshot further.
+            if (connectorConfig.streamingMode().isParallel() ) {
+                LOGGER.info("executing: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+                stmt.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+            }
+
             LOGGER.info("Creating replication slot with command {}", createCommand);
             stmt.execute(createCommand);
             // when we are in Postgres 9.4+, we can parse the slot creation info,
@@ -540,6 +559,34 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
     protected BaseConnection pgConnection() throws SQLException {
         return (BaseConnection) connection(false);
+    }
+
+    public String getBackendPid() {
+        try (Statement stmt = pgConnection().createStatement()) {
+            ResultSet rs = stmt.executeQuery("SELECT pg_backend_pid() backend_pid;");
+
+            if (rs.next()) {
+                return rs.getString("backend_pid");
+            }
+        } catch (SQLException sqle) {
+            LOGGER.warn("Unable to get the backend PID", sqle);
+        }
+
+        return "FAILED_TO_GET_BACKEND_PID";
+    }
+
+    public String getConnectedNodeIp() {
+        try (Statement stmt = pgConnection().createStatement()) {
+            ResultSet rs = stmt.executeQuery("SELECT inet_server_addr() connected_to_host;");
+
+            if (rs.next()) {
+                return rs.getString("connected_to_host");
+            }
+        } catch (SQLException sqle) {
+            LOGGER.warn("Unable to get the connected host node", sqle);
+        }
+
+        return "FAILED_TO_GET_CONNECTED_NODE";
     }
 
     private SlotCreationResult parseSlotCreation(ResultSet rs) {
@@ -776,7 +823,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
         if (dropSlotOnClose && dropSlot) {
             // we're dropping the replication slot via a regular - i.e. not a replication - connection
-            try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_DROP_SLOT)) {
+            try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(),
+                    PostgresConnection.CONNECTION_DROP_SLOT, connectorConfig.ybShouldLoadBalanceConnections())) {
                 connection.dropReplicationSlot(slotName);
             }
             catch (Throwable e) {
