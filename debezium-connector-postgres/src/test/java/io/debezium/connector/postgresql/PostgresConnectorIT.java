@@ -4300,6 +4300,114 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         });
     }
 
+    @Test
+    public void shouldStreamAllRecordsWithSingleShardTransactions() throws Exception {
+        // Create a table named test_table with a primary key column named id and another text column named data.
+        String createTableStmt = "CREATE TABLE test_table (id SERIAL PRIMARY KEY, data TEXT);";
+        TestHelper.execute(createTableStmt);
+
+        // Create a replication slot.
+        String slotName = "test_slot_noexport";
+        
+        // Drop the slot and publication if they exist already.
+        try {
+            TestHelper.execute("SELECT pg_drop_replication_slot('" + slotName + "')");
+        } catch (Exception sqle) {
+            if (sqle.getMessage().contains("does not exist")) {
+                LOGGER.info("Replication slot {} cannot be dropped because it does not exist.", slotName);
+            }
+        }
+
+        TestHelper.execute("DROP PUBLICATION IF EXISTS dbz_publication;");
+
+        TestHelper.createPublicationForAllTables("dbz_publication");
+        
+        // Create the replication slot manually using SQL to ensure it's created without exporting snapshots.
+        TestHelper.execute(String.format(
+                "SELECT * FROM pg_create_logical_replication_slot('%s', '%s')",
+                slotName,
+                TestHelper.decoderPlugin().getPostgresPluginName() /* YBOUTPUT */));
+
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+            .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+            .with(PostgresConnectorConfig.SLOT_NAME, slotName)
+            .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        TestHelper.waitFor(Duration.ofSeconds(15));
+
+        // Insert 10000 records into the table each record having a 100 bytes.
+        String dataValue = "A".repeat(100); // 100 character string
+
+        // Insert records in batches to avoid memory issues.
+        int batchSize = 1000;
+        int totalRecords = 10000;
+
+        LOGGER.info("Starting to insert {} records in batches of {}", totalRecords, batchSize);
+        for (int batch = 0; batch < totalRecords; batch += batchSize) {
+            int currentBatchSize = Math.min(batchSize, totalRecords - batch);
+            StringBuilder batchStmt = new StringBuilder();
+            batchStmt.append("set yb_disable_transactional_writes = true; INSERT INTO test_table (data) VALUES ");
+
+            for (int i = 0; i < currentBatchSize; i++) {
+                if (i > 0) {
+                    batchStmt.append(",");
+                }
+                batchStmt.append("('").append(dataValue).append("')");
+            }
+            batchStmt.append(";");
+
+            TestHelper.execute(batchStmt.toString());
+
+            // Log progress every 10 batches.
+            if ((batch / batchSize) % 10 == 0) {
+                LOGGER.info("Inserted {} records so far", batch + currentBatchSize);
+            }
+        }
+        LOGGER.info("Completed inserting all {} records", totalRecords);
+
+        // Wait for the connector to consume all the records.
+        // We expect to consume 10000 records.
+        LOGGER.info("Starting to consume {} records from the connector", totalRecords);
+        SourceRecords records = consumeRecordsByTopic(totalRecords);
+        LOGGER.info("Successfully consumed {} records from the connector", records.allRecordsInOrder().size());
+
+        // Verify that we received the expected number of records
+        assertThat(records.allRecordsInOrder().size()).isEqualTo(totalRecords);
+
+        // Verify that all records are from the test_table topic
+        List<SourceRecord> testTableRecords = records.recordsForTopic(topicName("public.test_table"));
+        assertThat(testTableRecords.size()).isEqualTo(totalRecords);
+        LOGGER.info("Test table records: {}", testTableRecords.size());
+
+        // Verify that each record has the correct structure
+        for (SourceRecord record : testTableRecords) {
+            // Verify the after field exists and has the expected structure
+            Struct after = ((Struct) record.value()).getStruct("after");
+            assertThat(after).isNotNull();
+
+            // Verify the id field exists and is an integer
+            assertThat(after.getStruct("id").getInt32("value")).isNotNull();
+
+            // Verify the data field exists and is a string of 100 characters
+            String data = after.getStruct("data").getString("value");
+            assertThat(data).isNotNull();
+            assertThat(data.length()).isEqualTo(100);
+            assertThat(data).isEqualTo(dataValue);
+        }
+
+        // Stop the connector
+        stopConnector();
+
+        // Clean up the replication slot
+        try {
+            TestHelper.execute("SELECT pg_drop_replication_slot('" + slotName + "')");
+        }
+        catch (Exception e) {
+            // Ignore if slot doesn't exist
+        }
+    }
+
     @Override
     protected int consumeAvailableRecords(Consumer<SourceRecord> recordConsumer) {
         List<SourceRecord> records = consumedLines
