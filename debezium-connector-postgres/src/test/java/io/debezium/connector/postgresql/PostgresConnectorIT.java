@@ -21,7 +21,9 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -4298,6 +4300,162 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             Struct source = ((Struct) sourceRecord.value()).getStruct("source");
             assertEquals("newFieldValue", source.getString("newField"));
         });
+    }
+
+    @Test
+    public void shouldStreamAllRecordsWithSingleShardTransactions() throws Exception {
+        // Create a table named test_table with a simple integer primary key column named id and another text column named data.
+        String createTableStmt = "CREATE TABLE test_table (id INTEGER PRIMARY KEY, data TEXT);";
+        TestHelper.execute(createTableStmt);
+
+        // Create a replication slot.
+        String slotName = "test_slot_noexport";
+        
+        // Drop the slot and publication if they exist already.
+        try {
+            TestHelper.execute("SELECT pg_drop_replication_slot('" + slotName + "')");
+        } catch (Exception sqle) {
+            if (sqle.getMessage().contains("does not exist")) {
+                LOGGER.info("Replication slot {} cannot be dropped because it does not exist.", slotName);
+            }
+        }
+
+        TestHelper.execute("DROP PUBLICATION IF EXISTS dbz_publication;");
+
+        TestHelper.createPublicationForAllTables("dbz_publication");
+        
+        // Create the replication slot manually using SQL to ensure it's created without exporting snapshots.
+        TestHelper.execute(String.format(
+                "SELECT * FROM pg_create_logical_replication_slot('%s', '%s')",
+                slotName,
+                TestHelper.decoderPlugin().getPostgresPluginName() /* YBOUTPUT */));
+
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+            .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER.getValue())
+            .with(PostgresConnectorConfig.SLOT_NAME, slotName)
+            .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE);
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        TestHelper.waitFor(Duration.ofSeconds(15));
+
+        String dataValue = "A".repeat(100); // 100 character string
+        final int totalRecords = 10000;
+        final int batchSize = 1000;
+
+        LOGGER.info("Starting to insert {} records using two threads", totalRecords);
+
+        // Thread 1: Batch inserts with positive IDs (1, 2, 3, ...)
+        Thread positiveThread = new Thread(() -> {
+            try {
+                int id = 1;
+                for (int batch = 0; batch < totalRecords / batchSize; ++batch) {
+                    StringBuilder batchStmt = new StringBuilder();
+                    batchStmt.append("set yb_disable_transactional_writes = true; INSERT INTO test_table (id, data) VALUES ");
+
+                    for (int i = 0; i < batchSize; i++) {
+                        if (i > 0) {
+                            batchStmt.append(",");
+                        }
+
+                        batchStmt.append("(").append(id).append(", '").append(dataValue).append("')");
+                        ++id;
+                    }
+                    batchStmt.append(";");
+
+                    TestHelper.execute(batchStmt.toString());
+                }
+                LOGGER.info("Positive thread completed inserting {} records", totalRecords);
+            } catch (Exception e) {
+                LOGGER.error("Error in positive thread", e);
+            }
+        });
+
+        // Thread 2: Generate series with negative IDs (-1, -2, -3, ...)
+        Thread negativeThread = new Thread(() -> {
+            try {
+                int start = -1;
+
+                for (int batch = 0; batch < totalRecords / batchSize; ++batch) {
+                    String generateSeriesStmt = String.format(
+                        "INSERT INTO test_table (id, data) VALUES (generate_series(%d, %d), '%s')",
+                        start - batchSize + 1, start, dataValue);   
+                    TestHelper.execute(generateSeriesStmt);
+
+                    start -= batchSize;
+                }
+                
+                LOGGER.info("Negative thread completed inserting {} records using generate_series", totalRecords);
+            } catch (Exception e) {
+                LOGGER.error("Error in negative thread", e);
+            }
+        });
+
+        // Start both threads
+        positiveThread.start();
+        negativeThread.start();
+
+        // Wait for both threads to complete
+        positiveThread.join();
+        negativeThread.join();
+
+        LOGGER.info("Completed inserting all {} records from both threads", totalRecords);
+
+        // Find total records in table using select count(*)
+        String countQuery = "SELECT COUNT(*) FROM test_table";
+        int actualRecordCount = 0;
+        try (PostgresConnection conn = TestHelper.create()) {
+            try (Statement stmt = conn.connection().createStatement();
+                 ResultSet rs = stmt.executeQuery(countQuery)) {
+                if (rs.next()) {
+                    actualRecordCount = rs.getInt(1);
+                }
+            }
+        }
+        LOGGER.info("Actual records in table: {}", actualRecordCount);
+        assertThat(actualRecordCount).isEqualTo(2 * totalRecords);
+
+        // Wait for the connector to consume all the records.
+        // We expect to consume 20000 (2 * 10000) records.
+        final int totalRecordsToBeConsumed = 2 * totalRecords;
+        LOGGER.info("Starting to consume {} records from the connector", totalRecordsToBeConsumed);
+        SourceRecords records = consumeRecordsByTopic(totalRecordsToBeConsumed);
+        LOGGER.info("Successfully consumed {} records from the connector", records.allRecordsInOrder().size());
+
+        // Verify that we received the expected number of records
+        assertThat(records.allRecordsInOrder().size()).isEqualTo(totalRecordsToBeConsumed);
+
+        // Verify that all records are from the test_table topic
+        List<SourceRecord> testTableRecords = records.recordsForTopic(topicName("public.test_table"));
+        assertThat(testTableRecords.size()).isEqualTo(totalRecordsToBeConsumed);
+        LOGGER.info("Test table records: {}", testTableRecords.size());
+
+        // Verify that each record has the correct structure
+        for (SourceRecord record : testTableRecords) {
+            // Verify the after field exists and has the expected structure
+            Struct after = ((Struct) record.value()).getStruct("after");
+            assertThat(after).isNotNull();
+
+            // Verify the id field exists and is an integer
+            Integer id = after.getStruct("id").getInt32("value");
+            assertThat(id).isNotNull();
+
+            // Verify the data field exists and is a string of 100 characters
+            String data = after.getStruct("data").getString("value");
+            assertThat(data).isNotNull();
+            assertThat(data.length()).isEqualTo(100);
+            assertThat(data).isEqualTo(dataValue);
+        }
+
+        // Stop the connector
+        stopConnector();
+
+        // Clean up the replication slot
+        try {
+            TestHelper.execute("SELECT pg_drop_replication_slot('" + slotName + "')");
+        }
+        catch (Exception e) {
+            // Ignore if slot doesn't exist
+        }
     }
 
     @Override
