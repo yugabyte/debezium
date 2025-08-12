@@ -21,7 +21,9 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -4302,8 +4304,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     public void shouldStreamAllRecordsWithSingleShardTransactions() throws Exception {
-        // Create a table named test_table with a primary key column named id and another text column named data.
-        String createTableStmt = "CREATE TABLE test_table (id SERIAL PRIMARY KEY, data TEXT);";
+        // Create a table named test_table with a simple integer primary key column named id and another text column named data.
+        String createTableStmt = "CREATE TABLE test_table (id INTEGER PRIMARY KEY, data TEXT);";
         TestHelper.execute(createTableStmt);
 
         // Create a replication slot.
@@ -4336,48 +4338,95 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         start(YugabyteDBConnector.class, configBuilder.build());
         TestHelper.waitFor(Duration.ofSeconds(15));
 
-        // Insert 10000 records into the table each record having a 100 bytes.
         String dataValue = "A".repeat(100); // 100 character string
+        final int totalRecords = 10000;
+        final int batchSize = 1000;
 
-        // Insert records in batches to avoid memory issues.
-        int batchSize = 1000;
-        int totalRecords = 10000;
+        LOGGER.info("Starting to insert {} records using two threads", totalRecords);
 
-        LOGGER.info("Starting to insert {} records in batches of {}", totalRecords, batchSize);
-        for (int batch = 0; batch < totalRecords; batch += batchSize) {
-            int currentBatchSize = Math.min(batchSize, totalRecords - batch);
-            StringBuilder batchStmt = new StringBuilder();
-            batchStmt.append("set yb_disable_transactional_writes = true; INSERT INTO test_table (data) VALUES ");
+        // Thread 1: Batch inserts with positive IDs (1, 2, 3, ...)
+        Thread positiveThread = new Thread(() -> {
+            try {
+                int id = 1;
+                for (int batch = 0; batch < totalRecords / batchSize; ++batch) {
+                    StringBuilder batchStmt = new StringBuilder();
+                    batchStmt.append("set yb_disable_transactional_writes = true; INSERT INTO test_table (id, data) VALUES ");
 
-            for (int i = 0; i < currentBatchSize; i++) {
-                if (i > 0) {
-                    batchStmt.append(",");
+                    for (int i = 0; i < batchSize; i++) {
+                        if (i > 0) {
+                            batchStmt.append(",");
+                        }
+
+                        batchStmt.append("(").append(id).append(", '").append(dataValue).append("')");
+                        ++id;
+                    }
+                    batchStmt.append(";");
+
+                    TestHelper.execute(batchStmt.toString());
                 }
-                batchStmt.append("('").append(dataValue).append("')");
+                LOGGER.info("Positive thread completed inserting {} records", totalRecords);
+            } catch (Exception e) {
+                LOGGER.error("Error in positive thread", e);
             }
-            batchStmt.append(";");
+        });
 
-            TestHelper.execute(batchStmt.toString());
+        // Thread 2: Generate series with negative IDs (-1, -2, -3, ...)
+        Thread negativeThread = new Thread(() -> {
+            try {
+                int start = -1;
 
-            // Log progress every 10 batches.
-            if ((batch / batchSize) % 10 == 0) {
-                LOGGER.info("Inserted {} records so far", batch + currentBatchSize);
+                for (int batch = 0; batch < totalRecords / batchSize; ++batch) {
+                    String generateSeriesStmt = String.format(
+                        "INSERT INTO test_table (id, data) VALUES (generate_series(%d, %d), '%s')",
+                        start - batchSize + 1, start, dataValue);   
+                    TestHelper.execute(generateSeriesStmt);
+
+                    start -= batchSize;
+                }
+                
+                LOGGER.info("Negative thread completed inserting {} records using generate_series", totalRecords);
+            } catch (Exception e) {
+                LOGGER.error("Error in negative thread", e);
+            }
+        });
+
+        // Start both threads
+        positiveThread.start();
+        negativeThread.start();
+
+        // Wait for both threads to complete
+        positiveThread.join();
+        negativeThread.join();
+
+        LOGGER.info("Completed inserting all {} records from both threads", totalRecords);
+
+        // Find total records in table using select count(*)
+        String countQuery = "SELECT COUNT(*) FROM test_table";
+        int actualRecordCount = 0;
+        try (PostgresConnection conn = TestHelper.create()) {
+            try (Statement stmt = conn.connection().createStatement();
+                 ResultSet rs = stmt.executeQuery(countQuery)) {
+                if (rs.next()) {
+                    actualRecordCount = rs.getInt(1);
+                }
             }
         }
-        LOGGER.info("Completed inserting all {} records", totalRecords);
+        LOGGER.info("Actual records in table: {}", actualRecordCount);
+        assertThat(actualRecordCount).isEqualTo(2 * totalRecords);
 
         // Wait for the connector to consume all the records.
-        // We expect to consume 10000 records.
-        LOGGER.info("Starting to consume {} records from the connector", totalRecords);
-        SourceRecords records = consumeRecordsByTopic(totalRecords);
+        // We expect to consume 20000 (2 * 10000) records.
+        final int totalRecordsToBeConsumed = 2 * totalRecords;
+        LOGGER.info("Starting to consume {} records from the connector", totalRecordsToBeConsumed);
+        SourceRecords records = consumeRecordsByTopic(totalRecordsToBeConsumed);
         LOGGER.info("Successfully consumed {} records from the connector", records.allRecordsInOrder().size());
 
         // Verify that we received the expected number of records
-        assertThat(records.allRecordsInOrder().size()).isEqualTo(totalRecords);
+        assertThat(records.allRecordsInOrder().size()).isEqualTo(totalRecordsToBeConsumed);
 
         // Verify that all records are from the test_table topic
         List<SourceRecord> testTableRecords = records.recordsForTopic(topicName("public.test_table"));
-        assertThat(testTableRecords.size()).isEqualTo(totalRecords);
+        assertThat(testTableRecords.size()).isEqualTo(totalRecordsToBeConsumed);
         LOGGER.info("Test table records: {}", testTableRecords.size());
 
         // Verify that each record has the correct structure
@@ -4387,7 +4436,8 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
             assertThat(after).isNotNull();
 
             // Verify the id field exists and is an integer
-            assertThat(after.getStruct("id").getInt32("value")).isNotNull();
+            Integer id = after.getStruct("id").getInt32("value");
+            assertThat(id).isNotNull();
 
             // Verify the data field exists and is a string of 100 characters
             String data = after.getStruct("data").getString("value");
