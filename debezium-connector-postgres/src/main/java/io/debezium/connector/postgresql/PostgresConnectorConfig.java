@@ -8,9 +8,12 @@ package io.debezium.connector.postgresql;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import io.debezium.DebeziumException;
@@ -387,10 +390,31 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             public boolean isParallel() {
                 return false;
             }
+
+            @Override
+            public boolean isParallelSlot() {
+                return false;
+            }
         },
         PARALLEL("PARALLEL") {
             @Override
             public boolean isParallel() {
+                return true;
+            }
+
+            @Override
+            public boolean isParallelSlot() {
+                return false;
+            }
+        },
+        PARALLEL_SLOT("PARALLEL_SLOT") {
+            @Override
+            public boolean isParallel() {
+                return false;
+            }
+
+            @Override
+            public boolean isParallelSlot() {
                 return true;
             }
         };
@@ -412,6 +436,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         }
 
         public abstract boolean isParallel();
+        public abstract boolean isParallelSlot();
     }
 
     public enum LsnType implements EnumeratedValue {
@@ -763,14 +788,30 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Field SLOT_RANGES = Field.create("slot.ranges")
             .withDisplayName("Ranges on which a slot is supposed to operate")
             .withImportance(Importance.LOW)
-            .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.")
-            .withValidation((config, field, output) -> {
-                if (!config.getString(field, "").isEmpty() && !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")) {
-                    output.accept(field, "", "slot.ranges is only valid with streaming.mode 'parallel'");
-                    return 1;
-                }
-                return 0;
-            });
+            .withDescription("Semi-colon separated values for hash ranges to be polled by tasks.");
+            // .withValidation((config, field, output) -> {
+            //     if (!config.getString(field, "").isEmpty()
+            //             && (!config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")
+            //                     || !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel_slot"))) {
+            //         output.accept(field, "", "slot.ranges is only valid with streaming.mode 'parallel' or 'parallel_slot'");
+            //         return 1;
+            //     }
+            //     return 0;
+            // });
+    
+    public static final Field SLOT_BOUNDS_INTERNAL = Field.create("slot.bounds.internal")
+            .withDisplayName("Ranges on which a slot is supposed to operate")
+            .withImportance(Importance.LOW)
+            .withDescription("Internal use only.");
+            // .withValidation((config, field, output) -> {
+            //     if (!config.getString(field, "").isEmpty()
+            //             && (!config.getString(STREAMING_MODE).equalsIgnoreCase("parallel")
+            //                     || !config.getString(STREAMING_MODE).equalsIgnoreCase("parallel_slot"))) {
+            //         output.accept(field, "", "slot.ranges is only valid with streaming.mode 'parallel' or 'parallel_slot'");
+            //         return 1;
+            //     }
+            //     return 0;
+            // });
 
     public static final Field YB_LOAD_BALANCE_CONNECTIONS = Field.create("yb.load.balance.connections")
             .withDisplayName("YB load balance connections")
@@ -1231,6 +1272,29 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public StreamingMode streamingMode() {
         return StreamingMode.parse(getConfig().getString(STREAMING_MODE));
+    }
+
+    /**
+     * Reads the stream params specified and returns the slot boundaries.
+     * @return a {@link List} where the list represents the range of a
+     * tablet i.e. {@code [startHashCode, endHashCode)}
+     */
+    public List<Integer> getSlotBounds() {
+        String regex = "hash_range=(\\d+),(\\d+)";
+
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(streamParams());
+
+        if (matcher.find()) {
+            // Extract the numbers
+            String start = matcher.group(1);
+            String end = matcher.group(2);
+
+            return List.of(Integer.valueOf(start), Integer.valueOf(end));
+        }
+
+        // Return the full list assuming that we are in the old model.
+        return List.of(0, 65536);
     }
 
     protected boolean dropSlotOnStop() {
