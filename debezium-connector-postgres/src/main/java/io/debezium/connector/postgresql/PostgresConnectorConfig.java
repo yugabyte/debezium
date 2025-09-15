@@ -1176,6 +1176,15 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                 return 0;
             });
 
+    public static final Field YSQL_MAJOR_UPGRADE = Field.create("ysql.major.upgrade")
+            .withDisplayName("YSQL major upgrade")
+            .withType(Type.BOOLEAN)
+            .withImportance(Importance.HIGH)
+            .withDefault(false)
+            .withDescription("Should be used carefully only on YSQL major upgrade. This will set "
+                    + "yb_skip_read_time_in_walsender to true in the walsender session. Setting this is "
+                    + "required to get over the catalog read errors.");
+
     private final LogicalDecodingMessageFilter logicalDecodingMessageFilter;
     private final HStoreHandlingMode hStoreHandlingMode;
     private final IntervalHandlingMode intervalHandlingMode;
@@ -1334,6 +1343,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return List.of(getConfig().getString(SLOT_RANGES).trim().split(";"));
     }
 
+    public boolean isYSQLMajorUpgrade() {
+        return getConfig().getBoolean(YSQL_MAJOR_UPGRADE);
+    }
+
     @Override
     public byte[] getUnavailableValuePlaceholder() {
         String placeholder = getConfig().getString(UNAVAILABLE_VALUE_PLACEHOLDER);
@@ -1422,7 +1435,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     STREAMING_MODE,
                     SLOT_NAMES,
                     PUBLICATION_NAMES,
-                    SLOT_RANGES)
+                    SLOT_RANGES,
+                    YSQL_MAJOR_UPGRADE)
             .excluding(INCLUDE_SCHEMA_CHANGES)
             .create();
 

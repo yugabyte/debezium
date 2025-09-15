@@ -396,6 +396,14 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         initConnection();
 
         connect();
+
+        if (connectorConfig.isYSQLMajorUpgrade()) {
+            try (Statement stmt = pgConnection().createStatement()) {
+                LOGGER.info("Setting yb_skip_read_time_in_walsender for walsender session");
+                stmt.execute("SET yb_skip_read_time_in_walsender = true");
+            }
+        }
+
         if (offset == null || !offset.isValid()) {
             offset = defaultStartingPos;
         }
