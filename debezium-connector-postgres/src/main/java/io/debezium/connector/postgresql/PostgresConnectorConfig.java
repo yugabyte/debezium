@@ -1182,7 +1182,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.HIGH)
             .withDefault(false)
             .withDescription("Should be used carefully only on YSQL major upgrade. This will set "
-                    + "yb_skip_read_time_in_walsender to true in the walsender session. Setting this is "
+                    + "yb_ignore_read_time_in_walsender to true in the walsender session. Setting this is "
                     + "required to get over the catalog read errors.");
 
     private final LogicalDecodingMessageFilter logicalDecodingMessageFilter;
