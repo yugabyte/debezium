@@ -97,7 +97,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
             final Charset databaseCharset;
             try (PostgresConnection tempConnection = new PostgresConnection(connectorConfig.getJdbcConfig(),
-                    PostgresConnection.CONNECTION_GENERAL, connectorConfig.ybShouldLoadBalanceConnections())) {
+                    PostgresConnection.CONNECTION_GENERAL, connectorConfig.getYbLoadBalanceConnections())) {
                 databaseCharset = tempConnection.getDatabaseCharset();
             }
 
@@ -108,7 +108,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
             MainConnectionProvidingConnectionFactory<PostgresConnection> connectionFactory = new DefaultMainConnectionProvidingConnectionFactory<>(
                     () -> new PostgresConnection(connectorConfig.getJdbcConfig(), valueConverterBuilder,
-                            PostgresConnection.CONNECTION_GENERAL, connectorConfig.ybShouldLoadBalanceConnections()));
+                            PostgresConnection.CONNECTION_GENERAL, connectorConfig.getYbLoadBalanceConnections()));
             // Global JDBC connection used both for snapshotting and streaming.
             // Must be able to resolve datatypes.
             jdbcConnection = connectionFactory.mainConnection();
@@ -243,7 +243,7 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
                                 schemaNameAdjuster,
                                 () -> new PostgresConnection(connectorConfig.getJdbcConfig(),
                                         PostgresConnection.CONNECTION_GENERAL,
-                                        connectorConfig.ybShouldLoadBalanceConnections()),
+                                        connectorConfig.getYbLoadBalanceConnections()),
                                         exception -> {
                                     String sqlErrorId = exception.getSQLState();
                                     switch (sqlErrorId) {

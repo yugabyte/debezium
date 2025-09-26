@@ -140,7 +140,8 @@ public final class TestHelper {
      * @return the PostgresConnection instance; never null
      */
     public static PostgresConnection create() {
-        return new PostgresConnection(defaultJdbcConfig(), CONNECTION_TEST, true /* loadBalance */);
+        return new PostgresConnection(
+                defaultJdbcConfig(), CONNECTION_TEST, "only-primary" /* loadBalance */);
     }
 
     /**
@@ -155,7 +156,7 @@ public final class TestHelper {
                 config.getJdbcConfig(),
                 getPostgresValueConverterBuilder(config),
                 CONNECTION_TEST,
-                config.ybShouldLoadBalanceConnections());
+                config.getYbLoadBalanceConnections());
     }
 
     /**
@@ -168,7 +169,7 @@ public final class TestHelper {
     public static PostgresConnection create(String appName) {
         return new PostgresConnection(
                 JdbcConfiguration.adapt(defaultJdbcConfig().edit().with("ApplicationName", appName).build()),
-                CONNECTION_TEST, true /* loadBalance */);
+                CONNECTION_TEST, "only-primary" /* loadBalance */);
     }
 
     /**
@@ -233,7 +234,7 @@ public final class TestHelper {
         final PostgresConnectorConfig config = new PostgresConnectorConfig(defaultConfig().build());
         try (PostgresConnection connection = new PostgresConnection(config.getJdbcConfig(),
                 getPostgresValueConverterBuilder(config), CONNECTION_TEST,
-                config.ybShouldLoadBalanceConnections())) {
+                config.getYbLoadBalanceConnections())) {
             return connection.getTypeRegistry();
         }
     }
@@ -241,7 +242,8 @@ public final class TestHelper {
     public static PostgresDefaultValueConverter getDefaultValueConverter() {
         final PostgresConnectorConfig config = new PostgresConnectorConfig(defaultConfig().build());
         try (PostgresConnection connection = new PostgresConnection(config.getJdbcConfig(),
-                getPostgresValueConverterBuilder(config), CONNECTION_TEST, config.ybShouldLoadBalanceConnections())) {
+                getPostgresValueConverterBuilder(config), CONNECTION_TEST,
+                config.getYbLoadBalanceConnections())) {
             return connection.getDefaultValueConverter();
         }
     }
@@ -249,7 +251,8 @@ public final class TestHelper {
     public static Charset getDatabaseCharset() {
         final PostgresConnectorConfig config = new PostgresConnectorConfig(defaultConfig().build());
         try (PostgresConnection connection = new PostgresConnection(config.getJdbcConfig(),
-                getPostgresValueConverterBuilder(config), CONNECTION_TEST, config.ybShouldLoadBalanceConnections())) {
+                getPostgresValueConverterBuilder(config), CONNECTION_TEST,
+                config.getYbLoadBalanceConnections())) {
             return connection.getDatabaseCharset();
         }
     }

@@ -11,7 +11,7 @@
     <name>YugabyteDB Source Connector</name>
     <packaging>jar</packaging>
     <properties>
-        <!-- 
+        <!--
           Specify the properties that will be used for setting up the integration tests' Docker container.
           Note that the `dockerhost.ip` property is computed from the IP address of DOCKER_HOST, which will
           work on all platforms. We'll set some of these as system properties during integration testing.
@@ -54,7 +54,7 @@
         <dependency>
             <groupId>com.yugabyte</groupId>
             <artifactId>jdbc-yugabytedb</artifactId>
-            <version>42.3.5-yb-4</version>
+            <version>42.7.3-yb-4</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
@@ -354,7 +354,7 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- 
+            <!--
             Unlike surefire, the failsafe plugin ensures 'post-integration-test' phase always runs, even
             when there are failed integration tests. We rely upon this to always shut down the Docker container
             after the integration tests (defined as '*IT.java') are run.
