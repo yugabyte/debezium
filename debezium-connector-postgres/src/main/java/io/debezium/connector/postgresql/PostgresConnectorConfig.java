@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import io.debezium.DebeziumException;
@@ -780,13 +781,14 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withImportance(Importance.LOW)
             .withDescription(
                     "This config determines load-balance property in the connection url. " +
-                    "Supported values are 'only-primary' and 'false'")
+                    "Supported values are 'true', 'only-primary', 'only-rr', 'prefer-primary', " +
+                    "'prefer-rr' and 'false'")
             .withValidation((config, field, output) -> {
                 final String value = config.getString(field);
-                if (!value.equals("only-primary") && !value.equals("false")) {
+                Set<String> validValues = Set.of("true", "only-primary", "only-rr", "prefer-primary", "prefer-rr", "false");
+                if (!validValues.contains(value)) {
                     output.accept(field, value,
-                            "yb.load.balance.connections has only 'only-primary' and 'false' as " +
-                            "valid values");
+                            "The valid values of yb.load.balance.connections are " + validValues);
                     return 1;
                 }
                 return 0;
