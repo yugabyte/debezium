@@ -783,16 +783,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     "This config determines load-balance property in the connection url. " +
                     "Supported values are 'true', 'only-primary', 'only-rr', 'prefer-primary', " +
                     "'prefer-rr' and 'false'")
-            .withValidation((config, field, output) -> {
-                final String value = config.getString(field);
-                Set<String> validValues = Set.of("true", "only-primary", "only-rr", "prefer-primary", "prefer-rr", "false");
-                if (!validValues.contains(value)) {
-                    output.accept(field, value,
-                            "The valid values of yb.load.balance.connections are " + validValues);
-                    return 1;
-                }
-                return 0;
-            });
+            .withValidation(PostgresConnectorConfig::validateYbLoadBalanceConnectionsValue);
 
     public static final Field MAX_RETRIES_ON_ERROR = Field.create(ERRORS_MAX_RETRIES)
             .withDisplayName("The maximum number of retries")
@@ -1314,7 +1305,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     }
 
     public String getYbLoadBalanceConnections() {
-      return getConfig().getString(YB_LOAD_BALANCE_CONNECTIONS);
+        return getConfig().getString(YB_LOAD_BALANCE_CONNECTIONS);
     }
 
     protected Snapshotter getSnapshotter() {
@@ -1611,6 +1602,20 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                 problems.accept(field, hostName, hostName + " has invalid format (only the underscore, hyphen, dot, comma, colon and alphanumeric characters are allowed)");
                 ++problemCount;
             }
+        }
+
+        return problemCount;
+    }
+
+    protected static int validateYbLoadBalanceConnectionsValue(Configuration config, Field field, Field.ValidationOutput problems) {
+        final String value = config.getString(field);
+        Set<String> validValues = Set.of("true", "only-primary", "only-rr", "prefer-primary", "prefer-rr", "false");
+        int problemCount = 0;
+
+        if (!validValues.contains(value)) {
+            problems.accept(field, value,
+                    "The valid values of yb.load.balance.connections are " + validValues);
+            ++problemCount;
         }
 
         return problemCount;
