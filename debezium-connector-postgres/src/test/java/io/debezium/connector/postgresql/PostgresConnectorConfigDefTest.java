@@ -121,6 +121,17 @@ public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest
         assertThat(valid).isTrue();
     }
 
+    @Test
+    public void shouldFailForInvalidYbLoadBalanceConnectionsValue() {
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS, "invalid");
+
+        int problemCount = PostgresConnectorConfig.validateYbLoadBalanceConnectionsValue(
+                configBuilder.build(), PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS, (field, value, problemMessage) -> System.out.println(problemMessage));
+
+        assertThat((problemCount == 1)).isTrue();
+    }
+
     public void validateCorrectHostname(boolean multiNode) {
         Configuration.Builder configBuilder = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.HOSTNAME, multiNode ? "127.0.0.1:5433,127.0.0.2:5433,127.0.0.3:5433" : "127.0.0.1");

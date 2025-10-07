@@ -124,10 +124,11 @@ public class PostgresConnection extends JdbcConnection {
         }
     }
 
-    public PostgresConnection(JdbcConfiguration config, PostgresValueConverterBuilder valueConverterBuilder,
-            String connectionUsage, Boolean loadBalance) {
+    public PostgresConnection(JdbcConfiguration config,
+            PostgresValueConverterBuilder valueConverterBuilder, String connectionUsage,
+            String loadBalance) {
         this(config, valueConverterBuilder, connectionUsage,
-                PostgresConnectorConfig.getConnectionFactory(config.getHostname(), loadBalance));
+            PostgresConnectorConfig.getConnectionFactory(config.getHostname(), loadBalance));
     }
 
     /**
@@ -152,10 +153,11 @@ public class PostgresConnection extends JdbcConnection {
         this.jdbcConfig = config.getJdbcConfig();
     }
 
-    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry, String connectionUsage,
-            Boolean loadBalance) {
+    public PostgresConnection(PostgresConnectorConfig config, TypeRegistry typeRegistry,
+            String connectionUsage, String loadBalance) {
         this(config, typeRegistry, connectionUsage,
-                PostgresConnectorConfig.getConnectionFactory(config.getJdbcConfig().getHostname(), loadBalance));
+            PostgresConnectorConfig.getConnectionFactory(
+                config.getJdbcConfig().getHostname(), loadBalance));
     }
 
     /**
@@ -165,7 +167,8 @@ public class PostgresConnection extends JdbcConnection {
      * @param config {@link Configuration} instance, may not be null.
      * @param connectionUsage a symbolic name of the connection to be tracked in monitoring tools
      */
-    public PostgresConnection(JdbcConfiguration config, String connectionUsage, Boolean loadBalance) {
+    public PostgresConnection(JdbcConfiguration config, String connectionUsage,
+            String loadBalance) {
         this(config, null, connectionUsage, loadBalance);
     }
 
@@ -182,14 +185,15 @@ public class PostgresConnection extends JdbcConnection {
      *
      * @return a {@code String} where the variables in {@code urlPattern} are replaced with values from the configuration
      */
-    public String connectionString(Boolean loadBalance) {
-        Pair<String, String> urlPatterns = PostgresConnectorConfig
-                .findAndReplaceLoadBalancePropertyValues(loadBalance);
+    @Override
+    public String connectionString(String loadBalance) {
+        Pair<String, String> urlPatterns =
+            PostgresConnectorConfig.findAndReplaceLoadBalancePropertyValues(loadBalance);
         String hostName = jdbcConfig.getHostname();
         if (hostName.contains(":")) {
-            return connectionString(urlPatterns.getFirst());
+            return super.connectionString(urlPatterns.getFirst());
         } else {
-            return connectionString(urlPatterns.getSecond());
+            return super.connectionString(urlPatterns.getSecond());
         }
     }
 

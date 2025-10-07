@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import io.debezium.DebeziumException;
@@ -634,7 +635,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     public static final Pattern YB_HOSTNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9-_.,:]+$");
     public static final int YB_DEFAULT_ERRORS_MAX_RETRIES = 60;
     public static final long YB_DEFAULT_RETRIABLE_RESTART_WAIT = 30000L;
-    public static final boolean YB_DEFAULT_LOAD_BALANCE_CONNECTIONS = true;
+    public static final String YB_DEFAULT_LOAD_BALANCE_CONNECTIONS = "only-primary";
 
     public static final Field PORT = RelationalDatabaseConnectorConfig.PORT
             .withDefault(DEFAULT_PORT);
@@ -772,12 +773,17 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                 return 0;
             });
 
-    public static final Field YB_LOAD_BALANCE_CONNECTIONS = Field.create("yb.load.balance.connections")
+    public static final Field YB_LOAD_BALANCE_CONNECTIONS =
+        Field.create("yb.load.balance.connections")
             .withDisplayName("YB load balance connections")
-            .withType(Type.BOOLEAN)
+            .withType(Type.STRING)
             .withDefault(YB_DEFAULT_LOAD_BALANCE_CONNECTIONS)
             .withImportance(Importance.LOW)
-            .withDescription("Whether or not to add load-balance property to connection url");
+            .withDescription(
+                    "This config determines load-balance property in the connection url. " +
+                    "Supported values are 'true', 'only-primary', 'only-rr', 'prefer-primary', " +
+                    "'prefer-rr' and 'false'")
+            .withValidation(PostgresConnectorConfig::validateYbLoadBalanceConnectionsValue);
 
     public static final Field MAX_RETRIES_ON_ERROR = Field.create(ERRORS_MAX_RETRIES)
             .withDisplayName("The maximum number of retries")
@@ -1307,8 +1313,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return getConfig().getBoolean(YB_CONSISTENT_SNAPSHOT);
     }
 
-    public boolean ybShouldLoadBalanceConnections() {
-        return getConfig().getBoolean(YB_LOAD_BALANCE_CONNECTIONS);
+    public String getYbLoadBalanceConnections() {
+        return getConfig().getString(YB_LOAD_BALANCE_CONNECTIONS);
     }
 
     protected Snapshotter getSnapshotter() {
@@ -1481,20 +1487,21 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         }
         return 0;
     }
-    
-    public static Pair<String, String> findAndReplaceLoadBalancePropertyValues(Boolean loadBalance) {
+
+    public static Pair<String, String> findAndReplaceLoadBalancePropertyValues(String loadBalance) {
         String multiHostUrl = PostgresConnection.MULTI_HOST_URL_PATTERN;
         String singleHostUrl = PostgresConnection.URL_PATTERN;
-        String value = loadBalance.toString();
 
         if (multiHostUrl.contains("${" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "}")) {
             multiHostUrl = multiHostUrl.replaceAll(
-                    "\\$\\{" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "\\}", value);
+                    "\\$\\{" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "\\}",
+                    loadBalance);
         }
 
         if (singleHostUrl.contains("${" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "}")) {
             singleHostUrl = singleHostUrl.replaceAll(
-                    "\\$\\{" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "\\}", value);
+                    "\\$\\{" + PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS + "\\}",
+                    loadBalance);
         }
 
         return new Pair<>(multiHostUrl, singleHostUrl);
@@ -1505,7 +1512,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
      * @param hostName the host(s) for the PostgreSQL/YugabyteDB instance
      * @return a {@link io.debezium.jdbc.JdbcConnection.ConnectionFactory} instance
      */
-    public static JdbcConnection.ConnectionFactory getConnectionFactory(String hostName, Boolean loadBalance) {
+    public static JdbcConnection.ConnectionFactory getConnectionFactory(
+            String hostName, String loadBalance) {
         // The first string in the pair contains multi host URL pattern while the second string contains single host URL pattern.
         Pair<String,String> urlPatterns = findAndReplaceLoadBalancePropertyValues(loadBalance);
         return hostName.contains(":")
@@ -1608,6 +1616,20 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                 problems.accept(field, hostName, hostName + " has invalid format (only the underscore, hyphen, dot, comma, colon and alphanumeric characters are allowed)");
                 ++problemCount;
             }
+        }
+
+        return problemCount;
+    }
+
+    protected static int validateYbLoadBalanceConnectionsValue(Configuration config, Field field, Field.ValidationOutput problems) {
+        final String value = config.getString(field);
+        Set<String> validValues = Set.of("true", "only-primary", "only-rr", "prefer-primary", "prefer-rr", "false");
+        int problemCount = 0;
+
+        if (!validValues.contains(value)) {
+            problems.accept(field, value,
+                    "The valid values of yb.load.balance.connections are " + validValues);
+            ++problemCount;
         }
 
         return problemCount;
