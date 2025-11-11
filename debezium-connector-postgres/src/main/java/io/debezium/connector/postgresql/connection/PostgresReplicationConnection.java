@@ -886,6 +886,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         assert lsn != null;
 
         boolean enableDriverKeepaliveFlush = (connectorConfig.getLsnFlushMode() == PostgresConnectorConfig.LsnFlushMode.CONNECTOR_AND_DRIVER);
+        LOGGER.info("Starting replication stream from LSN {} with automaticFlush={} (mode={})", lsn, enableDriverKeepaliveFlush, connectorConfig.getLsnFlushMode());
 
         ChainedLogicalStreamBuilder streamBuilder = pgConnection()
                 .getReplicationAPI()
