@@ -3282,7 +3282,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
     @Test
     @FixFor("DBZ-5811")
-    // Tests deprecated SHOULD_FLUSH_LSN_IN_SOURCE_DB property for backward compatibility
     public void shouldNotAckLsnOnSource() throws Exception {
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.execute(SETUP_TABLES_STMT);
