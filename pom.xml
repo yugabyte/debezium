@@ -10,7 +10,7 @@
 
     <groupId>io.debezium</groupId>
     <artifactId>debezium-build-parent</artifactId>
-    <version>dz.2.5.2.yb.2024.1-SNAPSHOT</version>
+    <version>dz.2.5.2.yb.2025.1.SNAPSHOT.3</version>
     <name>Debezium Build Aggregator</name>
     <description>Debezium is an open source change data capture platform</description>
     <packaging>pom</packaging>
@@ -187,15 +187,17 @@
     </modules>
 
     <distributionManagement>
+      <site>
+        <id>s3.site</id>
+        <url>s3://repository.yugabyte.com/maven/site</url>
+      </site>
       <repository>
-        <id>ossrh</id>
-        <name>Sonatype Staging Repository</name>
-        <url>${release.endpoint}/service/local/staging/deploy/maven2</url>
+        <id>s3.release</id>
+        <url>s3://repository.yugabyte.com/maven/release</url>
       </repository>
       <snapshotRepository>
-        <id>ossrh</id>
-        <name>OSS Sonatype Nexus Snapshots</name>
-        <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        <id>s3.snapshot</id>
+        <url>s3://repository.yugabyte.com/snapshot</url>
       </snapshotRepository>
     </distributionManagement>
 
@@ -225,6 +227,13 @@
     </repositories>
 
     <build>
+        <extensions>
+            <extension>
+                <groupId>com.gkatzioura.maven.cloud</groupId>
+                <artifactId>s3-storage-wagon</artifactId>
+                <version>2.3</version>
+            </extension>
+        </extensions>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -311,6 +320,7 @@
                     <serverId>ossrh</serverId>
                     <nexusUrl>${release.endpoint}</nexusUrl>
                     <autoReleaseAfterClose>false</autoReleaseAfterClose>
+                    <skipNexusStagingDeployMojo>true</skipNexusStagingDeployMojo>
                 </configuration>
             </plugin>
             <plugin>

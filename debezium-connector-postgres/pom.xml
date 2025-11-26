@@ -3,7 +3,7 @@
     <parent>
         <groupId>io.debezium</groupId>
         <artifactId>debezium-parent</artifactId>
-        <version>dz.2.5.2.yb.2024.1-SNAPSHOT</version>
+        <version>dz.2.5.2.yb.2025.1.SNAPSHOT.3</version>
         <relativePath>../debezium-parent/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -166,6 +166,24 @@
 
     <build>
         <plugins>
+            <!-- Override parent's nexus-staging-maven-plugin to disable extensions 
+                 so that maven-deploy-plugin is used instead for S3 deployment -->
+            <plugin>
+                <groupId>org.sonatype.plugins</groupId>
+                <artifactId>nexus-staging-maven-plugin</artifactId>
+                <extensions>false</extensions>
+                <configuration>
+                    <skipNexusStagingDeployMojo>true</skipNexusStagingDeployMojo>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>3.1.1</version>
+                <configuration>
+                    <skip>false</skip>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>io.confluent</groupId>
                 <version>0.12.0</version>
@@ -432,6 +450,22 @@
             </testResource>
         </testResources>
     </build>
+    
+    <distributionManagement>
+        <site>
+            <id>s3.site</id>
+            <url>s3://repository.yugabyte.com/maven/site</url>
+        </site>
+        <repository>
+            <id>s3.release</id>
+            <url>s3://repository.yugabyte.com/maven/release</url>
+        </repository>
+        <snapshotRepository>
+            <id>s3.snapshot</id>
+            <url>s3://repository.yugabyte.com/snapshot</url>
+        </snapshotRepository>
+    </distributionManagement>
+    
     <!--
     Define several useful profiles
     -->

@@ -5,7 +5,7 @@
   <parent>
     <groupId>io.debezium</groupId>
     <artifactId>debezium-parent</artifactId>
-    <version>dz.2.5.2.yb.2024.1-SNAPSHOT</version>
+    <version>dz.2.5.2.yb.2025.1.SNAPSHOT.3</version>
     <relativePath>../debezium-parent/pom.xml</relativePath>
   </parent>
 
