@@ -69,7 +69,6 @@
 
     <build>
         <extensions>
-            <!-- s3-storage-wagon is compatible with Java 11+ (uses AWS SDK v2) -->
             <extension>
                 <groupId>com.gkatzioura.maven.cloud</groupId>
                 <artifactId>s3-storage-wagon</artifactId>
