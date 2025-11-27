@@ -544,22 +544,33 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                     tempPart,
                     plugin.getPostgresPluginName(),
                     lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
-                    streamingMode.isParallel() ? "USE_SNAPSHOT" : "");
-
-            // Begin a read-only transaction when it is the parallel streaming mode because
-            // we will be using this read-only transaction to take the snapshot further.
-            if (connectorConfig.streamingMode().isParallel() ) {
-                LOGGER.info("executing: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
-                stmt.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
-            }
-
+                    streamingMode.isParallel() ? "EXPORT_SNAPSHOT" : ""); // TODO: YOU NEED TO CHOOSE USE_SNAPSHOT FOR OLD VERSION 
+            // TODO: MOVE INTO 2 mehtod old way and pg way
+            
+            // TODO: REMOVE BELOW STATEMENT        
             LOGGER.info("Creating replication slot with command {}", createCommand);
             stmt.execute(createCommand);
-            // when we are in Postgres 9.4+, we can parse the slot creation info,
-            // otherwise, it returns nothing
             if (canExportSnapshot) {
                 this.slotCreationInfo = parseSlotCreation(stmt.getResultSet());
             }
+            // Begin a read-only transaction when it is the parallel streaming mode because
+            // we will be using this read-only transaction to take the snapshot further.
+            // if (connectorConfig.streamingMode().isParallel() ) {
+            //     LOGGER.info("executing: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+            //     stmt.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+            // }
+
+            /// BEGIN 
+            /// 
+
+            // TODO: BELOW BACK
+            // LOGGER.info("Creating replication slot with command {}", createCommand);
+            // stmt.execute(createCommand);
+            // when we are in Postgres 9.4+, we can parse the slot creation info,
+            // otherwise, it returns nothing
+            // if (canExportSnapshot) {
+            //     this.slotCreationInfo = parseSlotCreation(stmt.getResultSet());
+            // }
 
             return Optional.ofNullable(slotCreationInfo);
         }

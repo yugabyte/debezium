@@ -331,13 +331,25 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             LOGGER.info("Setting isolation level");
             String transactionStatement = snapshotter.snapshotTransactionIsolationLevelStatement(slotCreatedInfo, isOnDemand);
             LOGGER.info("Opening transaction with statement {}", transactionStatement);
-            jdbcConnection.executeWithoutCommitting(transactionStatement);
+            // jdbcConnection.executeWithoutCommitting(transactionStatement);
+            // TODO: SHISHIR ADDED BELOW
+            // Execute statements separately to avoid batch execution issues with YugabyteDB
+            // YugabyteDB does not allow SET TRANSACTION SNAPSHOT in batch execution
+            for (String stmt : transactionStatement.split(";\\s*\\n")) {
+                String trimmed = stmt.trim();
+                if (!trimmed.isEmpty()) {
+                    LOGGER.info("Executing statement: {}", trimmed);
+                    jdbcConnection.executeWithoutCommitting(trimmed);
+                }
+            }
         } else {
             LOGGER.info("Skipping setting snapshot time, snapshot data will not be consistent");
         }
 
-        // Regardless of whether consistent snapshot is enabled or not, we need to set the
-        // transaction isolation level.
+        // TODO: SHISHIR CHECK WHY IS THIS THE CASE?
+
+        // // Regardless of whether consistent snapshot is enabled or not, we need to set the
+        // // transaction isolation level.
         String transactionIsolationLevelStatement = "SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE;";
         LOGGER.info("Setting transaction isolation levels with statement {}", transactionIsolationLevelStatement);
         jdbcConnection.executeWithoutCommitting(transactionIsolationLevelStatement);
