@@ -10,7 +10,7 @@
 
     <groupId>io.debezium</groupId>
     <artifactId>debezium-build-parent</artifactId>
-    <version>dz.2.5.2.yb.2025.1.SNAPSHOT.3</version>
+    <version>${revision}</version>
     <name>Debezium Build Aggregator</name>
     <description>Debezium is an open source change data capture platform</description>
     <packaging>pom</packaging>
@@ -52,6 +52,7 @@
         </developer>
     </developers>
     <properties>
+        <revision>dz.2.5.2.yb.2025.1.SNAPSHOT.3</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
@@ -88,6 +89,7 @@
         <version.jandex>1.0.8</version.jandex>
         <version.revapi-java.plugin>0.21.0</version.revapi-java.plugin>
         <version.build-helper.plugin>1.9.1</version.build-helper.plugin>
+        <version.flatten.plugin>1.5.0</version.flatten.plugin>
 
         <!-- Which Maven Central infra should be used -->
         <release.endpoint>https://s01.oss.sonatype.org/</release.endpoint>
@@ -301,9 +303,38 @@
                     <artifactId>build-helper-maven-plugin</artifactId>
                     <version>${version.build-helper.plugin}</version>
                 </plugin>
+               <plugin>
+                   <groupId>org.codehaus.mojo</groupId>
+                   <artifactId>flatten-maven-plugin</artifactId>
+                   <version>${version.flatten.plugin}</version>
+               </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
+           <plugin>
+               <groupId>org.codehaus.mojo</groupId>
+               <artifactId>flatten-maven-plugin</artifactId>
+               <configuration>
+                   <updatePomFile>true</updatePomFile>
+                   <flattenMode>resolveCiFriendliesOnly</flattenMode>
+               </configuration>
+               <executions>
+                   <execution>
+                       <id>flatten</id>
+                       <phase>process-resources</phase>
+                       <goals>
+                           <goal>flatten</goal>
+                       </goals>
+                   </execution>
+                   <execution>
+                       <id>flatten.clean</id>
+                       <phase>clean</phase>
+                       <goals>
+                           <goal>clean</goal>
+                       </goals>
+                   </execution>
+               </executions>
+           </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
