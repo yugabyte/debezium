@@ -257,7 +257,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     stream.stopKeepAlive();
                 }
                 // TODO author=Horia Chiorean date=08/11/2016 description=Ideally we'd close the stream, but it's not reliable atm (see javadoc)
-                // replicationStream.close();2
+                // replicationStream.close();
                 // close the connection - this should also disconnect the current stream even if it's blocking
                 try {
                     if (!isInPreSnapshotCatchUpStreaming(offsetContext)) {

@@ -23,6 +23,7 @@ import io.debezium.connector.postgresql.PostgresOffsetContext.Loader;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.snapshot.AlwaysSnapshotter;
+import io.debezium.connector.postgresql.snapshot.QueryingSnapshotter;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.connector.postgresql.spi.Snapshotter;
@@ -331,22 +332,18 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             LOGGER.info("Setting isolation level");
             String transactionStatement = snapshotter.snapshotTransactionIsolationLevelStatement(slotCreatedInfo, isOnDemand);
             LOGGER.info("Opening transaction with statement {}", transactionStatement);
-            // jdbcConnection.executeWithoutCommitting(transactionStatement);
-            // TODO: SHISHIR ADDED BELOW
-            // Execute statements separately to avoid batch execution issues with YugabyteDB
-            // YugabyteDB does not allow SET TRANSACTION SNAPSHOT in batch execution
-            for (String stmt : transactionStatement.split(";\\s*\\n")) {
-                String trimmed = stmt.trim();
-                if (!trimmed.isEmpty()) {
-                    LOGGER.info("Executing statement: {}", trimmed);
-                    jdbcConnection.executeWithoutCommitting(trimmed);
-                }
-            }
+            jdbcConnection.executeWithoutCommitting(transactionStatement);
+
+            if (QueryingSnapshotter.useExportSnapshot && slotCreatedInfo != null && !isOnDemand) {
+                String setSnapshotQuery = "SET TRANSACTION SNAPSHOT '" + slotCreatedInfo.snapshotName() + "';";
+                LOGGER.info("Setting snapshot for  transaction with {}", setSnapshotQuery);
+                jdbcConnection.executeWithoutCommitting(setSnapshotQuery);
+                // TODO: SHISHIR MAYBE WE NEED TO ADD A FALLBACK HERE TOO
+            }  
         } else {
             LOGGER.info("Skipping setting snapshot time, snapshot data will not be consistent");
         }
 
-        // TODO: SHISHIR CHECK WHY IS THIS THE CASE?
 
         // // Regardless of whether consistent snapshot is enabled or not, we need to set the
         // // transaction isolation level.
