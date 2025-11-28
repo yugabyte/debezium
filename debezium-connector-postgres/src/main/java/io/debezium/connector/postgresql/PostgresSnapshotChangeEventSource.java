@@ -345,8 +345,8 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         }
 
 
-        // // Regardless of whether consistent snapshot is enabled or not, we need to set the
-        // // transaction isolation level.
+        // Regardless of whether consistent snapshot is enabled or not, we need to set the
+        // transaction isolation level.
         String transactionIsolationLevelStatement = "SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE;";
         LOGGER.info("Setting transaction isolation levels with statement {}", transactionIsolationLevelStatement);
         jdbcConnection.executeWithoutCommitting(transactionIsolationLevelStatement);
