@@ -63,7 +63,7 @@ public interface ReplicationConnection extends AutoCloseable {
      *
      * @throws SQLException if anything fails
      */
-    Optional<SlotCreationResult>  createReplicationSlot() throws SQLException;
+    Optional<SlotCreationResult> createReplicationSlot() throws SQLException;
 
     /**
      *  Forces the connection to be created, is called by startStreaming, but can be called manually

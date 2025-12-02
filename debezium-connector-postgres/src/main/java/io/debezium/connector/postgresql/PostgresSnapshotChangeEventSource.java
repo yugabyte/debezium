@@ -110,6 +110,15 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             throws Exception {
         if (YugabyteDBServer.isEnabled()) {
             // In case of YB, the consistent snapshot is performed as follows -
+
+            // For version 2025.2.1 & above:
+            // EXPORT_SNAPSHOT is enabled by default.
+            // 1) If connector created the slot, then the snapshotName returned as part of the CREATE_REPLICATION_SLOT
+            //    command will have the snapshot id which will be used to set the transaction snapshot
+            // 2) If slot already exists, then the snapshot query will be run as of the hybrid time corresponding to the
+            //    restart_lsn. This information is available in the pg_replication_slots view
+
+            // For version 2025.2.0 & below:
             // 1) If connector created the slot, then the snapshotName returned as part of the CREATE_REPLICATION_SLOT
             //    command will have the hybrid time as of which the snapshot query is to be run
             // 2) If slot already exists, then the snapshot query will be run as of the hybrid time corresponding to the

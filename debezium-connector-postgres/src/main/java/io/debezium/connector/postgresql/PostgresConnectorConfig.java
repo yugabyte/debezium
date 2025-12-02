@@ -1326,18 +1326,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         return getConfig().getString(YB_LOAD_BALANCE_CONNECTIONS);
     }
 
-    /**
-     * Returns whether EXPORT_SNAPSHOT is supported by the YugabyteDB server.
-     * This is determined at runtime during slot creation.
-     */
     public boolean isExportSnapshotSupported() {
         return exportSnapshotSupported;
     }
 
-    /**
-     * Sets whether EXPORT_SNAPSHOT is supported. Called when slot creation with
-     * EXPORT_SNAPSHOT fails and we fall back to USE_SNAPSHOT.
-     */
     public void setExportSnapshotSupported(boolean supported) {
         this.exportSnapshotSupported = supported;
     }
