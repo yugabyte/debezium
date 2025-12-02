@@ -23,7 +23,6 @@ import io.debezium.connector.postgresql.PostgresOffsetContext.Loader;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.snapshot.AlwaysSnapshotter;
-import io.debezium.connector.postgresql.snapshot.QueryingSnapshotter;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.connector.postgresql.spi.Snapshotter;
@@ -334,16 +333,14 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             LOGGER.info("Opening transaction with statement {}", transactionStatement);
             jdbcConnection.executeWithoutCommitting(transactionStatement);
 
-            if (QueryingSnapshotter.useExportSnapshot && slotCreatedInfo != null && !isOnDemand) {
+            if (connectorConfig.isExportSnapshotSupported() && slotCreatedInfo != null && !isOnDemand) {
                 String setSnapshotQuery = "SET TRANSACTION SNAPSHOT '" + slotCreatedInfo.snapshotName() + "';";
-                LOGGER.info("Setting snapshot for  transaction with {}", setSnapshotQuery);
+                LOGGER.info("Setting snapshot for transaction with {}", setSnapshotQuery);
                 jdbcConnection.executeWithoutCommitting(setSnapshotQuery);
-                // TODO: SHISHIR MAYBE WE NEED TO ADD A FALLBACK HERE TOO
             }  
         } else {
             LOGGER.info("Skipping setting snapshot time, snapshot data will not be consistent");
         }
-
 
         // Regardless of whether consistent snapshot is enabled or not, we need to set the
         // transaction isolation level.

@@ -21,14 +21,11 @@ import io.debezium.relational.TableId;
 public abstract class QueryingSnapshotter implements Snapshotter {
 
     private SlotState slotState;
-
-    // If the connector crashes after this changes to false, it will reset to true on restart.
-    // However, this is safe because newSlotInfo will be null, preventing the if blocks from 
-    // executing.
-    public static volatile boolean useExportSnapshot = true;
+    private PostgresConnectorConfig config;
 
     @Override
     public void init(PostgresConnectorConfig config, OffsetState sourceInfo, SlotState slotState) {
+        this.config = config;
         if (YugabyteDBServer.isEnabled()) {
             this.slotState = slotState;
         }
@@ -50,19 +47,21 @@ public abstract class QueryingSnapshotter implements Snapshotter {
     @Override
     public String snapshotTransactionIsolationLevelStatement(SlotCreationResult newSlotInfo, boolean isOnDemand) {
 
-        if (newSlotInfo != null && !isOnDemand && YugabyteDBServer.isEnabled() && useExportSnapshot) {
-        
+        if (newSlotInfo != null && !isOnDemand && YugabyteDBServer.isEnabled() && config.isExportSnapshotSupported()) {
             /*
              * For an on demand blocking snapshot we don't need to reuse
              * the same snapshot from the existing exported transaction as for the initial snapshot.
              */
-            
-            // YB Change: We will set the  transaction snapshot separately otherwise we will get an 
+
+            // YB Change: We will set the transaction snapshot separately otherwise we will get an
             // exception with the error message: ERROR: cannot export/import a snapshot in Batch Execution.
             return "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;";
-
         }
-        else if (YugabyteDBServer.isEnabled() && !isOnDemand && !useExportSnapshot) {
+        else if (YugabyteDBServer.isEnabled() && !isOnDemand) {
+            // YB fallback: This handles two cases:
+            // 1) EXPORT_SNAPSHOT failed and we fell back to USE_SNAPSHOT - use newSlotInfo.snapshotName()
+            // 2) Connector restarted with existing slot (newSlotInfo is null) - use slotState.slotRestartCommitHT()
+            //
             // In case of YB, the consistent snapshot is performed as follows -
             // 1) If connector created the slot, then the snapshotName returned as part of the CREATE_REPLICATION_SLOT
             //    command will have the hybrid time as of which the snapshot query is to be run
@@ -81,12 +80,14 @@ public abstract class QueryingSnapshotter implements Snapshotter {
             // be removed from here.
             try {
                 Thread.sleep(1000);
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 throw new RuntimeException("Exception while waiting", e);
             }
 
-            String snapshotTimeHT =
-                    newSlotInfo != null ?  newSlotInfo.snapshotName() : String.valueOf(slotState.slotRestartCommitHT());
+            String snapshotTimeHT = newSlotInfo != null
+                    ? newSlotInfo.snapshotName()
+                    : String.valueOf(slotState.slotRestartCommitHT());
             return ybSnapshotStatement(snapshotTimeHT);
         }
 

@@ -42,7 +42,6 @@ import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresSchema;
 import io.debezium.connector.postgresql.ReplicaIdentityMapper;
 import io.debezium.connector.postgresql.TypeRegistry;
-import io.debezium.connector.postgresql.snapshot.QueryingSnapshotter;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.jdbc.JdbcConnection;
@@ -564,7 +563,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                     // YB: If the create replication slot command fails as a fallback mechanism
                     // we will try to create the slot again with the USE_SNAPSHOT option.
                     // This is to make it backward compatible with the old version of YugabyteDB.
-                    QueryingSnapshotter.useExportSnapshot = false;
+                    connectorConfig.setExportSnapshotSupported(false);
                     String createCommand = getReplicationSlotCreationCommand(tempPart, false);
 
                     // Begin a read-only transaction when it is the parallel streaming mode because
