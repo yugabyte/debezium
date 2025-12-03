@@ -10,7 +10,7 @@
 
     <groupId>io.debezium</groupId>
     <artifactId>debezium-build-parent</artifactId>
-    <version>dz.2.5.2.yb.2024.1-SNAPSHOT</version>
+    <version>${revision}</version>
     <name>Debezium Build Aggregator</name>
     <description>Debezium is an open source change data capture platform</description>
     <packaging>pom</packaging>
@@ -52,6 +52,7 @@
         </developer>
     </developers>
     <properties>
+        <revision>dz.2.5.2.yb.2025.1.SNAPSHOT.3</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
@@ -88,6 +89,7 @@
         <version.jandex>1.0.8</version.jandex>
         <version.revapi-java.plugin>0.21.0</version.revapi-java.plugin>
         <version.build-helper.plugin>1.9.1</version.build-helper.plugin>
+        <version.flatten.plugin>1.5.0</version.flatten.plugin>
 
         <!-- Which Maven Central infra should be used -->
         <release.endpoint>https://s01.oss.sonatype.org/</release.endpoint>
@@ -187,15 +189,17 @@
     </modules>
 
     <distributionManagement>
+      <site>
+        <id>s3.site</id>
+        <url>s3://repository.yugabyte.com/maven/site</url>
+      </site>
       <repository>
-        <id>ossrh</id>
-        <name>Sonatype Staging Repository</name>
-        <url>${release.endpoint}/service/local/staging/deploy/maven2</url>
+        <id>s3.release</id>
+        <url>s3://repository.yugabyte.com/maven/release</url>
       </repository>
       <snapshotRepository>
-        <id>ossrh</id>
-        <name>OSS Sonatype Nexus Snapshots</name>
-        <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        <id>s3.snapshot</id>
+        <url>s3://repository.yugabyte.com/snapshot</url>
       </snapshotRepository>
     </distributionManagement>
 
@@ -225,6 +229,13 @@
     </repositories>
 
     <build>
+        <extensions>
+            <extension>
+                <groupId>com.gkatzioura.maven.cloud</groupId>
+                <artifactId>s3-storage-wagon</artifactId>
+                <version>2.3</version>
+            </extension>
+        </extensions>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -292,9 +303,38 @@
                     <artifactId>build-helper-maven-plugin</artifactId>
                     <version>${version.build-helper.plugin}</version>
                 </plugin>
+               <plugin>
+                   <groupId>org.codehaus.mojo</groupId>
+                   <artifactId>flatten-maven-plugin</artifactId>
+                   <version>${version.flatten.plugin}</version>
+               </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
+           <plugin>
+               <groupId>org.codehaus.mojo</groupId>
+               <artifactId>flatten-maven-plugin</artifactId>
+               <configuration>
+                   <updatePomFile>true</updatePomFile>
+                   <flattenMode>resolveCiFriendliesOnly</flattenMode>
+               </configuration>
+               <executions>
+                   <execution>
+                       <id>flatten</id>
+                       <phase>process-resources</phase>
+                       <goals>
+                           <goal>flatten</goal>
+                       </goals>
+                   </execution>
+                   <execution>
+                       <id>flatten.clean</id>
+                       <phase>clean</phase>
+                       <goals>
+                           <goal>clean</goal>
+                       </goals>
+                   </execution>
+               </executions>
+           </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-release-plugin</artifactId>
@@ -306,11 +346,12 @@
             <plugin>
                 <groupId>org.sonatype.plugins</groupId>
                 <artifactId>nexus-staging-maven-plugin</artifactId>
-                <extensions>true</extensions>
+                <extensions>false</extensions>
                 <configuration>
                     <serverId>ossrh</serverId>
                     <nexusUrl>${release.endpoint}</nexusUrl>
                     <autoReleaseAfterClose>false</autoReleaseAfterClose>
+                    <skipNexusStagingDeployMojo>true</skipNexusStagingDeployMojo>
                 </configuration>
             </plugin>
             <plugin>
