@@ -669,42 +669,42 @@ public class PostgresValueConverter extends JdbcValueConverters {
 
     private Object convertPgVector(Column column, Field fieldDefn, Object data) {
         return convertValue(column, fieldDefn, data, Collections.emptyList(), r -> {
-            if (data instanceof byte[] typedData) {
-                r.deliver(Vector.fromLogical(fieldDefn.schema(), new String(typedData, databaseCharset)));
+            if (data instanceof byte[]) {
+                r.deliver(Vector.fromLogical(fieldDefn.schema(), new String((byte[]) data, databaseCharset)));
             }
-            if (data instanceof String typedData) {
-                r.deliver(Vector.fromLogical(fieldDefn.schema(), typedData));
+            else if (data instanceof String) {
+                r.deliver(Vector.fromLogical(fieldDefn.schema(), (String) data));
             }
-            else if (data instanceof PGobject typedData) {
-                r.deliver(Vector.fromLogical(fieldDefn.schema(), typedData.getValue()));
+            else if (data instanceof PGobject) {
+                r.deliver(Vector.fromLogical(fieldDefn.schema(), ((PGobject) data).getValue()));
             }
         });
     }
 
     private Object convertPgHalfVector(Column column, Field fieldDefn, Object data) {
         return convertValue(column, fieldDefn, data, Collections.emptyList(), r -> {
-            if (data instanceof byte[] typedData) {
-                r.deliver(HalfVector.fromLogical(fieldDefn.schema(), new String(typedData, databaseCharset)));
+            if (data instanceof byte[]) {
+                r.deliver(HalfVector.fromLogical(fieldDefn.schema(), new String((byte[]) data, databaseCharset)));
             }
-            if (data instanceof String typedData) {
-                r.deliver(HalfVector.fromLogical(fieldDefn.schema(), typedData));
+            else if (data instanceof String) {
+                r.deliver(HalfVector.fromLogical(fieldDefn.schema(), (String) data));
             }
-            else if (data instanceof PGobject typedData) {
-                r.deliver(HalfVector.fromLogical(fieldDefn.schema(), typedData.getValue()));
+            else if (data instanceof PGobject) {
+                r.deliver(HalfVector.fromLogical(fieldDefn.schema(), ((PGobject) data).getValue()));
             }
         });
     }
 
     private Object convertPgSparseVector(Column column, Field fieldDefn, Object data) {
         return convertValue(column, fieldDefn, data, Collections.emptyList(), r -> {
-            if (data instanceof byte[] typedData) {
-                r.deliver(SparseVector.fromLogical(fieldDefn.schema(), new String(typedData, databaseCharset)));
+            if (data instanceof byte[]) {
+                r.deliver(SparseVector.fromLogical(fieldDefn.schema(), new String((byte[]) data, databaseCharset)));
             }
-            if (data instanceof String typedData) {
-                r.deliver(SparseVector.fromLogical(fieldDefn.schema(), typedData));
+            else if (data instanceof String) {
+                r.deliver(SparseVector.fromLogical(fieldDefn.schema(), (String) data));
             }
-            else if (data instanceof PGobject typedData) {
-                r.deliver(SparseVector.fromLogical(fieldDefn.schema(), typedData.getValue()));
+            else if (data instanceof PGobject) {
+                r.deliver(SparseVector.fromLogical(fieldDefn.schema(), ((PGobject) data).getValue()));
             }
         });
     }

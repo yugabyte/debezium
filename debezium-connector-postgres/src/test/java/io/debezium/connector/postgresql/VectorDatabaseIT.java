@@ -53,7 +53,7 @@ public class VectorDatabaseIT extends AbstractRecordsProducerTest {
     public void shouldSnapshotAndStreamData() throws Exception {
         Testing.Print.enable();
 
-        start(PostgresConnector.class, TestHelper.defaultConfig()
+        start(YugabyteDBConnector.class, TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL)
                 .build());
         assertConnectorIsRunning();
@@ -88,8 +88,8 @@ public class VectorDatabaseIT extends AbstractRecordsProducerTest {
     @Test
     public void shouldStreamData() throws Exception {
         Testing.Print.enable();
-        start(PostgresConnector.class, TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA)
+        start(YugabyteDBConnector.class, TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
                 .build());
         assertConnectorIsRunning();
 
