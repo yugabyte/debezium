@@ -4342,6 +4342,196 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         });
     }
 
+    @Test
+    public void shouldStreamWithExportSnapshotDisabledAndPreCreatedSlotWithUseSnapshot() throws Exception {
+        // For the following test ensure you set the ysql_enable_pg_export_snapshot to false.
+        // If the above option is not possible then explictly create the slot with the USE_SNAPSHOT
+        // option.
+        TestHelper.dropAllSchemas();
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.dropPublication();
+
+        String slotName = "test_use_snapshot_slot";
+        String tableName = "public.test_snapshot";
+
+        TestHelper.execute("DROP TABLE IF EXISTS " + tableName);
+        TestHelper.execute("CREATE TABLE " + tableName + " (pk SERIAL PRIMARY KEY, aa INTEGER)");
+
+        for (int i = 1; i <= 10; i++) {
+            TestHelper.execute("INSERT INTO " + tableName + " (aa) VALUES (" + i + ")");
+        }
+
+        PostgresConnectorConfig config = new PostgresConnectorConfig(TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, slotName)
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false)
+                .build());
+
+        try (ReplicationConnection replConnection = TestHelper.createForReplication(slotName, false, config)) {
+            replConnection.createReplicationSlot();
+        }
+
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, slotName)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, tableName)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false);
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+
+        TestHelper.waitFor(Duration.ofSeconds(10));
+
+        SourceRecords snapshotRecords = consumeRecordsByTopic(10);
+        List<SourceRecord> tableRecords = snapshotRecords.recordsForTopic(topicName(tableName));
+        assertThat(tableRecords).hasSize(10);
+
+        for (int i = 11; i <= 15; i++) {
+            TestHelper.execute("INSERT INTO " + tableName + " (aa) VALUES (" + i + ")");
+        }
+
+        SourceRecords streamRecords = consumeRecordsByTopic(5);
+        tableRecords = streamRecords.recordsForTopic(topicName(tableName));
+        assertThat(tableRecords).hasSize(5);
+
+        stopConnector();
+
+        for (int i = 16; i <= 20; i++) {
+            TestHelper.execute("INSERT INTO " + tableName + " (aa) VALUES (" + i + ")");
+        }
+
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, true).build());
+        assertConnectorIsRunning();
+
+        TestHelper.waitFor(Duration.ofSeconds(10));
+
+        SourceRecords afterRestartRecords = consumeRecordsByTopic(5);
+        tableRecords = afterRestartRecords.recordsForTopic(topicName(tableName));
+        assertThat(tableRecords).hasSize(5);
+
+        TestHelper.execute("DROP TABLE IF EXISTS " + tableName);
+    }
+
+    @Test
+    public void shouldStreamWithDefaultFlagsAndConnectorCreatedSlot() throws Exception {
+        TestHelper.dropAllSchemas();
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.dropPublication();
+
+        String tableName = "public.test_default_flags";
+
+        TestHelper.execute("DROP TABLE IF EXISTS " + tableName);
+        TestHelper.execute("CREATE TABLE " + tableName + " (pk SERIAL PRIMARY KEY, aa INTEGER)");
+
+        for (int i = 1; i <= 10; i++) {
+            TestHelper.execute("INSERT INTO " + tableName + " (aa) VALUES (" + i + ")");
+        }
+
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, tableName)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false);
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+
+        TestHelper.waitFor(Duration.ofSeconds(10));
+
+        SourceRecords snapshotRecords = consumeRecordsByTopic(10);
+        List<SourceRecord> tableRecords = snapshotRecords.recordsForTopic(topicName(tableName));
+        assertThat(tableRecords).hasSize(10);
+
+        for (int i = 11; i <= 15; i++) {
+            TestHelper.execute("INSERT INTO " + tableName + " (aa) VALUES (" + i + ")");
+        }
+
+        SourceRecords streamRecords = consumeRecordsByTopic(5);
+        tableRecords = streamRecords.recordsForTopic(topicName(tableName));
+        assertThat(tableRecords).hasSize(5);
+
+        stopConnector();
+
+        for (int i = 16; i <= 20; i++) {
+            TestHelper.execute("INSERT INTO " + tableName + " (aa) VALUES (" + i + ")");
+        }
+
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, true).build());
+        assertConnectorIsRunning();
+
+        TestHelper.waitFor(Duration.ofSeconds(10));
+
+        SourceRecords afterRestartRecords = consumeRecordsByTopic(5);
+        tableRecords = afterRestartRecords.recordsForTopic(topicName(tableName));
+        assertThat(tableRecords).hasSize(5);
+
+        TestHelper.execute("DROP TABLE IF EXISTS " + tableName);
+    }
+
+    @Test
+    public void shouldStreamWithDefaultFlagsAndPreCreatedSlotViaReplicationConnection() throws Exception {
+        TestHelper.dropAllSchemas();
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.dropPublication();
+
+        String slotName = "test_repl_conn_slot";
+        String tableName = "public.test_repl_slot";
+
+        TestHelper.execute("DROP TABLE IF EXISTS " + tableName);
+        TestHelper.execute("CREATE TABLE " + tableName + " (pk SERIAL PRIMARY KEY, aa INTEGER)");
+
+        for (int i = 1; i <= 10; i++) {
+            TestHelper.execute("INSERT INTO " + tableName + " (aa) VALUES (" + i + ")");
+        }
+
+        PostgresConnectorConfig config = new PostgresConnectorConfig(TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, slotName)
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false)
+                .build());
+
+        try (ReplicationConnection replConnection = TestHelper.createForReplication(slotName, false, config)) {
+            replConnection.createReplicationSlot();
+        }
+
+        Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_NAME, slotName)
+                .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, tableName)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL.getValue())
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, false);
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+
+        TestHelper.waitFor(Duration.ofSeconds(10));
+
+        SourceRecords snapshotRecords = consumeRecordsByTopic(10);
+        List<SourceRecord> tableRecords = snapshotRecords.recordsForTopic(topicName(tableName));
+        assertThat(tableRecords).hasSize(10);
+
+        for (int i = 11; i <= 15; i++) {
+            TestHelper.execute("INSERT INTO " + tableName + " (aa) VALUES (" + i + ")");
+        }
+
+        SourceRecords streamRecords = consumeRecordsByTopic(5);
+        tableRecords = streamRecords.recordsForTopic(topicName(tableName));
+        assertThat(tableRecords).hasSize(5);
+
+        stopConnector();
+
+        for (int i = 16; i <= 20; i++) {
+            TestHelper.execute("INSERT INTO " + tableName + " (aa) VALUES (" + i + ")");
+        }
+
+        start(YugabyteDBConnector.class, configBuilder.with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, true).build());
+        assertConnectorIsRunning();
+
+        TestHelper.waitFor(Duration.ofSeconds(10));
+
+        SourceRecords afterRestartRecords = consumeRecordsByTopic(5);
+        tableRecords = afterRestartRecords.recordsForTopic(topicName(tableName));
+        assertThat(tableRecords).hasSize(5);
+
+        TestHelper.execute("DROP TABLE IF EXISTS " + tableName);
+    }
+
     private Predicate<SourceRecord> stopOnPKPredicate(int pkValue) {
         return record -> {
             Struct key = (Struct) record.key();
