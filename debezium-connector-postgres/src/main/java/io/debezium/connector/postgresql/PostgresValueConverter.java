@@ -668,6 +668,7 @@ public class PostgresValueConverter extends JdbcValueConverters {
     }
 
     private Object convertPgVector(Column column, Field fieldDefn, Object data) {
+        // YB: Changed from Java 16+ pattern matching instanceof to Java 11 compatible explicit casts
         return convertValue(column, fieldDefn, data, Collections.emptyList(), r -> {
             if (data instanceof byte[]) {
                 r.deliver(Vector.fromLogical(fieldDefn.schema(), new String((byte[]) data, databaseCharset)));
@@ -682,6 +683,7 @@ public class PostgresValueConverter extends JdbcValueConverters {
     }
 
     private Object convertPgHalfVector(Column column, Field fieldDefn, Object data) {
+        // YB: Changed from Java 16+ pattern matching instanceof to Java 11 compatible explicit casts
         return convertValue(column, fieldDefn, data, Collections.emptyList(), r -> {
             if (data instanceof byte[]) {
                 r.deliver(HalfVector.fromLogical(fieldDefn.schema(), new String((byte[]) data, databaseCharset)));
@@ -696,6 +698,7 @@ public class PostgresValueConverter extends JdbcValueConverters {
     }
 
     private Object convertPgSparseVector(Column column, Field fieldDefn, Object data) {
+        // YB: Changed from Java 16+ pattern matching instanceof to Java 11 compatible explicit casts
         return convertValue(column, fieldDefn, data, Collections.emptyList(), r -> {
             if (data instanceof byte[]) {
                 r.deliver(SparseVector.fromLogical(fieldDefn.schema(), new String((byte[]) data, databaseCharset)));
