@@ -3,6 +3,14 @@
 
 FROM debezium/connect:2.5.2.Final
 
+# Install Java 17 (required because connector JAR is compiled with Java 17)
+USER root
+RUN microdnf install -y java-17-openjdk-headless && microdnf clean all \
+    && ln -sfn /usr/lib/jvm/java-17-openjdk-* /usr/lib/jvm/java-17
+ENV JAVA_HOME=/usr/lib/jvm/java-17
+ENV PATH=$JAVA_HOME/bin:$PATH
+USER kafka
+
 WORKDIR $KAFKA_CONNECT_PLUGINS_DIR
 RUN rm -f debezium-connector-postgres/debezium-connector-postgres-*.jar
 RUN rm -rf debezium-connector-db2
