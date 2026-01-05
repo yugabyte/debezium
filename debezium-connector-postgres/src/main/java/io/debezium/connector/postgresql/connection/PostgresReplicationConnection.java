@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 import org.apache.kafka.connect.errors.ConnectException;
 import com.yugabyte.core.BaseConnection;
 import com.yugabyte.core.ServerVersion;
+import com.yugabyte.replication.LogSequenceNumber;
 import com.yugabyte.replication.PGReplicationStream;
 import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
 import com.yugabyte.util.PSQLException;
@@ -822,10 +823,22 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             }
 
             private void doFlushLsn(Lsn lsn) throws SQLException {
-                stream.setFlushedLSN(lsn.asLogSequenceNumber());
-                stream.setAppliedLSN(lsn.asLogSequenceNumber());
+                LogSequenceNumber newLsn = lsn.asLogSequenceNumber();
+                boolean flushedAdvanced = false;
+                boolean appliedAdvanced = false;
 
-                stream.forceUpdateStatus();
+                if (stream.getLastFlushedLSN().compareTo(newLsn) < 0) {
+                    stream.setFlushedLSN(newLsn);
+                    flushedAdvanced = true;
+                }
+
+                if (stream.getLastAppliedLSN().compareTo(newLsn) < 0) {
+                    stream.setAppliedLSN(newLsn);
+                    appliedAdvanced = true;
+                }
+                if (flushedAdvanced || appliedAdvanced) {
+                    stream.forceUpdateStatus();
+                }
             }
 
             @Override
