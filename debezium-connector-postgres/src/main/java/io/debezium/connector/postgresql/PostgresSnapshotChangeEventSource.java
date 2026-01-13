@@ -342,7 +342,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             LOGGER.info("Opening transaction with statement {}", transactionStatement);
             jdbcConnection.executeWithoutCommitting(transactionStatement);
 
-            if (connectorConfig.isExportSnapshotSupported() && slotCreatedInfo != null && !isOnDemand) {
+            if (YugabyteDBServer.isEnabled() && connectorConfig.isExportSnapshotSupported() && slotCreatedInfo != null && !isOnDemand) {
                 String setSnapshotQuery = "SET TRANSACTION SNAPSHOT '" + slotCreatedInfo.snapshotName() + "';";
                 LOGGER.info("Setting snapshot for transaction with {}", setSnapshotQuery);
                 jdbcConnection.executeWithoutCommitting(setSnapshotQuery);
