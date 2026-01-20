@@ -15,6 +15,7 @@ import org.junit.Test;
 import io.debezium.config.CommonConnectorConfig;
 import io.debezium.config.Configuration;
 import io.debezium.connector.AbstractSourceInfoStructMaker;
+import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.data.VerifyRecord;
 import io.debezium.doc.FixFor;
 import io.debezium.relational.TableId;
@@ -75,8 +76,44 @@ public class SourceInfoTest {
                 .field("txId", Schema.OPTIONAL_INT64_SCHEMA)
                 .field("lsn", Schema.OPTIONAL_INT64_SCHEMA)
                 .field("xmin", Schema.OPTIONAL_INT64_SCHEMA)
+                .field("origin", Schema.OPTIONAL_STRING_SCHEMA)
+                .field("origin_lsn", Schema.OPTIONAL_INT64_SCHEMA)
                 .build();
 
         VerifyRecord.assertConnectSchemasAreEqual(null, source.struct().schema(), schema);
+    }
+
+    @Test
+    public void originInfoIsNullByDefault() {
+        assertThat(source.originName()).isNull();
+        assertThat(source.originLsn()).isNull();
+        // Verify struct doesn't contain origin fields when not set
+        assertThat(source.struct().schema().field(SourceInfo.ORIGIN_KEY)).isNotNull();
+        assertThat(source.struct().schema().field(SourceInfo.ORIGIN_LSN_KEY)).isNotNull();
+    }
+
+    @Test
+    public void originInfoCanBeSetAndCleared() {
+        // Set origin info
+        source.updateOrigin("dc1_postgres", Lsn.valueOf(26523000L));
+
+        assertThat(source.originName()).isEqualTo("dc1_postgres");
+        assertThat(source.originLsn()).isEqualTo(Lsn.valueOf(26523000L));
+        assertThat(source.struct().getString(SourceInfo.ORIGIN_KEY)).isEqualTo("dc1_postgres");
+        assertThat(source.struct().getInt64(SourceInfo.ORIGIN_LSN_KEY)).isEqualTo(26523000L);
+
+        // Clear origin info (simulating new transaction)
+        source.clearOrigin();
+
+        assertThat(source.originName()).isNull();
+        assertThat(source.originLsn()).isNull();
+    }
+
+    @Test
+    public void originInfoIncludedInToString() {
+        source.updateOrigin("replica_server", Lsn.valueOf(12345L));
+        String str = source.toString();
+        assertThat(str).contains("origin=replica_server");
+        assertThat(str).contains("originLsn=12345");
     }
 }

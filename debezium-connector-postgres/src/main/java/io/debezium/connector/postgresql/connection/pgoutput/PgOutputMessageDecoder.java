@@ -41,6 +41,7 @@ import io.debezium.connector.postgresql.connection.AbstractReplicationMessageCol
 import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.MessageDecoderContext;
+import io.debezium.connector.postgresql.connection.OriginMessage;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Column;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.NoopMessage;
@@ -134,9 +135,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             LOGGER.trace("Message Type: {}", type);
             switch (type) {
                 case TYPE:
-                case ORIGIN:
-                    // TYPE/ORIGIN
-                    // These should be skipped without calling shouldMessageBeSkipped. DBZ-5792
+                    // TYPE messages should be skipped without calling shouldMessageBeSkipped. DBZ-5792
                     LOGGER.trace("{} messages are always skipped without calling shouldMessageBeSkipped", type);
                     return true;
                 case TRUNCATE:
@@ -154,6 +153,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 case COMMIT:
                 case BEGIN:
                 case RELATION:
+                case ORIGIN:
                     // BEGIN
                     // These types should always be processed due to the nature that they provide
                     // the stream with pertinent per-transaction boundary state we will need to
@@ -163,6 +163,12 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                     // RELATION
                     // These messages are always sent with a lastReceivedLSN=0; and we need to
                     // always accept these to keep per-stream table state cached properly.
+                    //
+                    // ORIGIN
+                    // These messages contain origin information that needs to be cached for
+                    // subsequent events. Even during restart recovery, we need to process
+                    // ORIGIN messages to have the correct origin info once we reach the
+                    // point where we start emitting events.
                     LOGGER.trace("{} messages are always reprocessed", type);
                     return false;
                 default:
@@ -202,6 +208,9 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 break;
             case RELATION:
                 handleRelationMessage(buffer, typeRegistry);
+                break;
+            case ORIGIN:
+                handleOriginMessage(buffer, processor);
                 break;
             case LOGICAL_DECODING_MESSAGE:
                 handleLogicalDecodingMessage(buffer, processor);
@@ -280,6 +289,29 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         LOGGER.trace("End LSN of transaction: {}", endLsn);
         LOGGER.trace("Commit timestamp of transaction: {}", commitTimestamp);
         processor.process(new TransactionMessage(Operation.COMMIT, transactionId, commitTimestamp));
+    }
+
+    /**
+     * Callback handler for the 'O' origin replication message.
+     * The origin message indicates that the transaction originated from another server
+     * (e.g., in a logical replication setup).
+     *
+     * Message format according to PostgreSQL protocol:
+     * - Int64: The LSN of the commit on the origin server
+     * - String: Name of the origin
+     *
+     * @param buffer The replication stream buffer
+     * @param processor The replication message processor
+     */
+    private void handleOriginMessage(ByteBuffer buffer, ReplicationMessageProcessor processor) throws SQLException, InterruptedException {
+        Lsn originLsn = Lsn.valueOf(buffer.getLong());
+        String originName = readString(buffer);
+
+        LOGGER.trace("Event: {}", MessageType.ORIGIN);
+        LOGGER.trace("Origin LSN: {}", originLsn);
+        LOGGER.trace("Origin name: {}", originName);
+
+        processor.process(new OriginMessage(originName, originLsn, transactionId, commitTimestamp));
     }
 
     /**

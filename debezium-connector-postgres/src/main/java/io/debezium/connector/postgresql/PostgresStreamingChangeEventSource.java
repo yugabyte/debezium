@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import io.debezium.DebeziumException;
 import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
 import io.debezium.connector.postgresql.connection.Lsn;
+import io.debezium.connector.postgresql.connection.OriginMessage;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.PostgresReplicationConnection;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
@@ -341,6 +342,11 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
             }
             lastTxnidForWhichCommitSeen = currentTxnid;
 
+            // Always clear origin info on BEGIN, regardless of transaction metadata setting
+            if (message.getOperation() == Operation.BEGIN) {
+                offsetContext.clearOrigin();
+            }
+
             if (!connectorConfig.shouldProvideTransactionMetadata()) {
                 LOGGER.trace("Received transactional message {}", message);
                 // Don't skip on BEGIN message as it would flush LSN for the whole transaction
@@ -381,6 +387,12 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     (LogicalDecodingMessage) message);
 
             maybeWarnAboutGrowingWalBacklog(true);
+        }
+        // ORIGIN message - update origin state in offset context
+        else if (message.getOperation() == Operation.ORIGIN) {
+            OriginMessage originMessage = (OriginMessage) message;
+            offsetContext.updateOrigin(originMessage.getOriginName(), originMessage.getOriginLsn());
+            LOGGER.trace("Updated origin information: name={}, lsn={}", originMessage.getOriginName(), originMessage.getOriginLsn());
         }
         // DML event
         else {

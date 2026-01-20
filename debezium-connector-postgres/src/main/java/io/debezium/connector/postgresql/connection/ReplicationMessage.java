@@ -47,6 +47,7 @@ public interface ReplicationMessage {
         MESSAGE,
         BEGIN,
         COMMIT,
+        ORIGIN,
         NOOP
     }
 
