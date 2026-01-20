@@ -325,9 +325,11 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         // Tx BEGIN/END event
         if (message.isTransactionalMessage()) {
-            if(message.getOperation() == Operation.BEGIN) {
+            if (message.getOperation() == Operation.BEGIN) {
                 LOGGER.debug("Processing BEGIN with end LSN {} and txnid {}", lsn, message.getTransactionId());
-            } else {
+                offsetContext.clearOrigin();
+            }
+            else {
                 LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
                 LOGGER.debug("Record count in the txn {} is {} with commit time {}", message.getTransactionId(), recordCount, lsn.asLong() - 1);
                 recordCount = 0;
