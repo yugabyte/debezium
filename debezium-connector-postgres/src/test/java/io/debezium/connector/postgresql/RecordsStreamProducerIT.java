@@ -4325,7 +4325,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
         }
 
         // Stop connector mid-transaction
-        // With 100k rows, the connector should still be processing when we stop it
+        // With 2M rows, the connector should still be processing when we stop it
         logger.info("Stopping connector mid-transaction...");
         stopConnector();
 
