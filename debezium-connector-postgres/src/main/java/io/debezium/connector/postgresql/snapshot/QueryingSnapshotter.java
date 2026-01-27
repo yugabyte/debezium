@@ -22,11 +22,9 @@ import io.debezium.relational.TableId;
 public abstract class QueryingSnapshotter implements Snapshotter {
 
     private SlotState slotState;
-    private PostgresConnectorConfig config;
 
     @Override
     public void init(PostgresConnectorConfig config, OffsetState sourceInfo, SlotState slotState) {
-        this.config = config;
         if (YugabyteDBServer.isEnabled()) {
             this.slotState = slotState;
         }
@@ -48,7 +46,7 @@ public abstract class QueryingSnapshotter implements Snapshotter {
     @Override
     public String snapshotTransactionIsolationLevelStatement(SlotCreationResult newSlotInfo, boolean isOnDemand) {
 
-        if (newSlotInfo != null && !isOnDemand && YugabyteDBServer.isEnabled() && config.isExportSnapshotSupported()) {
+        if (YugabyteDBServer.isEnabled() && !isOnDemand && newSlotInfo != null && newSlotInfo.isExportSnapshotUsed()) {
             /*
              * For an on demand blocking snapshot we don't need to reuse
              * the same snapshot from the existing exported transaction as for the initial snapshot.
@@ -59,12 +57,12 @@ public abstract class QueryingSnapshotter implements Snapshotter {
             return "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;";
         }
         else if (YugabyteDBServer.isEnabled() && !isOnDemand) {
-            // For version 2025.2.1 & above:
+            // For version 2025.2.2 & above:
             // YB fallback: This handles two cases:
             // 1) EXPORT_SNAPSHOT failed and we fell back to USE_SNAPSHOT - use newSlotInfo.snapshotName()
             // 2) Connector restarted with existing slot (newSlotInfo is null) - use slotState.slotRestartCommitHT()
             //
-            // For version 2025.2.0 & below:
+            // For version 2025.2.1 & below:
             // In case of YB, the consistent snapshot is performed as follows -
             // 1) If connector created the slot, then the snapshotName returned as part of the CREATE_REPLICATION_SLOT
             //    command will have the hybrid time as of which the snapshot query is to be run

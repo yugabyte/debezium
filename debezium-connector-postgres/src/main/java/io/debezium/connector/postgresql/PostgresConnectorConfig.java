@@ -1199,15 +1199,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
     private final boolean flushLsnOnSource;
     private final ReplicaIdentityMapper replicaIdentityMapper;
 
-    /**
-     * Runtime flag to track whether EXPORT_SNAPSHOT is supported by the YugabyteDB server.
-     * Set to false when CREATE_REPLICATION_SLOT with EXPORT_SNAPSHOT fails and we fall back
-     * to USE_SNAPSHOT. This is NOT a configuration property - it's runtime state that's
-     * determined during slot creation.
-     *
-     */
-    private volatile boolean exportSnapshotSupported = true;
-
     public PostgresConnectorConfig(Configuration config) {
         super(
                 config,
@@ -1324,14 +1315,6 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public String getYbLoadBalanceConnections() {
         return getConfig().getString(YB_LOAD_BALANCE_CONNECTIONS);
-    }
-
-    public boolean isExportSnapshotSupported() {
-        return exportSnapshotSupported;
-    }
-
-    public void setExportSnapshotSupported(boolean supported) {
-        this.exportSnapshotSupported = supported;
     }
 
     protected Snapshotter getSnapshotter() {

@@ -554,7 +554,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                 LOGGER.info("Creating replication slot with command {}", createCommand);
                 stmt.execute(createCommand);
                 if (canExportSnapshot) {
-                    this.slotCreationInfo = parseSlotCreation(stmt.getResultSet());
+                    this.slotCreationInfo = parseSlotCreation(stmt.getResultSet(), true);
                 }
             }
             catch (Exception e) {
@@ -563,7 +563,6 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                     // YB: If the create replication slot command fails as a fallback mechanism
                     // we will try to create the slot again with the USE_SNAPSHOT option.
                     // This is to make it backward compatible with the old version of YugabyteDB.
-                    connectorConfig.setExportSnapshotSupported(false);
                     String createCommand = getReplicationSlotCreationCommand(tempPart, false);
 
                     // Begin a read-only transaction when it is the parallel streaming mode because
@@ -577,7 +576,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                     stmt.execute(createCommand);
 
                     if (canExportSnapshot) {
-                        this.slotCreationInfo = parseSlotCreation(stmt.getResultSet());
+                        this.slotCreationInfo = parseSlotCreation(stmt.getResultSet(), false);
                     }
                 }
                 else {
@@ -620,7 +619,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         return "FAILED_TO_GET_CONNECTED_NODE";
     }
 
-    private SlotCreationResult parseSlotCreation(ResultSet rs) {
+    private SlotCreationResult parseSlotCreation(ResultSet rs, boolean exportSnapshotUsed) {
         try {
             if (rs.next()) {
                 String slotName = rs.getString("slot_name");
@@ -628,7 +627,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                 String snapName = rs.getString("snapshot_name");
                 String pluginName = rs.getString("output_plugin");
 
-                return new SlotCreationResult(slotName, startPoint, snapName, pluginName);
+                return new SlotCreationResult(slotName, startPoint, snapName, pluginName, exportSnapshotUsed);
             }
             else {
                 throw new ConnectException("No replication slot found");

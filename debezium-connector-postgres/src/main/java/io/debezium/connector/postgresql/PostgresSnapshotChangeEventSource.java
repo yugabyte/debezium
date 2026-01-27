@@ -111,7 +111,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
         if (YugabyteDBServer.isEnabled()) {
             // In case of YB, the consistent snapshot is performed as follows -
 
-            // For version 2025.2.1 & above:
+            // For version 2025.2.2 & above:
             // EXPORT_SNAPSHOT is enabled by default.
             // 1) If connector created the slot, then the snapshotName returned as part of the CREATE_REPLICATION_SLOT
             //    command will have the snapshot id which will be used to set the transaction snapshot
@@ -342,7 +342,7 @@ public class PostgresSnapshotChangeEventSource extends RelationalSnapshotChangeE
             LOGGER.info("Opening transaction with statement {}", transactionStatement);
             jdbcConnection.executeWithoutCommitting(transactionStatement);
 
-            if (YugabyteDBServer.isEnabled() && connectorConfig.isExportSnapshotSupported() && slotCreatedInfo != null && !isOnDemand) {
+            if (YugabyteDBServer.isEnabled() && slotCreatedInfo != null && slotCreatedInfo.isExportSnapshotUsed() && !isOnDemand) {
                 String setSnapshotQuery = "SET TRANSACTION SNAPSHOT '" + slotCreatedInfo.snapshotName() + "';";
                 LOGGER.info("Setting snapshot for transaction with {}", setSnapshotQuery);
                 jdbcConnection.executeWithoutCommitting(setSnapshotQuery);
