@@ -3867,7 +3867,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
 
         startConnector(config -> config
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test_origin")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA),
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER),
                 false);
 
         consumer = testConsumer(2);
@@ -3898,33 +3898,33 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
         consumer.await(TestHelper.waitTimeForRecords(), TimeUnit.SECONDS);
 
         // Verify first record (session_setup only, LSN defaults to 0)
-        assertFalse(consumer.isEmpty(), "Expected at least one record");
+        assertFalse("Expected at least one record", consumer.isEmpty());
         SourceRecord record1 = consumer.remove();
         Struct source1 = ((Struct) record1.value()).getStruct("source");
-        assertNotNull(source1, "Source struct should not be null");
+        assertNotNull("Source struct should not be null", source1);
 
         String origin1 = source1.getString(SourceInfo.ORIGIN_KEY);
         Long originLsn1 = source1.getInt64(SourceInfo.ORIGIN_LSN_KEY);
         logger.info("Record 1 (session_setup): origin={}, origin_lsn={}", origin1, originLsn1);
 
-        assertNotNull(origin1, "Origin should not be null when replication origin is set");
+        assertNotNull("Origin should not be null when replication origin is set", origin1);
         assertThat(origin1).isEqualTo(originName);
-        assertNotNull(originLsn1, "Origin LSN should not be null");
+        assertNotNull("Origin LSN should not be null", originLsn1);
         assertThat(originLsn1).isEqualTo(0L); // Default LSN when using session_setup only
 
         // Verify second record (xact_setup with explicit LSN)
-        assertFalse(consumer.isEmpty(), "Expected second record");
+        assertFalse("Expected second record", consumer.isEmpty());
         SourceRecord record2 = consumer.remove();
         Struct source2 = ((Struct) record2.value()).getStruct("source");
-        assertNotNull(source2, "Source struct should not be null");
+        assertNotNull("Source struct should not be null", source2);
 
         String origin2 = source2.getString(SourceInfo.ORIGIN_KEY);
         Long originLsn2 = source2.getInt64(SourceInfo.ORIGIN_LSN_KEY);
         logger.info("Record 2 (xact_setup): origin={}, origin_lsn={}", origin2, originLsn2);
 
-        assertNotNull(origin2, "Origin should not be null when replication origin is set");
+        assertNotNull("Origin should not be null when replication origin is set", origin2);
         assertThat(origin2).isEqualTo(originName);
-        assertNotNull(originLsn2, "Origin LSN should not be null");
+        assertNotNull("Origin LSN should not be null", originLsn2);
         assertThat(originLsn2).isEqualTo(74565L); // 0x12345 in decimal
 
         try {
@@ -3945,10 +3945,10 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 "DROP TABLE IF EXISTS test_no_origin;",
                 "CREATE TABLE test_no_origin (pk SERIAL PRIMARY KEY, data TEXT);");
 
-        // Use waitForSnapshot=false since we're using NO_DATA snapshot mode
+        // Use waitForSnapshot=false since we're using NEVER snapshot mode
         startConnector(config -> config
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test_no_origin")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA),
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER),
                 false);
 
         consumer = testConsumer(1);
@@ -3958,12 +3958,12 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
 
         consumer.await(TestHelper.waitTimeForRecords(), TimeUnit.SECONDS);
 
-        assertFalse(consumer.isEmpty(), "Expected at least one record");
+        assertFalse("Expected at least one record", consumer.isEmpty());
         SourceRecord record = consumer.remove();
 
         // Verify the source metadata exists but origin fields are null
         Struct source = ((Struct) record.value()).getStruct("source");
-        assertNotNull(source, "Source struct should not be null");
+        assertNotNull("Source struct should not be null", source);
 
         // Origin fields should be null when no origin is set
         assertThat(source.getString(SourceInfo.ORIGIN_KEY)).isNull();
@@ -3998,7 +3998,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
 
         startConnector(config -> config
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test_origin_leak")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA),
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER),
                 false);
 
         consumer = testConsumer(2);
@@ -4019,24 +4019,24 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
         consumer.await(TestHelper.waitTimeForRecords(), TimeUnit.SECONDS);
 
         // Verify first record (Transaction 1 - has origin)
-        assertFalse(consumer.isEmpty(), "Expected at least one record");
+        assertFalse("Expected at least one record", consumer.isEmpty());
         SourceRecord record1 = consumer.remove();
         Struct source1 = ((Struct) record1.value()).getStruct("source");
-        assertNotNull(source1, "Source struct should not be null");
+        assertNotNull("Source struct should not be null", source1);
 
         String origin1 = source1.getString(SourceInfo.ORIGIN_KEY);
         Long originLsn1 = source1.getInt64(SourceInfo.ORIGIN_LSN_KEY);
         logger.info("Record 1 (with origin): origin={}, origin_lsn={}", origin1, originLsn1);
 
-        assertNotNull(origin1, "Origin should not be null for transaction with origin set");
+        assertNotNull("Origin should not be null for transaction with origin set", origin1);
         assertThat(origin1).isEqualTo(originName);
-        assertNotNull(originLsn1, "Origin LSN should not be null");
+        assertNotNull("Origin LSN should not be null", originLsn1);
 
         // Verify second record (Transaction 2 - NO origin, should be null)
-        assertFalse(consumer.isEmpty(), "Expected second record");
+        assertFalse("Expected second record", consumer.isEmpty());
         SourceRecord record2 = consumer.remove();
         Struct source2 = ((Struct) record2.value()).getStruct("source");
-        assertNotNull(source2, "Source struct should not be null");
+        assertNotNull("Source struct should not be null", source2);
 
         String origin2 = source2.getString(SourceInfo.ORIGIN_KEY);
         Long originLsn2 = source2.getInt64(SourceInfo.ORIGIN_LSN_KEY);
@@ -4089,7 +4089,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
 
         startConnector(config -> config
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test_multi_origin")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA),
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER),
                 false);
 
         consumer = testConsumer(2);
@@ -4119,10 +4119,10 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
         consumer.await(TestHelper.waitTimeForRecords(), TimeUnit.SECONDS);
 
         // Verify first record (Transaction 1 - origin dc1)
-        assertFalse(consumer.isEmpty(), "Expected at least one record");
+        assertFalse("Expected at least one record", consumer.isEmpty());
         SourceRecord record1 = consumer.remove();
         Struct source1 = ((Struct) record1.value()).getStruct("source");
-        assertNotNull(source1, "Source struct should not be null");
+        assertNotNull("Source struct should not be null", source1);
 
         String origin1 = source1.getString(SourceInfo.ORIGIN_KEY);
         Long originLsn1 = source1.getInt64(SourceInfo.ORIGIN_LSN_KEY);
@@ -4136,10 +4136,10 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
                 .isEqualTo(69905L); // 0x11111 in decimal
 
         // Verify second record (Transaction 2 - origin dc2, NOT dc1)
-        assertFalse(consumer.isEmpty(), "Expected second record");
+        assertFalse("Expected second record", consumer.isEmpty());
         SourceRecord record2 = consumer.remove();
         Struct source2 = ((Struct) record2.value()).getStruct("source");
-        assertNotNull(source2, "Source struct should not be null");
+        assertNotNull("Source struct should not be null", source2);
 
         String origin2 = source2.getString(SourceInfo.ORIGIN_KEY);
         Long originLsn2 = source2.getInt64(SourceInfo.ORIGIN_LSN_KEY);
@@ -4165,11 +4165,10 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
         }
     }
 
-    @Test
+    @Test(timeout = 600000)
     @FixFor("DBZ-1528")
     @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "ORIGIN messages are only supported by pgoutput decoder")
     @SkipWhenDatabaseVersion(check = LESS_THAN, major = 11, reason = "Replication origins require PostgreSQL 11+")
-    @Timeout(value = 10, unit = TimeUnit.MINUTES)
     public void shouldPreserveOriginInfoAfterConnectorRestartMidTransaction() throws Exception {
         /*
          * This test verifies that ORIGIN messages are correctly processed even when
@@ -4221,13 +4220,13 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
         // Using default FileOffsetBackingStore (persistent offsets)
         Configuration config = TestHelper.defaultConfig()
                 .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.test_origin_restart")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.FALSE)
                 .with(PostgresConnectorConfig.INCLUDE_UNKNOWN_DATATYPES, false)
                 .with(PostgresConnectorConfig.SCHEMA_EXCLUDE_LIST, "postgis")
                 .build();
 
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingToStart();
 
@@ -4297,7 +4296,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
 
         // Start connector to process the large transaction
         logger.info("Starting connector to process the large transaction");
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingToStart();
 
@@ -4314,9 +4313,9 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
         Long firstOriginLsn = firstSource.getInt64(SourceInfo.ORIGIN_LSN_KEY);
         logger.info("First record (first run): origin={}, origin_lsn={}", firstOrigin, firstOriginLsn);
 
-        assertNotNull(firstOrigin, "Origin should not be null in first run");
+        assertNotNull("Origin should not be null in first run", firstOrigin);
         assertThat(firstOrigin).isEqualTo(originName);
-        assertNotNull(firstOriginLsn, "Origin LSN should not be null in first run");
+        assertNotNull("Origin LSN should not be null in first run", firstOriginLsn);
         assertThat(firstOriginLsn).isEqualTo(originLsnValue);
 
         // Drain remaining records from the consumer
@@ -4335,7 +4334,7 @@ public class RecordsStreamProducerIT extends AbstractRecordsProducerTest {
         // Restart connector - WalPositionLocator should detect lastEventStoredLsn > lastCommitLsn
         // and replay from the transaction BEGIN, re-processing the ORIGIN message
         logger.info("Restarting connector (WalPositionLocator should replay from BEGIN)...");
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
         waitForStreamingToStart();
 
