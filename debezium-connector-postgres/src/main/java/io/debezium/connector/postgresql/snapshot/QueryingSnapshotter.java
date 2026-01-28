@@ -46,7 +46,23 @@ public abstract class QueryingSnapshotter implements Snapshotter {
     @Override
     public String snapshotTransactionIsolationLevelStatement(SlotCreationResult newSlotInfo, boolean isOnDemand) {
 
-        if (YugabyteDBServer.isEnabled() && !isOnDemand) {
+        if (YugabyteDBServer.isEnabled() && !isOnDemand && newSlotInfo != null && newSlotInfo.isExportSnapshotUsed()) {
+            /*
+             * For an on demand blocking snapshot we don't need to reuse
+             * the same snapshot from the existing exported transaction as for the initial snapshot.
+             */
+
+            // YB Change: We will set the transaction snapshot separately otherwise we will get an
+            // exception with the error message: ERROR: cannot export/import a snapshot in Batch Execution.
+            return "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;";
+        }
+        else if (YugabyteDBServer.isEnabled() && !isOnDemand) {
+            // For version 2025.2.2 & above:
+            // YB fallback: This handles two cases:
+            // 1) EXPORT_SNAPSHOT failed and we fell back to USE_SNAPSHOT - use newSlotInfo.snapshotName()
+            // 2) Connector restarted with existing slot (newSlotInfo is null) - use slotState.slotRestartCommitHT()
+            //
+            // For version 2025.2.1 & below:
             // In case of YB, the consistent snapshot is performed as follows -
             // 1) If connector created the slot, then the snapshotName returned as part of the CREATE_REPLICATION_SLOT
             //    command will have the hybrid time as of which the snapshot query is to be run
@@ -65,7 +81,8 @@ public abstract class QueryingSnapshotter implements Snapshotter {
             // be removed from here.
             try {
                 Thread.sleep(1000);
-            } catch (Exception e) {
+            }
+            catch (Exception e) {
                 throw new RuntimeException("Exception while waiting", e);
             }
 

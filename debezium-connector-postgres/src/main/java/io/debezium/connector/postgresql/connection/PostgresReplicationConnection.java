@@ -510,6 +510,16 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
     }
 
+    public String getReplicationSlotCreationCommand(String tempPart, boolean canExportSnapshot) throws SQLException {
+        return String.format(
+            "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s %s %s",
+            slotName,
+            tempPart,
+            plugin.getPostgresPluginName(),
+            lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
+            streamingMode.isParallel() ? (canExportSnapshot ? "EXPORT_SNAPSHOT" : "USE_SNAPSHOT") : "");
+    }
+
     @Override
     public Optional<SlotCreationResult> createReplicationSlot() throws SQLException {
         // note that some of these options are only supported in Postgres 9.4+, additionally
@@ -538,29 +548,41 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         // that we stay backward compatible as the syntax is not recognizable by initial versions
         // of logical replication in YugabyteDB.
         try (Statement stmt = pgConnection().createStatement()) {
-            String createCommand = String.format(
-                    "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s %s %s",
-                    slotName,
-                    tempPart,
-                    plugin.getPostgresPluginName(),
-                    lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
-                    streamingMode.isParallel() ? "USE_SNAPSHOT" : "");
-
-            // Begin a read-only transaction when it is the parallel streaming mode because
-            // we will be using this read-only transaction to take the snapshot further.
-            if (connectorConfig.streamingMode().isParallel() ) {
-                LOGGER.info("executing: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
-                stmt.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+            try {
+                // Use EXPORT_SNAPSHOT just like upstream debezium does.
+                String createCommand = getReplicationSlotCreationCommand(tempPart, true);
+                LOGGER.info("Creating replication slot with command {}", createCommand);
+                stmt.execute(createCommand);
+                if (canExportSnapshot) {
+                    this.slotCreationInfo = parseSlotCreation(stmt.getResultSet(), true);
+                }
             }
+            catch (Exception e) {
+                if (e.getMessage() != null && e.getMessage().contains("cannot export or import snapshot when ysql_enable_pg_export_snapshot is disabled")) {
+                    LOGGER.warn("Failed to create replication slot with EXPORT_SNAPSHOT option, falling back to USE_SNAPSHOT, Exception: {}", e.getMessage());
+                    // YB: If the create replication slot command fails as a fallback mechanism
+                    // we will try to create the slot again with the USE_SNAPSHOT option.
+                    // This is to make it backward compatible with the old version of YugabyteDB.
+                    String createCommand = getReplicationSlotCreationCommand(tempPart, false);
 
-            LOGGER.info("Creating replication slot with command {}", createCommand);
-            stmt.execute(createCommand);
-            // when we are in Postgres 9.4+, we can parse the slot creation info,
-            // otherwise, it returns nothing
-            if (canExportSnapshot) {
-                this.slotCreationInfo = parseSlotCreation(stmt.getResultSet());
+                    // Begin a read-only transaction when it is the parallel streaming mode because
+                    // we will be using this read-only transaction to take the snapshot further.
+                    if (connectorConfig.streamingMode().isParallel() ) {
+                        LOGGER.info("executing: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+                        stmt.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+                    }
+
+                    LOGGER.info("Creating replication slot with command {}", createCommand);
+                    stmt.execute(createCommand);
+
+                    if (canExportSnapshot) {
+                        this.slotCreationInfo = parseSlotCreation(stmt.getResultSet(), false);
+                    }
+                }
+                else {
+                    throw e;
+                }
             }
-
             return Optional.ofNullable(slotCreationInfo);
         }
     }
@@ -597,7 +619,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         return "FAILED_TO_GET_CONNECTED_NODE";
     }
 
-    private SlotCreationResult parseSlotCreation(ResultSet rs) {
+    private SlotCreationResult parseSlotCreation(ResultSet rs, boolean exportSnapshotUsed) {
         try {
             if (rs.next()) {
                 String slotName = rs.getString("slot_name");
@@ -605,7 +627,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                 String snapName = rs.getString("snapshot_name");
                 String pluginName = rs.getString("output_plugin");
 
-                return new SlotCreationResult(slotName, startPoint, snapName, pluginName);
+                return new SlotCreationResult(slotName, startPoint, snapName, pluginName, exportSnapshotUsed);
             }
             else {
                 throw new ConnectException("No replication slot found");
