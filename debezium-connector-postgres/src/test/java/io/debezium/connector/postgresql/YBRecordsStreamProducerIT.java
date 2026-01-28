@@ -3555,8 +3555,6 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     }
 
     @Test
-    @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "ORIGIN messages are only supported by pgoutput/yboutput decoder")
-    @SkipWhenDatabaseVersion(check = EqualityCheck.LESS_THAN, major = 11, reason = "Replication origins require PostgreSQL 11+")
     public void shouldIncludeOriginInfoInSourceMetadataWhenOriginIsSet() throws Exception {
         // This test verifies that when a transaction has an associated replication origin,
         // the origin name and LSN are included in the source metadata of change events.
@@ -3621,7 +3619,6 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     }
 
     @Test
-    @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "ORIGIN messages are only supported by pgoutput/yboutput decoder")
     public void shouldHaveNullOriginInfoWhenNoOriginIsSet() throws Exception {
         // This test verifies that when no replication origin is set,
         // the origin fields in source metadata are null.
@@ -3660,8 +3657,6 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     }
 
     @Test
-    @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "ORIGIN messages are only supported by pgoutput/yboutput decoder")
-    @SkipWhenDatabaseVersion(check = EqualityCheck.LESS_THAN, major = 11, reason = "Replication origins require PostgreSQL 11+")
     public void shouldNotLeakOriginInfoBetweenTransactions() throws Exception {
         // This test verifies that origin information does not leak from one transaction to another.
         // Transaction 1 has an origin set, Transaction 2 does not have an origin.
@@ -3743,8 +3738,6 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
     }
 
     @Test
-    @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "ORIGIN messages are only supported by pgoutput/yboutput decoder")
-    @SkipWhenDatabaseVersion(check = EqualityCheck.LESS_THAN, major = 11, reason = "Replication origins require PostgreSQL 11+")
     public void shouldCorrectlyTrackDifferentOriginsAcrossTransactions() throws Exception {
         // This test verifies that different origins are correctly tracked across transactions.
         // Transaction 1 uses origin "dc1", Transaction 2 uses origin "dc2".
@@ -3844,8 +3837,6 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
 
     @Test
     @FixFor("DBZ-1528")
-    @SkipWhenDecoderPluginNameIsNot(value = SkipWhenDecoderPluginNameIsNot.DecoderPluginName.PGOUTPUT, reason = "ORIGIN messages are only supported by pgoutput/yboutput decoder")
-    @SkipWhenDatabaseVersion(check = EqualityCheck.LESS_THAN, major = 11, reason = "Replication origins require PostgreSQL 11+")
     public void shouldPreserveOriginInfoAfterConnectorRestartMidTransaction() throws Exception {
         /*
          * This test verifies that ORIGIN messages are correctly processed even when
