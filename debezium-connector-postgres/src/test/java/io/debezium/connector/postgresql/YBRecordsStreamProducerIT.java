@@ -3614,7 +3614,6 @@ public class YBRecordsStreamProducerIT extends AbstractRecordsProducerTest {
             TestHelper.execute("SELECT pg_replication_origin_drop('" + originName + "');");
         }
         catch (Exception e) {
-            // Ignore cleanup errors
         }
     }
 
