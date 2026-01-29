@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import io.debezium.DebeziumException;
 import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
 import io.debezium.connector.postgresql.connection.Lsn;
+import io.debezium.connector.postgresql.connection.OriginMessage;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.PostgresReplicationConnection;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
@@ -324,9 +325,11 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
         // Tx BEGIN/END event
         if (message.isTransactionalMessage()) {
-            if(message.getOperation() == Operation.BEGIN) {
+            if (message.getOperation() == Operation.BEGIN) {
                 LOGGER.debug("Processing BEGIN with end LSN {} and txnid {}", lsn, message.getTransactionId());
-            } else {
+                offsetContext.clearOrigin();
+            }
+            else {
                 LOGGER.debug("Processing COMMIT with end LSN {} and txnid {}", lsn, message.getTransactionId());
                 LOGGER.debug("Record count in the txn {} is {} with commit time {}", message.getTransactionId(), recordCount, lsn.asLong() - 1);
                 recordCount = 0;
@@ -381,6 +384,12 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     (LogicalDecodingMessage) message);
 
             maybeWarnAboutGrowingWalBacklog(true);
+        }
+        // ORIGIN message - update origin state in offset context
+        else if (message.getOperation() == Operation.ORIGIN) {
+            OriginMessage originMessage = (OriginMessage) message;
+            offsetContext.updateOrigin(originMessage.getOriginName(), originMessage.getOriginLsn());
+            LOGGER.trace("Updated origin information: name={}, lsn={}", originMessage.getOriginName(), originMessage.getOriginLsn());
         }
         // DML event
         else {
