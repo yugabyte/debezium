@@ -517,7 +517,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             tempPart,
             plugin.getPostgresPluginName(),
             lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
-            streamingMode.isParallel() ? (canExportSnapshot ? "EXPORT_SNAPSHOT" : "USE_SNAPSHOT") : "");
+            canExportSnapshot ? "EXPORT_SNAPSHOT" : (streamingMode.isParallel() ? "USE_SNAPSHOT" : ""));
     }
 
     @Override
