@@ -520,6 +520,15 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             canExportSnapshot ? "EXPORT_SNAPSHOT" : (streamingMode.isParallel() ? "USE_SNAPSHOT" : ""));
     }
 
+    public Boolean isExportSnapshotSupported(Exception exception) throws SQLException {
+        if (exception.getMessage() != null && (
+            exception.getMessage().contains("cannot export or import snapshot when ysql_enable_pg_export_snapshot is disabled") ||
+            exception.getMessage().contains("Exporting snapshot is not yet supported"))) {
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public Optional<SlotCreationResult> createReplicationSlot() throws SQLException {
         // note that some of these options are only supported in Postgres 9.4+, additionally
@@ -558,7 +567,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                 }
             }
             catch (Exception e) {
-                if (e.getMessage() != null && e.getMessage().contains("cannot export or import snapshot when ysql_enable_pg_export_snapshot is disabled")) {
+                if (!isExportSnapshotSupported(e)) {
                     LOGGER.warn("Failed to create replication slot with EXPORT_SNAPSHOT option, falling back to USE_SNAPSHOT, Exception: {}", e.getMessage());
                     // YB: If the create replication slot command fails as a fallback mechanism
                     // we will try to create the slot again with the USE_SNAPSHOT option.
