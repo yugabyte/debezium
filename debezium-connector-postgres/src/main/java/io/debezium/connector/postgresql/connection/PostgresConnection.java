@@ -574,12 +574,6 @@ public class PostgresConnection extends JdbcConnection {
      * @throws SQLException if anything unexpected fails.
      */
     public long currentXLogLocation() throws SQLException {
-        // YB Note: pg_current_wal_lsn() is not supported in YugabyteDB since each tablet maintains
-        // its own WAL (yugabyte/yugabyte-db#30243).
-        // Returning a dummy value.
-        if (YugabyteDBServer.isEnabled()) {
-            return Long.MAX_VALUE;
-        }
 
         AtomicLong result = new AtomicLong(0);
         int majorVersion = connection().getMetaData().getDatabaseMajorVersion();
