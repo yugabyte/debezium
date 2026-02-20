@@ -574,7 +574,6 @@ public class PostgresConnection extends JdbcConnection {
      * @throws SQLException if anything unexpected fails.
      */
     public long currentXLogLocation() throws SQLException {
-
         AtomicLong result = new AtomicLong(0);
         int majorVersion = connection().getMetaData().getDatabaseMajorVersion();
         query(majorVersion >= 10 ? "select (case pg_is_in_recovery() when 't' then pg_last_wal_receive_lsn() else pg_current_wal_lsn() end) AS pg_current_wal_lsn"
