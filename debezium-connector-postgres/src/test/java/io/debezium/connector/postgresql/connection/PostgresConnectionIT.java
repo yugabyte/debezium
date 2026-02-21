@@ -10,6 +10,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.reflect.Field;
@@ -60,11 +61,14 @@ public class PostgresConnectionIT {
         }
     }
 
+    // YB: Note: pg_current_wal_lsn() is not supported in YugabyteDB since each tablet
+    // maintains its own WAL (yugabyte/yugabyte-db#30243).
     @Test
     public void shouldReportValidXLogPos() throws SQLException {
         try (PostgresConnection connection = TestHelper.create()) {
             connection.connect();
-            assertTrue(connection.currentXLogLocation() > 0);
+            SQLException exception = assertThrows(SQLException.class, connection::currentXLogLocation);
+            assertTrue(exception.getMessage().contains("pg_current_wal_lsn() is not yet supported"));
         }
     }
 

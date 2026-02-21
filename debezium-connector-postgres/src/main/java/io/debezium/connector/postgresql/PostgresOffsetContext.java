@@ -245,7 +245,7 @@ public class PostgresOffsetContext extends CommonOffsetContext<SourceInfo> {
                                                        Lsn lastCompletelyProcessedLsn) {
         try {
             LOGGER.info("Creating initial offset context");
-            final Lsn lsn = Lsn.valueOf(jdbcConnection.currentXLogLocation());
+            final Lsn lsn = YugabyteDBServer.isEnabled() ? null : Lsn.valueOf(jdbcConnection.currentXLogLocation());
             final Long txId = jdbcConnection.currentTransactionId();
             LOGGER.info("Read xlogStart at '{}' from transaction '{}'", lsn, txId);
             return new PostgresOffsetContext(
