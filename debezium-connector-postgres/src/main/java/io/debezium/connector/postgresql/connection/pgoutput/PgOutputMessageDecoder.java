@@ -377,9 +377,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 key = isColumnInPrimaryKey(schemaName, tableName, columnName, primaryKeyColumns);
             }
 
-            boolean optional = true;
-
-            columns.add(new ColumnMetaData(columnName, postgresType, key, optional, false, null, attypmod));
+            columns.add(new ColumnMetaData(columnName, postgresType, key, true, false, null, attypmod));
             columnNames.add(columnName);
         }
 
