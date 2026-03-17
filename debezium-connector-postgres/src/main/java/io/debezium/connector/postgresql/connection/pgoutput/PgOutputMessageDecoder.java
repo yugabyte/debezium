@@ -5,8 +5,6 @@
  */
 package io.debezium.connector.postgresql.connection.pgoutput;
 
-import static java.util.stream.Collectors.toMap;
-
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.sql.DatabaseMetaData;
@@ -21,21 +19,20 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
-import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
-import io.debezium.connector.postgresql.YugabyteDBServer;
-import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
 
 import io.debezium.connector.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.postgresql.PostgresType;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.UnchangedToastedReplicationMessageColumn;
+import io.debezium.connector.postgresql.YugabyteDBServer;
 import io.debezium.connector.postgresql.connection.AbstractMessageDecoder;
 import io.debezium.connector.postgresql.connection.AbstractReplicationMessageColumn;
 import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
@@ -43,6 +40,7 @@ import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.MessageDecoderContext;
 import io.debezium.connector.postgresql.connection.OriginMessage;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Column;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.NoopMessage;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Operation;
@@ -332,24 +330,28 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         LOGGER.trace("Event: {}, RelationId: {}, Replica Identity: {}, Columns: {}", MessageType.RELATION, relationId, replicaIdentityId, columnCount);
         LOGGER.trace("Schema: '{}', Table: '{}'", schemaName, tableName);
 
-        // Perform several out-of-bands database metadata queries
-        Map<String, Optional<String>> columnDefaults;
-        Map<String, Boolean> columnOptionality;
-        List<String> primaryKeyColumns;
-
-        final DatabaseMetaData databaseMetadata = connection.connection().getMetaData();
         final TableId tableId = new TableId(null, schemaName, tableName);
+        final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = parseReplicaIdentity(replicaIdentityId);
 
-        final List<io.debezium.relational.Column> readColumns = getTableColumnsFromDatabase(connection, databaseMetadata, tableId);
-        columnDefaults = readColumns.stream()
-                .filter(io.debezium.relational.Column::hasDefaultValue)
-                .collect(toMap(io.debezium.relational.Column::name, io.debezium.relational.Column::defaultValueExpression));
+        // For DEFAULT, INDEX, and CHANGE identities the relation message flags byte reliably
+        // marks Primary Key columns, so we can avoid an out-of-band DB query.
+        // For FULL (all flags=1) and NOTHING (all flags=0) the flags are not useful for
+        // distinguishing PK columns, so we query the database.
+        // CHANGE is YugabyteDB-specific: we try flags first but fall back to a DB query
+        // because yboutput may not set the flags for CHANGE identity (YB#22555).
+        boolean useFlags = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.DEFAULT
+                || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.INDEX
+                || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
 
-        columnOptionality = readColumns.stream().collect(toMap(io.debezium.relational.Column::name, io.debezium.relational.Column::isOptional));
-        primaryKeyColumns = connection.readPrimaryKeyNames(databaseMetadata, tableId);
-        if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
-            LOGGER.warn("Primary keys are not defined for table '{}', defaulting to unique indices", tableName);
-            primaryKeyColumns = connection.readTableUniqueIndices(databaseMetadata, tableId);
+        List<String> primaryKeyColumns;
+        if (useFlags) {
+            LOGGER.debug("Using relation message flags to resolve PKs for '{}.{}'", schemaName, tableName);
+            primaryKeyColumns = new ArrayList<>();
+        }
+        else {
+            LOGGER.debug("Using DB metadata query to resolve PKs for '{}.{}' (replicaIdentity={})",
+                    schemaName, tableName, replicaIdentity);
+            primaryKeyColumns = queryPrimaryKeysFromDatabase(tableId);
         }
 
         List<ColumnMetaData> columns = new ArrayList<>();
@@ -360,27 +362,35 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             int columnType = buffer.getInt();
             int attypmod = buffer.getInt();
 
+            LOGGER.debug("Column '{}' in '{}.{}': flags={}, typeOid={}", columnName, schemaName, tableName, flags, columnType);
+
             final PostgresType postgresType = typeRegistry.get(columnType);
-            boolean key = isColumnInPrimaryKey(schemaName, tableName, columnName, primaryKeyColumns);
 
-            Boolean optional = columnOptionality.get(columnName);
-            if (optional == null) {
-                if (decoderContext.getConfig().getColumnFilter().matches(tableId.catalog(), tableId.schema(), tableId.table(), columnName)) {
-                    LOGGER.warn("Column '{}' optionality could not be determined, defaulting to true", columnName);
+            boolean key;
+            if (useFlags) {
+                key = (flags & 1) == 1;
+                if (key) {
+                    primaryKeyColumns.add(columnName);
                 }
-                optional = true;
+            }
+            else {
+                key = isColumnInPrimaryKey(schemaName, tableName, columnName, primaryKeyColumns);
             }
 
-            if (YugabyteDBServer.isEnabled() && !key && isReplicaIdentityChange(replicaIdentityId)) {
-                LOGGER.trace("Marking column {} optional for replica identity CHANGE", columnName);
-                optional = true;
-            }
+            boolean optional = true;
 
-            final boolean hasDefault = columnDefaults.containsKey(columnName);
-            final String defaultValueExpression = columnDefaults.getOrDefault(columnName, Optional.empty()).orElse(null);
-
-            columns.add(new ColumnMetaData(columnName, postgresType, key, optional, hasDefault, defaultValueExpression, attypmod));
+            columns.add(new ColumnMetaData(columnName, postgresType, key, optional, false, null, attypmod));
             columnNames.add(columnName);
+        }
+
+        // CHANGE identity fallback: yboutput may not set flags for CHANGE in earlier versions of
+        // YugabyteDB (YB#22555).
+        // If no key columns were found from flags, fall back to DB query.
+        if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE && primaryKeyColumns.isEmpty()) {
+            LOGGER.trace("No key columns from flags for CHANGE identity on '{}.{}', falling back to DB query",
+                    schemaName, tableName);
+            primaryKeyColumns = queryPrimaryKeysFromDatabase(tableId);
+            LOGGER.debug("DB fallback resolved PKs for '{}.{}': {}", schemaName, tableName, primaryKeyColumns);
         }
 
         // Remove any PKs that do not exist as part of this this relation message. This can occur when issuing
@@ -400,12 +410,37 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         // to reflect the actual primary key state at time `t0`.
         primaryKeyColumns.retainAll(columnNames);
 
+        LOGGER.trace("Final primaryKeyColumns for '{}.{}': {}", schemaName, tableName, primaryKeyColumns);
+
         Table table = resolveRelationFromMetadata(new PgOutputRelationMetaData(relationId, schemaName, tableName, columns, primaryKeyColumns));
         if (YugabyteDBServer.isEnabled()) {
             decoderContext.getSchema().applySchemaChangesForTableWithReplicaIdentity(relationId, table, replicaIdentityId);
-        } else {
+        }
+        else {
             decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
         }
+    }
+
+    /**
+     * Queries the database for primary key columns of the given table.
+     * Falls back to unique indices if no primary keys are found.
+     */
+    private List<String> queryPrimaryKeysFromDatabase(TableId tableId) throws SQLException {
+        final DatabaseMetaData databaseMetadata = connection.connection().getMetaData();
+        List<String> primaryKeyColumns = connection.readPrimaryKeyNames(databaseMetadata, tableId);
+        if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
+            LOGGER.warn("Primary keys are not defined for table '{}', defaulting to unique indices", tableId);
+            primaryKeyColumns = connection.readTableUniqueIndices(databaseMetadata, tableId);
+        }
+        return primaryKeyColumns;
+    }
+
+    /**
+     * @param replicaIdentityId the integer representation of the character for denoting replica identity.
+     * @return the parsed {@link ReplicaIdentityInfo.ReplicaIdentity} enum value.
+     */
+    private ReplicaIdentityInfo.ReplicaIdentity parseReplicaIdentity(int replicaIdentityId) {
+        return ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId));
     }
 
     /**
@@ -413,8 +448,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
      * @return true if the replica identity is change, false otherwise.
      */
     private boolean isReplicaIdentityChange(int replicaIdentityId) {
-        return ReplicaIdentityInfo.ReplicaIdentity.CHANGE
-                 == ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId));
+        return ReplicaIdentityInfo.ReplicaIdentity.CHANGE == parseReplicaIdentity(replicaIdentityId);
     }
 
     private List<io.debezium.relational.Column> getTableColumnsFromDatabase(PostgresConnection connection, DatabaseMetaData databaseMetadata, TableId tableId)
