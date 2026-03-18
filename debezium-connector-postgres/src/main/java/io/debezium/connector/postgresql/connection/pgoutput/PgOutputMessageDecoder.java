@@ -8,7 +8,6 @@ package io.debezium.connector.postgresql.connection.pgoutput;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -354,6 +353,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             primaryKeyColumns = queryPrimaryKeysFromDatabase(tableId);
         }
 
+        List<String> flagBasedPrimaryKeyColumns = new ArrayList<>();
         List<ColumnMetaData> columns = new ArrayList<>();
         Set<String> columnNames = new HashSet<>();
         for (short i = 0; i < columnCount; ++i) {
@@ -377,6 +377,10 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 key = isColumnInPrimaryKey(schemaName, tableName, columnName, primaryKeyColumns);
             }
 
+            if ((flags & 1) == 1) {
+                flagBasedPrimaryKeyColumns.add(columnName);
+            }
+
             columns.add(new ColumnMetaData(columnName, postgresType, key, true, false, null, attypmod));
             columnNames.add(columnName);
         }
@@ -389,6 +393,17 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                     schemaName, tableName);
             primaryKeyColumns = queryPrimaryKeysFromDatabase(tableId);
             LOGGER.debug("DB fallback resolved PKs for '{}.{}': {}", schemaName, tableName, primaryKeyColumns);
+        }
+
+        // FULL identity fallback: for FULL, all column flags are 1 so the DB query is the
+        // primary source of PKs.  When the table has been dropped the query returns empty and
+        // the schema cache may also be empty (e.g. after a fresh restart).  Fall back to the
+        // flag-based columns so that records still get non-null Kafka keys.
+        if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.FULL && primaryKeyColumns.isEmpty()
+                && !flagBasedPrimaryKeyColumns.isEmpty()) {
+            LOGGER.debug("DB query returned no PKs for FULL identity on '{}.{}', falling back to flag-based columns",
+                    schemaName, tableName);
+            primaryKeyColumns = flagBasedPrimaryKeyColumns;
         }
 
         // Remove any PKs that do not exist as part of this this relation message. This can occur when issuing
@@ -439,33 +454,6 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
      */
     private ReplicaIdentityInfo.ReplicaIdentity parseReplicaIdentity(int replicaIdentityId) {
         return ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId));
-    }
-
-    /**
-     * @param replicaIdentityId the integer representation of the character for denoting replica identity.
-     * @return true if the replica identity is change, false otherwise.
-     */
-    private boolean isReplicaIdentityChange(int replicaIdentityId) {
-        return ReplicaIdentityInfo.ReplicaIdentity.CHANGE == parseReplicaIdentity(replicaIdentityId);
-    }
-
-    private List<io.debezium.relational.Column> getTableColumnsFromDatabase(PostgresConnection connection, DatabaseMetaData databaseMetadata, TableId tableId)
-            throws SQLException {
-        List<io.debezium.relational.Column> readColumns = new ArrayList<>();
-        try {
-            try (ResultSet columnMetadata = databaseMetadata.getColumns(null, tableId.schema(), tableId.table(), null)) {
-                while (columnMetadata.next()) {
-                    connection.readColumnForDecoder(columnMetadata, tableId, decoderContext.getConfig().getColumnFilter())
-                            .ifPresent(readColumns::add);
-                }
-            }
-        }
-        catch (SQLException e) {
-            LOGGER.error("Failed to read column metadata for '{}.{}'", tableId.schema(), tableId.table());
-            throw e;
-        }
-
-        return readColumns;
     }
 
     private boolean isColumnInPrimaryKey(String schemaName, String tableName, String columnName, List<String> primaryKeyColumns) {
