@@ -29,15 +29,14 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.yugabyte.core.BaseConnection;
 import com.yugabyte.core.ServerVersion;
 import com.yugabyte.replication.PGReplicationStream;
 import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
 import com.yugabyte.util.PSQLException;
 import com.yugabyte.util.PSQLState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
@@ -590,17 +589,18 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
     public String getReplicationSlotCreationCommand(String tempPart, boolean canExportSnapshot) throws SQLException {
         return String.format(
-                "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s %s %s",
-                slotName,
-                tempPart,
-                plugin.getPostgresPluginName(),
-                lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
-                canExportSnapshot ? "EXPORT_SNAPSHOT" : "USE_SNAPSHOT");
+            "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s %s %s",
+            slotName,
+            tempPart,
+            plugin.getPostgresPluginName(),
+            lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
+            canExportSnapshot ? "EXPORT_SNAPSHOT" : "USE_SNAPSHOT");
     }
 
     public Boolean isExportSnapshotSupported(Exception exception) throws SQLException {
-        if (exception.getMessage() != null && (exception.getMessage().contains("cannot export or import snapshot when ysql_enable_pg_export_snapshot is disabled") ||
-                exception.getMessage().contains("Exporting snapshot is not yet supported"))) {
+        if (exception.getMessage() != null && (
+            exception.getMessage().contains("cannot export or import snapshot when ysql_enable_pg_export_snapshot is disabled") ||
+            exception.getMessage().contains("Exporting snapshot is not yet supported"))) {
             return false;
         }
         return true;
@@ -653,7 +653,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
                     // Begin a read-only transaction when it is the parallel streaming mode because
                     // we will be using this read-only transaction to take the snapshot further.
-                    if (connectorConfig.streamingMode().isParallel()) {
+                    if (connectorConfig.streamingMode().isParallel() ) {
                         LOGGER.info("executing: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
                         stmt.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
                     }
@@ -684,8 +684,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             if (rs.next()) {
                 return rs.getString("backend_pid");
             }
-        }
-        catch (SQLException sqle) {
+        } catch (SQLException sqle) {
             LOGGER.warn("Unable to get the backend PID", sqle);
         }
 
@@ -699,8 +698,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             if (rs.next()) {
                 return rs.getString("connected_to_host");
             }
-        }
-        catch (SQLException sqle) {
+        } catch (SQLException sqle) {
             LOGGER.warn("Unable to get the connected host node", sqle);
         }
 
