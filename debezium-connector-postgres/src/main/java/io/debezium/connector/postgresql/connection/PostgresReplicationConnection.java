@@ -10,6 +10,7 @@ import static java.lang.Math.toIntExact;
 
 import java.nio.ByteBuffer;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
@@ -28,14 +29,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.yugabyte.core.BaseConnection;
 import com.yugabyte.core.ServerVersion;
 import com.yugabyte.replication.PGReplicationStream;
 import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
 import com.yugabyte.util.PSQLException;
 import com.yugabyte.util.PSQLState;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
@@ -193,7 +195,9 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                                             publicationName, plugin, database()));
                                 }
                                 else {
-                                    createOrUpdatePublicationModeFilterted(stmt, true);
+                                    if (isPublicationUpdateRequired(stmt)) {
+                                        createOrUpdatePublicationModeFilterted(stmt, true);
+                                    }
                                 }
                                 break;
                             default:
@@ -232,6 +236,80 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             throw new ConnectException(String.format("Unable to %s filtered publication %s for %s", isUpdate ? "update" : "create", publicationName, tableFilterString),
                     e);
         }
+    }
+
+    /**
+     * Gets the list of tables currently configured in the publication by querying pg_publication_tables.
+     *
+     * @param stmt the statement to use for the query
+     * @return Optional containing the Set of TableId objects in the publication, empty if unable to query
+     */
+    private Optional<Set<TableId>> getCurrentPublicationTables(Statement stmt) {
+        String query = String.format(
+                "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = '%s'", publicationName);
+
+        Set<TableId> publicationTables = new HashSet<>();
+        try (PreparedStatement prepStmt = stmt.getConnection().prepareStatement(query)) {
+            try (ResultSet rs = prepStmt.executeQuery()) {
+                while (rs.next()) {
+                    String schemaName = rs.getString("schemaname");
+                    String tableName = rs.getString("tablename");
+                    TableId tableId = jdbcConnection.createTableId(connectorConfig.databaseName(), schemaName, tableName);
+                    publicationTables.add(tableId);
+                }
+            }
+        }
+        catch (SQLException e) {
+            LOGGER.warn("Unable to query pg_publication_tables for publication '{}'. "
+                    + "Publication will be updated to ensure synchronization. Error: {}", publicationName, e.getMessage());
+            return Optional.empty();
+        }
+        return Optional.of(publicationTables);
+    }
+
+    /**
+     * Checks whether the publication's current table set differs from the desired captured tables.
+     *
+     * @param stmt the statement to use for database queries
+     * @return true if the publication needs to be updated, false otherwise
+     * @throws SQLException if database queries fail
+     */
+    public boolean isPublicationUpdateRequired(Statement stmt) throws SQLException {
+        Optional<Set<TableId>> currentPublicationTables = getCurrentPublicationTables(stmt);
+
+        if (currentPublicationTables.isEmpty()) {
+            LOGGER.info("Unable to determine current publication tables for '{}', will update publication to ensure synchronization",
+                    publicationName);
+            return true;
+        }
+
+        Set<TableId> desiredTables;
+        try {
+            desiredTables = determineCapturedTables();
+        }
+        catch (Exception e) {
+            throw new SQLException("Failed to determine captured tables", e);
+        }
+
+        if (desiredTables.isEmpty()) {
+            LOGGER.warn("No table filters found for filtered publication {}", publicationName);
+            return false;
+        }
+
+        Set<TableId> currentTables = currentPublicationTables.get();
+        if (currentTables.equals(desiredTables)) {
+            LOGGER.info("Publication '{}' is already up to date with desired tables", publicationName);
+            return false;
+        }
+
+        Set<TableId> toAdd = new HashSet<>(desiredTables);
+        toAdd.removeAll(currentTables);
+        Set<TableId> toRemove = new HashSet<>(currentTables);
+        toRemove.removeAll(desiredTables);
+
+        LOGGER.info("Publication '{}' needs update. Tables to add: {}, Tables to remove: {}",
+                publicationName, toAdd, toRemove);
+        return true;
     }
 
     /**
@@ -512,18 +590,17 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
     public String getReplicationSlotCreationCommand(String tempPart, boolean canExportSnapshot) throws SQLException {
         return String.format(
-            "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s %s %s",
-            slotName,
-            tempPart,
-            plugin.getPostgresPluginName(),
-            lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
-            canExportSnapshot ? "EXPORT_SNAPSHOT" : "USE_SNAPSHOT");
+                "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s %s %s",
+                slotName,
+                tempPart,
+                plugin.getPostgresPluginName(),
+                lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
+                canExportSnapshot ? "EXPORT_SNAPSHOT" : "USE_SNAPSHOT");
     }
 
     public Boolean isExportSnapshotSupported(Exception exception) throws SQLException {
-        if (exception.getMessage() != null && (
-            exception.getMessage().contains("cannot export or import snapshot when ysql_enable_pg_export_snapshot is disabled") ||
-            exception.getMessage().contains("Exporting snapshot is not yet supported"))) {
+        if (exception.getMessage() != null && (exception.getMessage().contains("cannot export or import snapshot when ysql_enable_pg_export_snapshot is disabled") ||
+                exception.getMessage().contains("Exporting snapshot is not yet supported"))) {
             return false;
         }
         return true;
@@ -576,7 +653,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
                     // Begin a read-only transaction when it is the parallel streaming mode because
                     // we will be using this read-only transaction to take the snapshot further.
-                    if (connectorConfig.streamingMode().isParallel() ) {
+                    if (connectorConfig.streamingMode().isParallel()) {
                         LOGGER.info("executing: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
                         stmt.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
                     }
@@ -607,7 +684,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             if (rs.next()) {
                 return rs.getString("backend_pid");
             }
-        } catch (SQLException sqle) {
+        }
+        catch (SQLException sqle) {
             LOGGER.warn("Unable to get the backend PID", sqle);
         }
 
@@ -621,7 +699,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             if (rs.next()) {
                 return rs.getString("connected_to_host");
             }
-        } catch (SQLException sqle) {
+        }
+        catch (SQLException sqle) {
             LOGGER.warn("Unable to get the connected host node", sqle);
         }
 
