@@ -244,11 +244,11 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
      * @return Optional containing the Set of TableId objects in the publication, empty if unable to query
      */
     private Optional<Set<TableId>> getCurrentPublicationTables(Statement stmt) {
-        String query = String.format(
+        String getPublicationTablesQuery = String.format(
                 "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = '%s'", publicationName);
 
         Set<TableId> publicationTables = new HashSet<>();
-        try (PreparedStatement prepStmt = stmt.getConnection().prepareStatement(query)) {
+        try (PreparedStatement prepStmt = stmt.getConnection().prepareStatement(getPublicationTablesQuery)) {
             try (ResultSet rs = prepStmt.executeQuery()) {
                 while (rs.next()) {
                     String schemaName = rs.getString("schemaname");
