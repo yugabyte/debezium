@@ -23,6 +23,7 @@ import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.OriginMessage;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.PostgresReplicationConnection;
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.connector.postgresql.connection.ReplicationMessage;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Operation;
@@ -32,6 +33,7 @@ import io.debezium.connector.postgresql.spi.Snapshotter;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.source.spi.StreamingChangeEventSource;
+import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 import io.debezium.util.Clock;
 import io.debezium.util.DelayStrategy;
@@ -407,7 +409,23 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     tableId,
                     message.getOperation());
 
-            boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
+            boolean shouldFilterNoPkRecord = false;
+            if (YugabyteDBServer.isEnabled() && tableId != null
+                    && (message.getOperation() == Operation.UPDATE || message.getOperation() == Operation.DELETE)) {
+                Table table = schema.tableFor(tableId);
+                if (table != null && table.primaryKeyColumnNames().isEmpty()) {
+                    ReplicaIdentityInfo.ReplicaIdentity ri = schema.getReplicaIdentity(tableId);
+                    if (ri != ReplicaIdentityInfo.ReplicaIdentity.FULL) {
+                        shouldFilterNoPkRecord = true;
+                        LOGGER.info("Filtering {} record for table '{}': table has no primary key and "
+                                + "stream replica identity is {} (non-FULL). Record will be skipped.",
+                                message.getOperation(), tableId, ri);
+                    }
+                }
+            }
+
+            boolean dispatched = !shouldFilterNoPkRecord
+                    && message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
                     partition,
                     tableId,
                     new PostgresChangeRecordEmitter(

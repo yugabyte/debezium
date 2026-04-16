@@ -4,8 +4,10 @@ import io.debezium.config.Configuration;
 import io.debezium.data.Envelope;
 import io.debezium.data.VerifyRecord;
 import io.debezium.embedded.AbstractConnectorTest;
+import io.debezium.junit.logging.LogInterceptor;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -21,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import static io.debezium.connector.postgresql.TestHelper.PK_FIELD;
 import static io.debezium.connector.postgresql.TestHelper.topicName;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests to validate the functionality of replica identities with YugabyteDB.
@@ -50,15 +53,41 @@ public class YugabyteReplicaIdentityIT extends AbstractConnectorTest {
   @Before
   public void before() {
     initializeConnectorTestFramework();
-    TestHelper.dropDefaultReplicationSlot();
+    terminateAndDropSlot();
     TestHelper.execute(CREATE_TABLES_STMT);
   }
 
   @After
   public void after() {
     stopConnector();
-    TestHelper.dropDefaultReplicationSlot();
+    terminateAndDropSlot();
     TestHelper.dropPublication();
+  }
+
+  private void terminateAndDropSlot() {
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        TestHelper.execute(
+            "SELECT pg_terminate_backend(active_pid) "
+                + "FROM pg_replication_slots "
+                + "WHERE slot_name = 'debezium' AND active = true;");
+        Thread.sleep(20_000);
+        TestHelper.dropDefaultReplicationSlot();
+        return;
+      }
+      catch (Exception e) {
+        LOGGER.warn("terminateAndDropSlot attempt {} failed: {}", attempt, e.getMessage());
+        if (attempt == 3) {
+          LOGGER.warn("Could not drop slot after 3 attempts, continuing anyway");
+        }
+        try {
+          Thread.sleep(10_000);
+        }
+        catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
   }
 
   @Test
@@ -445,5 +474,334 @@ public class YugabyteReplicaIdentityIT extends AbstractConnectorTest {
     assertThat(deleteRecordValue.getStruct(Envelope.FieldName.BEFORE).getStruct("pk").getInt32("value")).isEqualTo(1);
     assertThat(deleteRecordValue.getStruct(Envelope.FieldName.BEFORE).getStruct("aa").getInt32("value")).isNull();
     assertThat(deleteRecordValue.getStruct(Envelope.FieldName.BEFORE).getStruct("bb").getString("value")).isNull();
+  }
+
+  // --- Tests for filtering UPDATE/DELETE on tables without primary key ---
+
+  @Test
+  public void shouldFilterUpdateAndDeleteForNoPkTableWithNonFullRI() throws Exception {
+    TestHelper.execute("DROP TABLE IF EXISTS nopk_change;");
+    TestHelper.execute("CREATE TABLE nopk_change (id INT, val TEXT);");
+    TestHelper.execute("ALTER TABLE nopk_change REPLICA IDENTITY CHANGE;");
+
+    TestHelper.dropPublication();
+    TestHelper.execute(
+        "SET yb_cdcsdk_stream_tables_without_primary_key = true; "
+            + "CREATE PUBLICATION dbz_publication FOR TABLE nopk_change;");
+
+    Configuration config = TestHelper.defaultConfig()
+        .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER.getValue())
+        .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+        .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.nopk_change")
+        .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "disabled")
+        .build();
+
+    start(YugabyteDBConnector.class, config);
+    assertConnectorIsRunning();
+
+    TestHelper.waitFor(Duration.ofSeconds(10));
+    waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+    assertNoRecordsToConsume();
+
+    LogInterceptor logInterceptor = new LogInterceptor(PostgresStreamingChangeEventSource.class);
+
+    TestHelper.execute("INSERT INTO nopk_change VALUES (1, 'hello');");
+    TestHelper.execute(
+        "SET yb_cdcsdk_allow_dml_without_pk = true; "
+            + "UPDATE nopk_change SET val = 'world' WHERE id = 1;");
+    TestHelper.execute(
+        "SET yb_cdcsdk_allow_dml_without_pk = true; "
+            + "DELETE FROM nopk_change WHERE id = 1;");
+
+    SourceRecords records = consumeRecordsByTopic(1);
+    List<SourceRecord> nopkRecords = records.recordsForTopic(topicName("nopk_change"));
+
+    assertThat(nopkRecords).hasSize(1);
+    assertThat(((Struct) nopkRecords.get(0).value()).get("op")).isEqualTo("c");
+
+    Awaitility.await().atMost(60, TimeUnit.SECONDS).until(
+        () -> logInterceptor.containsMessage("Filtering UPDATE record for table")
+            || logInterceptor.containsMessage("Filtering DELETE record for table"));
+  }
+
+  @Test
+  public void shouldNotFilterUpdateAndDeleteForNoPkTableWithFullRI() throws Exception {
+    TestHelper.execute("DROP TABLE IF EXISTS nopk_full;");
+    TestHelper.execute("CREATE TABLE nopk_full (id INT, val TEXT);");
+    TestHelper.execute("ALTER TABLE nopk_full REPLICA IDENTITY FULL;");
+
+    TestHelper.dropPublication();
+    TestHelper.execute(
+        "SET yb_cdcsdk_stream_tables_without_primary_key = true; "
+            + "CREATE PUBLICATION dbz_publication FOR TABLE nopk_full;");
+
+    Configuration config = TestHelper.defaultConfig()
+        .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER.getValue())
+        .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+        .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.nopk_full")
+        .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "disabled")
+        .build();
+
+    start(YugabyteDBConnector.class, config);
+    assertConnectorIsRunning();
+
+    TestHelper.waitFor(Duration.ofSeconds(10));
+    waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+    assertNoRecordsToConsume();
+
+    TestHelper.execute("INSERT INTO nopk_full VALUES (1, 'hello');");
+    TestHelper.execute("UPDATE nopk_full SET val = 'world' WHERE id = 1;");
+    TestHelper.execute("DELETE FROM nopk_full WHERE id = 1;");
+
+    SourceRecords records = consumeRecordsByTopic(3);
+    List<SourceRecord> nopkRecords = records.recordsForTopic(topicName("nopk_full"));
+
+    assertThat(nopkRecords).hasSize(3);
+    assertThat(((Struct) nopkRecords.get(0).value()).get("op")).isEqualTo("c");
+    assertThat(((Struct) nopkRecords.get(1).value()).get("op")).isEqualTo("u");
+    assertThat(((Struct) nopkRecords.get(2).value()).get("op")).isEqualTo("d");
+  }
+
+  @Test
+  public void shouldNotFilterInsertForNoPkTableRegardlessOfRI() throws Exception {
+    TestHelper.execute("DROP TABLE IF EXISTS nopk_insert;");
+    TestHelper.execute("CREATE TABLE nopk_insert (id INT, val TEXT);");
+    TestHelper.execute("ALTER TABLE nopk_insert REPLICA IDENTITY CHANGE;");
+
+    TestHelper.dropPublication();
+    TestHelper.execute(
+        "SET yb_cdcsdk_stream_tables_without_primary_key = true; "
+            + "CREATE PUBLICATION dbz_publication FOR TABLE nopk_insert;");
+
+    Configuration config = TestHelper.defaultConfig()
+        .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER.getValue())
+        .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+        .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.nopk_insert")
+        .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "disabled")
+        .build();
+
+    start(YugabyteDBConnector.class, config);
+    assertConnectorIsRunning();
+
+    TestHelper.waitFor(Duration.ofSeconds(10));
+    waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+    assertNoRecordsToConsume();
+
+    TestHelper.execute("INSERT INTO nopk_insert VALUES (1, 'hello');");
+    TestHelper.execute("INSERT INTO nopk_insert VALUES (2, 'world');");
+
+    SourceRecords records = consumeRecordsByTopic(2);
+    List<SourceRecord> nopkRecords = records.recordsForTopic(topicName("nopk_insert"));
+
+    assertThat(nopkRecords).hasSize(2);
+    assertThat(((Struct) nopkRecords.get(0).value()).get("op")).isEqualTo("c");
+    assertThat(((Struct) nopkRecords.get(1).value()).get("op")).isEqualTo("c");
+  }
+
+  @Test
+  public void shouldBlockUpdateAndDeleteForNoPkTableWithFlagFalse() throws Exception {
+    TestHelper.execute("DROP TABLE IF EXISTS nopk_default;");
+    TestHelper.execute("CREATE TABLE nopk_default (id INT, val TEXT);");
+
+    TestHelper.execute("DROP TABLE IF EXISTS nopk_change_block;");
+    TestHelper.execute("CREATE TABLE nopk_change_block (id INT, val TEXT);");
+    TestHelper.execute("ALTER TABLE nopk_change_block REPLICA IDENTITY CHANGE;");
+
+    TestHelper.execute("INSERT INTO nopk_default VALUES (1, 'a');");
+    TestHelper.execute("INSERT INTO nopk_change_block VALUES (1, 'a');");
+
+    assertThatThrownBy(() -> TestHelper.execute("UPDATE nopk_default SET val = 'b' WHERE id = 1;"))
+        .hasMessageContaining("does not have a replica identity")
+        .hasMessageContaining("publishes updates");
+
+    assertThatThrownBy(() -> TestHelper.execute("UPDATE nopk_change_block SET val = 'b' WHERE id = 1;"))
+        .hasMessageContaining("UPDATE and DELETE are not allowed on table")
+        .hasMessageContaining("without primary key");
+  }
+
+  @Test
+  public void shouldFilterUpdateAndDeleteForNoPkTableWithDefaultRIAndFlagTrue() throws Exception {
+    TestHelper.execute("DROP TABLE IF EXISTS nopk_default_flag;");
+    TestHelper.execute("CREATE TABLE nopk_default_flag (id INT, val TEXT);");
+
+    TestHelper.dropPublication();
+    TestHelper.execute(
+        "SET yb_cdcsdk_stream_tables_without_primary_key = true; "
+            + "CREATE PUBLICATION dbz_publication FOR TABLE nopk_default_flag;");
+
+    Configuration config = TestHelper.defaultConfig()
+        .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER.getValue())
+        .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+        .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.nopk_default_flag")
+        .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "disabled")
+        .build();
+
+    start(YugabyteDBConnector.class, config);
+    assertConnectorIsRunning();
+
+    TestHelper.waitFor(Duration.ofSeconds(10));
+    waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+    assertNoRecordsToConsume();
+
+    LogInterceptor logInterceptor = new LogInterceptor(PostgresStreamingChangeEventSource.class);
+
+    TestHelper.execute("INSERT INTO nopk_default_flag VALUES (1, 'hello');");
+    TestHelper.execute(
+        "SET yb_cdcsdk_allow_dml_without_pk = true; "
+            + "UPDATE nopk_default_flag SET val = 'world' WHERE id = 1;");
+    TestHelper.execute(
+        "SET yb_cdcsdk_allow_dml_without_pk = true; "
+            + "DELETE FROM nopk_default_flag WHERE id = 1;");
+
+    SourceRecords records = consumeRecordsByTopic(1);
+    List<SourceRecord> nopkRecords = records.recordsForTopic(topicName("nopk_default_flag"));
+
+    assertThat(nopkRecords).hasSize(1);
+    assertThat(((Struct) nopkRecords.get(0).value()).get("op")).isEqualTo("c");
+
+    Awaitility.await().atMost(60, TimeUnit.SECONDS).until(
+        () -> logInterceptor.containsMessage("Filtering UPDATE record for table")
+            || logInterceptor.containsMessage("Filtering DELETE record for table"));
+  }
+
+  @Test
+  public void shouldFilterUpdateDeleteAfterAlterToFullBecauseStreamRIIsStale() throws Exception {
+    TestHelper.execute("DROP TABLE IF EXISTS nopk_alter_change;");
+    TestHelper.execute("CREATE TABLE nopk_alter_change (id INT, val TEXT);");
+    TestHelper.execute("ALTER TABLE nopk_alter_change REPLICA IDENTITY CHANGE;");
+
+    assertThatThrownBy(
+        () -> TestHelper.execute("UPDATE nopk_alter_change SET val = 'x' WHERE id = 1;"))
+        .hasMessageContaining("UPDATE and DELETE are not allowed on table")
+        .hasMessageContaining("without primary key");
+
+    TestHelper.dropPublication();
+    TestHelper.execute(
+        "SET yb_cdcsdk_stream_tables_without_primary_key = true; "
+            + "CREATE PUBLICATION dbz_publication FOR TABLE nopk_alter_change;");
+
+    Configuration config = TestHelper.defaultConfig()
+        .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER.getValue())
+        .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+        .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.nopk_alter_change")
+        .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "disabled")
+        .build();
+
+    start(YugabyteDBConnector.class, config);
+    assertConnectorIsRunning();
+
+    TestHelper.waitFor(Duration.ofSeconds(10));
+    waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+    assertNoRecordsToConsume();
+
+    LogInterceptor logInterceptor = new LogInterceptor(PostgresStreamingChangeEventSource.class);
+
+    TestHelper.execute("ALTER TABLE nopk_alter_change REPLICA IDENTITY FULL;");
+
+    TestHelper.execute("INSERT INTO nopk_alter_change VALUES (1, 'hello');");
+    TestHelper.execute("UPDATE nopk_alter_change SET val = 'world' WHERE id = 1;");
+    TestHelper.execute("DELETE FROM nopk_alter_change WHERE id = 1;");
+
+    SourceRecords records = consumeRecordsByTopic(1);
+    List<SourceRecord> nopkRecords = records.recordsForTopic(topicName("nopk_alter_change"));
+
+    assertThat(nopkRecords).hasSize(1);
+    assertThat(((Struct) nopkRecords.get(0).value()).get("op")).isEqualTo("c");
+
+    Awaitility.await().atMost(60, TimeUnit.SECONDS).until(
+        () -> logInterceptor.containsMessage("Filtering UPDATE record for table")
+            || logInterceptor.containsMessage("Filtering DELETE record for table"));
+  }
+
+  @Test
+  public void shouldFilterUpdateDeleteForDefaultRIAfterAlterToFull() throws Exception {
+    TestHelper.execute("DROP TABLE IF EXISTS nopk_alter_default;");
+    TestHelper.execute("CREATE TABLE nopk_alter_default (id INT, val TEXT);");
+
+    assertThatThrownBy(
+        () -> TestHelper.execute("UPDATE nopk_alter_default SET val = 'x' WHERE id = 1;"))
+        .hasMessageContaining("does not have a replica identity")
+        .hasMessageContaining("publishes updates");
+
+    TestHelper.dropPublication();
+    TestHelper.execute(
+        "SET yb_cdcsdk_stream_tables_without_primary_key = true; "
+            + "CREATE PUBLICATION dbz_publication FOR TABLE nopk_alter_default;");
+
+    Configuration config = TestHelper.defaultConfig()
+        .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER.getValue())
+        .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+        .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.nopk_alter_default")
+        .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "disabled")
+        .build();
+
+    start(YugabyteDBConnector.class, config);
+    assertConnectorIsRunning();
+
+    TestHelper.waitFor(Duration.ofSeconds(10));
+    waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+    assertNoRecordsToConsume();
+
+    LogInterceptor logInterceptor = new LogInterceptor(PostgresStreamingChangeEventSource.class);
+
+    TestHelper.execute("ALTER TABLE nopk_alter_default REPLICA IDENTITY FULL;");
+
+    TestHelper.execute("INSERT INTO nopk_alter_default VALUES (1, 'hello');");
+    TestHelper.execute("UPDATE nopk_alter_default SET val = 'world' WHERE id = 1;");
+    TestHelper.execute("DELETE FROM nopk_alter_default WHERE id = 1;");
+
+    SourceRecords records = consumeRecordsByTopic(1);
+    List<SourceRecord> nopkRecords = records.recordsForTopic(topicName("nopk_alter_default"));
+
+    assertThat(nopkRecords).hasSize(1);
+    assertThat(((Struct) nopkRecords.get(0).value()).get("op")).isEqualTo("c");
+
+    Awaitility.await().atMost(60, TimeUnit.SECONDS).until(
+        () -> logInterceptor.containsMessage("Filtering UPDATE record for table")
+            || logInterceptor.containsMessage("Filtering DELETE record for table"));
+  }
+
+  @Test
+  public void shouldVerifyStreamReplicaIdentityAfterAlterToFull() throws Exception {
+    TestHelper.execute("DROP TABLE IF EXISTS nopk_ri_verify;");
+    TestHelper.execute("CREATE TABLE nopk_ri_verify (id INT, val TEXT);");
+    TestHelper.execute("ALTER TABLE nopk_ri_verify REPLICA IDENTITY CHANGE;");
+
+    TestHelper.dropPublication();
+    TestHelper.execute(
+        "SET yb_cdcsdk_stream_tables_without_primary_key = true; "
+            + "CREATE PUBLICATION dbz_publication FOR TABLE nopk_ri_verify;");
+
+    Configuration config = TestHelper.defaultConfig()
+        .with(PostgresConnectorConfig.SNAPSHOT_MODE, PostgresConnectorConfig.SnapshotMode.NEVER.getValue())
+        .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
+        .with(PostgresConnectorConfig.TABLE_INCLUDE_LIST, "public.nopk_ri_verify")
+        .with(PostgresConnectorConfig.PUBLICATION_AUTOCREATE_MODE, "disabled")
+        .build();
+
+    start(YugabyteDBConnector.class, config);
+    assertConnectorIsRunning();
+
+    TestHelper.waitFor(Duration.ofSeconds(10));
+    waitForAvailableRecords(10_000, TimeUnit.MILLISECONDS);
+    assertNoRecordsToConsume();
+
+    TestHelper.execute("INSERT INTO nopk_ri_verify VALUES (1, 'hello');");
+
+    SourceRecords records = consumeRecordsByTopic(1);
+    assertThat(records.recordsForTopic(topicName("nopk_ri_verify"))).hasSize(1);
+
+    LogInterceptor logInterceptor = new LogInterceptor(PostgresStreamingChangeEventSource.class);
+
+    TestHelper.execute("ALTER TABLE nopk_ri_verify REPLICA IDENTITY FULL;");
+
+    TestHelper.execute("INSERT INTO nopk_ri_verify VALUES (2, 'world');");
+    TestHelper.execute("UPDATE nopk_ri_verify SET val = 'updated' WHERE id = 2;");
+
+    SourceRecords records2 = consumeRecordsByTopic(1);
+    assertThat(records2.recordsForTopic(topicName("nopk_ri_verify"))).hasSize(1);
+
+    Awaitility.await().atMost(60, TimeUnit.SECONDS).until(
+        () -> logInterceptor.containsMessage("Filtering UPDATE record for table"));
   }
 }
