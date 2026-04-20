@@ -10,6 +10,7 @@ import static java.lang.Math.toIntExact;
 
 import java.nio.ByteBuffer;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
@@ -193,7 +194,9 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                                             publicationName, plugin, database()));
                                 }
                                 else {
-                                    createOrUpdatePublicationModeFilterted(stmt, true);
+                                    if (isPublicationUpdateRequired(stmt)) {
+                                        createOrUpdatePublicationModeFilterted(stmt, true);
+                                    }
                                 }
                                 break;
                             default:
@@ -232,6 +235,80 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             throw new ConnectException(String.format("Unable to %s filtered publication %s for %s", isUpdate ? "update" : "create", publicationName, tableFilterString),
                     e);
         }
+    }
+
+    /**
+     * Gets the list of tables currently configured in the publication by querying pg_publication_tables.
+     *
+     * @param stmt the statement to use for the query
+     * @return Optional containing the Set of TableId objects in the publication, empty if unable to query
+     */
+    private Optional<Set<TableId>> getCurrentPublicationTables(Statement stmt) {
+        String getPublicationTablesQuery = String.format(
+                "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = '%s'", publicationName);
+
+        Set<TableId> publicationTables = new HashSet<>();
+        try (PreparedStatement prepStmt = stmt.getConnection().prepareStatement(getPublicationTablesQuery)) {
+            try (ResultSet rs = prepStmt.executeQuery()) {
+                while (rs.next()) {
+                    String schemaName = rs.getString("schemaname");
+                    String tableName = rs.getString("tablename");
+                    TableId tableId = jdbcConnection.createTableId(connectorConfig.databaseName(), schemaName, tableName);
+                    publicationTables.add(tableId);
+                }
+            }
+        }
+        catch (SQLException e) {
+            LOGGER.warn("Unable to query pg_publication_tables for publication '{}'. "
+                    + "Publication will be updated to ensure synchronization. Error: {}", publicationName, e.getMessage());
+            return Optional.empty();
+        }
+        return Optional.of(publicationTables);
+    }
+
+    /**
+     * Checks whether the publication's current table set differs from the desired captured tables.
+     *
+     * @param stmt the statement to use for database queries
+     * @return true if the publication needs to be updated, false otherwise
+     * @throws SQLException if database queries fail
+     */
+    public boolean isPublicationUpdateRequired(Statement stmt) throws SQLException {
+        Optional<Set<TableId>> currentPublicationTables = getCurrentPublicationTables(stmt);
+
+        if (currentPublicationTables.isEmpty()) {
+            LOGGER.info("Unable to determine current publication tables for '{}', will update publication to ensure synchronization",
+                    publicationName);
+            return true;
+        }
+
+        Set<TableId> desiredTables;
+        try {
+            desiredTables = determineCapturedTables();
+        }
+        catch (Exception e) {
+            throw new SQLException("Failed to determine captured tables", e);
+        }
+
+        if (desiredTables.isEmpty()) {
+            LOGGER.warn("No table filters found for filtered publication {}", publicationName);
+            return false;
+        }
+
+        Set<TableId> currentTables = currentPublicationTables.get();
+        if (currentTables.equals(desiredTables)) {
+            LOGGER.info("Publication '{}' is already up to date with desired tables", publicationName);
+            return false;
+        }
+
+        Set<TableId> toAdd = new HashSet<>(desiredTables);
+        toAdd.removeAll(currentTables);
+        Set<TableId> toRemove = new HashSet<>(currentTables);
+        toRemove.removeAll(desiredTables);
+
+        LOGGER.info("Publication '{}' needs update. Tables to add: {}, Tables to remove: {}",
+                publicationName, toAdd, toRemove);
+        return true;
     }
 
     /**
