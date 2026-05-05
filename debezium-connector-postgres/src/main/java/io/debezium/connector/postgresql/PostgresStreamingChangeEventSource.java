@@ -53,6 +53,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      * trigger a "WAL backlog growing" warning.
      */
     private static final int GROWING_WAL_WARNING_LOG_INTERVAL = 10_000;
+    private static final long FILTERED_NO_PK_LOG_INTERVAL_MS = 5 * 60 * 1000L;
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresStreamingChangeEventSource.class);
 
     // PGOUTPUT decoder sends the messages with larger time gaps than other decoders
@@ -94,6 +95,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      */
     private OptionalLong lastTxnidForWhichCommitSeen = OptionalLong.empty();
     private long recordCount = 0;
+    private long totalFilteredNoPkRecords = 0;
+    private long filteredNoPkRecordsSinceLastLog = 0;
+    private long lastFilteredNoPkLogTimeMs = 0;
 
     public PostgresStreamingChangeEventSource(PostgresConnectorConfig connectorConfig, Snapshotter snapshotter,
                                               PostgresConnection connection, PostgresEventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
@@ -414,31 +418,59 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     && (message.getOperation() == Operation.UPDATE || message.getOperation() == Operation.DELETE)) {
                 Table table = schema.tableFor(tableId);
                 if (table != null && table.primaryKeyColumnNames().isEmpty()) {
-                    ReplicaIdentityInfo.ReplicaIdentity ri = schema.getReplicaIdentity(tableId);
-                    if (ri != ReplicaIdentityInfo.ReplicaIdentity.FULL) {
+                    ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = schema.getReplicaIdentity(tableId);
+                    if (replicaIdentity != ReplicaIdentityInfo.ReplicaIdentity.FULL) {
                         shouldFilterNoPkRecord = true;
-                        LOGGER.info("Filtering {} record for table '{}': table has no primary key and "
-                                + "stream replica identity is {} (non-FULL). Record will be skipped.",
-                                message.getOperation(), tableId, ri);
+                        maybeLogNoPkRecordFiltering(message.getOperation(), tableId, replicaIdentity);
                     }
                 }
             }
 
-            boolean dispatched = !shouldFilterNoPkRecord
-                    && message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
-                    partition,
-                    tableId,
-                    new PostgresChangeRecordEmitter(
-                            partition,
-                            offsetContext,
-                            clock,
-                            connectorConfig,
-                            schema,
-                            connection,
-                            tableId,
-                            message));
+            boolean dispatched = false;
+            if (!shouldFilterNoPkRecord && message.getOperation() != Operation.NOOP) {
+                dispatched = dispatcher.dispatchDataChangeEvent(
+                        partition,
+                        tableId,
+                        new PostgresChangeRecordEmitter(
+                                partition,
+                                offsetContext,
+                                clock,
+                                connectorConfig,
+                                schema,
+                                connection,
+                                tableId,
+                                message));
+            }
 
             maybeWarnAboutGrowingWalBacklog(dispatched);
+        }
+    }
+
+    private void maybeLogNoPkRecordFiltering(Operation operation, TableId tableId,
+                                             ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) {
+        totalFilteredNoPkRecords++;
+        filteredNoPkRecordsSinceLastLog++;
+
+        if (!LOGGER.isDebugEnabled()) {
+            return;
+        }
+
+        final long currentTimeMs = clock.currentTimeAsInstant().toEpochMilli();
+        if (lastFilteredNoPkLogTimeMs == 0L) {
+            lastFilteredNoPkLogTimeMs = currentTimeMs;
+            LOGGER.debug("Filtered {} UPDATE/DELETE record(s) in the last 5 minutes ({} total). "
+                    + "Most recent skipped record: operation={}, table='{}', stream replica identity={} (non-FULL).",
+                    filteredNoPkRecordsSinceLastLog, totalFilteredNoPkRecords, operation, tableId, replicaIdentity);
+            filteredNoPkRecordsSinceLastLog = 0;
+            return;
+        }
+
+        if (currentTimeMs - lastFilteredNoPkLogTimeMs >= FILTERED_NO_PK_LOG_INTERVAL_MS) {
+            LOGGER.debug("Filtered {} UPDATE/DELETE record(s) in the last 5 minutes ({} total). "
+                    + "Most recent skipped record: operation={}, table='{}', stream replica identity={} (non-FULL).",
+                    filteredNoPkRecordsSinceLastLog, totalFilteredNoPkRecords, operation, tableId, replicaIdentity);
+            filteredNoPkRecordsSinceLastLog = 0;
+            lastFilteredNoPkLogTimeMs = currentTimeMs;
         }
     }
 
