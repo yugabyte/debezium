@@ -563,8 +563,7 @@ public class YugabyteReplicaIdentityIT extends AbstractConnectorTest {
     assertThat(deleteValue.getString("op")).isEqualTo(Envelope.Operation.DELETE.code());
 
     // Verify no filtering log was emitted.
-    assertThat(streamLog.containsMessage("Filtering UPDATE record for table")).isFalse();
-    assertThat(streamLog.containsMessage("Filtering DELETE record for table")).isFalse();
+    assertThat(streamLog.containsMessage("UPDATE/DELETE record(s) in the last 5 minutes")).isFalse();
   }
 
   @Test
@@ -661,6 +660,11 @@ public class YugabyteReplicaIdentityIT extends AbstractConnectorTest {
 
     // Phase 2: ALTER to FULL -- server now allows UPDATE/DELETE.
     // But the stream RI stays CHANGE (stale).
+    // NOTE: On YB debug builds, mid-stream ALTER REPLICA IDENTITY bumps the
+    // schema version and the next CDC poll's SchemaPackingStorage lookup hits
+    // a DCHECK in schema_packing.cc that aborts the tserver. Run with
+    // --TEST_dcheck_for_missing_schema_packing=false. Release builds self-heal
+    // via the recovery path in cdcsdk_producer.cc (AddSchema).
     TestHelper.execute("ALTER TABLE s2.nopk_alter REPLICA IDENTITY FULL;");
     TestHelper.waitFor(Duration.ofSeconds(5));
 
@@ -669,11 +673,13 @@ public class YugabyteReplicaIdentityIT extends AbstractConnectorTest {
     TestHelper.execute("DELETE FROM s2.nopk_alter WHERE aa = 99;");
 
     // Connector should STILL filter because stream RI = CHANGE (stale, non-FULL).
+    // The throttled summary log fires once per 5 minutes, so we wait for a single
+    // emission. The "0 additional records" assertion below proves both UPDATE and
+    // DELETE were filtered.
     Awaitility.await()
         .atMost(Duration.ofSeconds(60))
         .pollInterval(Duration.ofSeconds(1))
-        .until(() -> streamLog.containsMessage("Filtering UPDATE record for table")
-            && streamLog.containsMessage("Filtering DELETE record for table"));
+        .until(() -> streamLog.containsMessage("UPDATE/DELETE record(s) in the last 5 minutes"));
 
     // Only the initial INSERT should have been dispatched after the ALTER.
     // No additional records should be available.
