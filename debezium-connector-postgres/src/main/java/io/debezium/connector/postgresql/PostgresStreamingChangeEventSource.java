@@ -451,22 +451,15 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
         totalFilteredNoPkRecords++;
         filteredNoPkRecordsSinceLastLog++;
 
-        if (!LOGGER.isDebugEnabled()) {
-            return;
-        }
+        // DEBUG: log every filtered record.
+        LOGGER.debug("Filtering {} record for table '{}' (stream replica identity={} non-FULL, no primary key)",
+                operation, tableId, replicaIdentity);
 
+        // INFO: rate-limited summary, at most once per 5 minutes.
         final long currentTimeMs = clock.currentTimeAsInstant().toEpochMilli();
-        if (lastFilteredNoPkLogTimeMs == 0L) {
-            lastFilteredNoPkLogTimeMs = currentTimeMs;
-            LOGGER.debug("Filtered {} UPDATE/DELETE record(s) in the last 5 minutes ({} total). "
-                    + "Most recent skipped record: operation={}, table='{}', stream replica identity={} (non-FULL).",
-                    filteredNoPkRecordsSinceLastLog, totalFilteredNoPkRecords, operation, tableId, replicaIdentity);
-            filteredNoPkRecordsSinceLastLog = 0;
-            return;
-        }
-
-        if (currentTimeMs - lastFilteredNoPkLogTimeMs >= FILTERED_NO_PK_LOG_INTERVAL_MS) {
-            LOGGER.debug("Filtered {} UPDATE/DELETE record(s) in the last 5 minutes ({} total). "
+        if (lastFilteredNoPkLogTimeMs == 0L
+                || currentTimeMs - lastFilteredNoPkLogTimeMs >= FILTERED_NO_PK_LOG_INTERVAL_MS) {
+            LOGGER.info("Filtered {} UPDATE/DELETE record(s) in the last 5 minutes ({} total). "
                     + "Most recent skipped record: operation={}, table='{}', stream replica identity={} (non-FULL).",
                     filteredNoPkRecordsSinceLastLog, totalFilteredNoPkRecords, operation, tableId, replicaIdentity);
             filteredNoPkRecordsSinceLastLog = 0;
