@@ -660,11 +660,6 @@ public class YugabyteReplicaIdentityIT extends AbstractConnectorTest {
 
     // Phase 2: ALTER to FULL -- server now allows UPDATE/DELETE.
     // But the stream RI stays CHANGE (stale).
-    // NOTE: On YB debug builds, mid-stream ALTER REPLICA IDENTITY bumps the
-    // schema version and the next CDC poll's SchemaPackingStorage lookup hits
-    // a DCHECK in schema_packing.cc that aborts the tserver. Run with
-    // --TEST_dcheck_for_missing_schema_packing=false. Release builds self-heal
-    // via the recovery path in cdcsdk_producer.cc (AddSchema).
     TestHelper.execute("ALTER TABLE s2.nopk_alter REPLICA IDENTITY FULL;");
     TestHelper.waitFor(Duration.ofSeconds(5));
 
