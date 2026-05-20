@@ -23,6 +23,7 @@ import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.OriginMessage;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.PostgresReplicationConnection;
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.connector.postgresql.connection.ReplicationMessage;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Operation;
@@ -32,6 +33,7 @@ import io.debezium.connector.postgresql.spi.Snapshotter;
 import io.debezium.heartbeat.Heartbeat;
 import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.source.spi.StreamingChangeEventSource;
+import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 import io.debezium.util.Clock;
 import io.debezium.util.DelayStrategy;
@@ -51,6 +53,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      * trigger a "WAL backlog growing" warning.
      */
     private static final int GROWING_WAL_WARNING_LOG_INTERVAL = 10_000;
+    private static final long FILTERED_NO_PK_LOG_INTERVAL_MS = 5 * 60 * 1000L;
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresStreamingChangeEventSource.class);
 
     // PGOUTPUT decoder sends the messages with larger time gaps than other decoders
@@ -92,6 +95,9 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      */
     private OptionalLong lastTxnidForWhichCommitSeen = OptionalLong.empty();
     private long recordCount = 0;
+    private long totalFilteredNoPkRecords = 0;
+    private long filteredNoPkRecordsSinceLastLog = 0;
+    private long lastFilteredNoPkLogTimeMs = 0;
 
     public PostgresStreamingChangeEventSource(PostgresConnectorConfig connectorConfig, Snapshotter snapshotter,
                                               PostgresConnection connection, PostgresEventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
@@ -407,20 +413,57 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
                     tableId,
                     message.getOperation());
 
-            boolean dispatched = message.getOperation() != Operation.NOOP && dispatcher.dispatchDataChangeEvent(
-                    partition,
-                    tableId,
-                    new PostgresChangeRecordEmitter(
-                            partition,
-                            offsetContext,
-                            clock,
-                            connectorConfig,
-                            schema,
-                            connection,
-                            tableId,
-                            message));
+            boolean shouldFilterNoPkRecord = false;
+            if (YugabyteDBServer.isEnabled() && tableId != null
+                    && (message.getOperation() == Operation.UPDATE || message.getOperation() == Operation.DELETE)) {
+                Table table = schema.tableFor(tableId);
+                if (table != null && table.primaryKeyColumnNames().isEmpty()) {
+                    ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = schema.getReplicaIdentity(tableId);
+                    if (replicaIdentity != ReplicaIdentityInfo.ReplicaIdentity.FULL) {
+                        shouldFilterNoPkRecord = true;
+                        maybeLogNoPkRecordFiltering(message.getOperation(), tableId, replicaIdentity);
+                    }
+                }
+            }
+
+            boolean dispatched = false;
+            if (!shouldFilterNoPkRecord && message.getOperation() != Operation.NOOP) {
+                dispatched = dispatcher.dispatchDataChangeEvent(
+                        partition,
+                        tableId,
+                        new PostgresChangeRecordEmitter(
+                                partition,
+                                offsetContext,
+                                clock,
+                                connectorConfig,
+                                schema,
+                                connection,
+                                tableId,
+                                message));
+            }
 
             maybeWarnAboutGrowingWalBacklog(dispatched);
+        }
+    }
+
+    private void maybeLogNoPkRecordFiltering(Operation operation, TableId tableId,
+                                             ReplicaIdentityInfo.ReplicaIdentity replicaIdentity) {
+        totalFilteredNoPkRecords++;
+        filteredNoPkRecordsSinceLastLog++;
+
+        // DEBUG: log every filtered record.
+        LOGGER.debug("Filtering {} record for table '{}' (stream replica identity={} non-FULL, no primary key)",
+                operation, tableId, replicaIdentity);
+
+        // INFO: rate-limited summary, at most once per 5 minutes.
+        final long currentTimeMs = clock.currentTimeAsInstant().toEpochMilli();
+        if (lastFilteredNoPkLogTimeMs == 0L
+                || currentTimeMs - lastFilteredNoPkLogTimeMs >= FILTERED_NO_PK_LOG_INTERVAL_MS) {
+            LOGGER.info("Filtered {} UPDATE/DELETE record(s) in the last 5 minutes ({} total). "
+                    + "Most recent skipped record: operation={}, table='{}', stream replica identity={} (non-FULL).",
+                    filteredNoPkRecordsSinceLastLog, totalFilteredNoPkRecords, operation, tableId, replicaIdentity);
+            filteredNoPkRecordsSinceLastLog = 0;
+            lastFilteredNoPkLogTimeMs = currentTimeMs;
         }
     }
 
