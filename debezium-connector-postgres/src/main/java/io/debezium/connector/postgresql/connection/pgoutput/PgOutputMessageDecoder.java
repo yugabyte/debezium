@@ -337,8 +337,6 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         // marks Primary Key columns, so we can avoid an out-of-band DB query.
         // For FULL (all flags=1) and NOTHING (all flags=0) the flags are not useful for
         // distinguishing PK columns, so we query the database.
-        // CHANGE is YugabyteDB-specific: we try flags first but fall back to a DB query
-        // because yboutput may not set the flags for CHANGE identity (YB#22555).
         boolean useFlags = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.DEFAULT
                 || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.INDEX
                 || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
@@ -379,16 +377,6 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
 
             columns.add(new ColumnMetaData(columnName, postgresType, key, true, false, null, attypmod));
             columnNames.add(columnName);
-        }
-
-        // CHANGE identity fallback: yboutput may not set flags for CHANGE in earlier versions of
-        // YugabyteDB (YB#22555).
-        // If no key columns were found from flags, fall back to DB query.
-        if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE && primaryKeyColumns.isEmpty()) {
-            LOGGER.trace("No key columns from flags for CHANGE identity on '{}.{}', falling back to DB query",
-                    schemaName, tableName);
-            primaryKeyColumns = queryPrimaryKeysFromDatabase(tableId);
-            LOGGER.debug("DB fallback resolved PKs for '{}.{}': {}", schemaName, tableName, primaryKeyColumns);
         }
 
         // Remove any PKs that do not exist as part of this this relation message. This can occur when issuing
