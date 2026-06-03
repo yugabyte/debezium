@@ -1,6 +1,7 @@
 package io.debezium.connector.postgresql;
 
 import io.debezium.DebeziumException;
+import io.debezium.config.Configuration;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -56,5 +57,28 @@ public class YBValidateTest {
         } catch (DebeziumException ex) {
             assertTrue(ex.getMessage().contains("Tablet range starting from hash_code"));
         }
+    }
+
+    @Test
+    public void shouldRejectUnsupportedSlotSeekToKnownOffsetProperty() {
+        Configuration config = Configuration.create()
+                .with(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET, true)
+                .build();
+
+        DebeziumException ex = assertThrows(DebeziumException.class,
+                () -> YugabyteDBConnector.rejectUnsupportedProperties(config));
+
+        assertTrue(ex.getMessage().contains(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET.name()));
+        assertTrue(ex.getMessage().contains("no longer supported"));
+    }
+
+    @Test
+    public void shouldRejectUnsupportedSlotSeekToKnownOffsetPropertyEvenWhenFalse() {
+        Configuration config = Configuration.create()
+                .with(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET, false)
+                .build();
+
+        assertThrows(DebeziumException.class,
+                () -> YugabyteDBConnector.rejectUnsupportedProperties(config));
     }
 }

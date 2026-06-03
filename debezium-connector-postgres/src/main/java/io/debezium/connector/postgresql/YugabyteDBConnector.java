@@ -58,8 +58,19 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     @Override
     public void start(Map<String, String> props) {
+        rejectUnsupportedProperties(Configuration.from(props));
         this.props = props;
         this.connectorConfig = new PostgresConnectorConfig(Configuration.from(props));
+    }
+
+    /**
+     * Fail fast if the configuration contains a property that is no longer supported by the connector.
+     */
+    protected static void rejectUnsupportedProperties(Configuration config) {
+        if (config.hasKey(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET)) {
+            throw new DebeziumException("Configuration property '" + PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET.name()
+                    + "' is no longer supported. Please remove it from the connector configuration.");
+        }
     }
 
     protected List<Map<String, String>> getTaskConfigsForParallelStreaming(List<String> slotNames,
