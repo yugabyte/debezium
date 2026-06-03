@@ -43,6 +43,7 @@ import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresSchema;
 import io.debezium.connector.postgresql.ReplicaIdentityMapper;
 import io.debezium.connector.postgresql.TypeRegistry;
+import io.debezium.connector.postgresql.YugabyteDBServer;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.jdbc.JdbcConnection;
@@ -494,7 +495,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         int tryCount = 0;
         while (true) {
             try {
-                if (connectorConfig.slotSeekToKnownOffsetOnStart()) {
+                if (!YugabyteDBServer.isEnabled() && connectorConfig.slotSeekToKnownOffsetOnStart()) {
                     validateSlotIsInExpectedState(walPosition);
                 }
                 return createReplicationStream(lsn, walPosition);
