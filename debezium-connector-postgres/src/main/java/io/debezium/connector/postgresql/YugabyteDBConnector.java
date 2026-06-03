@@ -58,8 +58,19 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     @Override
     public void start(Map<String, String> props) {
+        rejectUnsupportedProperties(Configuration.from(props));
         this.props = props;
         this.connectorConfig = new PostgresConnectorConfig(Configuration.from(props));
+    }
+
+    protected static void rejectUnsupportedProperties(Configuration config) {
+        if (config.hasKey(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET)) {
+            throw new DebeziumException(unsupportedPropertyMessage(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET.name()));
+        }
+    }
+
+    private static String unsupportedPropertyMessage(String propertyName) {
+        return "Configuration property '" + propertyName + "' is not supported. Please remove it from the connector configuration.";
     }
 
     protected List<Map<String, String>> getTaskConfigsForParallelStreaming(List<String> slotNames,
@@ -218,6 +229,14 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
 
     @Override
     protected void validateConnection(Map<String, ConfigValue> configValues, Configuration config) {
+        // Reject properties that are not supported before attempting to connect.
+        if (config.hasKey(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET)) {
+            final String propertyName = PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET.name();
+            configValues.computeIfAbsent(propertyName, ConfigValue::new)
+                    .addErrorMessage(unsupportedPropertyMessage(propertyName));
+            return;
+        }
+
         final ConfigValue databaseValue = configValues.get(RelationalDatabaseConnectorConfig.DATABASE_NAME.name());
         final ConfigValue slotNameValue = configValues.get(PostgresConnectorConfig.SLOT_NAME.name());
         final ConfigValue pluginNameValue = configValues.get(PostgresConnectorConfig.PLUGIN_NAME.name());

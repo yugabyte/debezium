@@ -1,10 +1,14 @@
 package io.debezium.connector.postgresql;
 
 import io.debezium.DebeziumException;
+import io.debezium.config.Configuration;
+import org.apache.kafka.common.config.ConfigValue;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Tests to verify that our validation methods are working fine.
@@ -56,5 +60,44 @@ public class YBValidateTest {
         } catch (DebeziumException ex) {
             assertTrue(ex.getMessage().contains("Tablet range starting from hash_code"));
         }
+    }
+
+    @Test
+    public void shouldRejectUnsupportedSlotSeekToKnownOffsetProperty() {
+        Configuration config = Configuration.create()
+                .with(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET, true)
+                .build();
+
+        DebeziumException ex = assertThrows(DebeziumException.class,
+                () -> YugabyteDBConnector.rejectUnsupportedProperties(config));
+
+        assertTrue(ex.getMessage().contains(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET.name()));
+        assertTrue(ex.getMessage().contains("not supported"));
+    }
+
+    @Test
+    public void shouldRejectUnsupportedSlotSeekToKnownOffsetPropertyEvenWhenFalse() {
+        Configuration config = Configuration.create()
+                .with(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET, false)
+                .build();
+
+        assertThrows(DebeziumException.class,
+                () -> YugabyteDBConnector.rejectUnsupportedProperties(config));
+    }
+
+    @Test
+    public void shouldSurfaceUnsupportedPropertyAsValidationError() {
+        Configuration config = Configuration.create()
+                .with(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET, true)
+                .build();
+        Map<String, ConfigValue> configValues = new HashMap<>();
+
+        // The validate path records an error rather than attempting to connect to the database.
+        new YugabyteDBConnector().validateConnection(configValues, config);
+
+        ConfigValue value = configValues.get(PostgresConnectorConfig.SLOT_SEEK_TO_KNOWN_OFFSET.name());
+        assertNotNull(value);
+        assertFalse(value.errorMessages().isEmpty());
+        assertTrue(value.errorMessages().get(0).contains("not supported"));
     }
 }
