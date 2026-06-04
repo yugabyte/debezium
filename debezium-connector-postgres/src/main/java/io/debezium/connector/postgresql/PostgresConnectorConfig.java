@@ -1574,16 +1574,29 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                                      HeartbeatConnectionProvider connectionProvider,
                                      HeartbeatErrorHandler errorHandler) {
         if (YugabyteDBServer.isEnabled()) {
-            // We do not need any heartbeat when snapshot is never required.
-            if (snapshotMode.equals(SnapshotMode.NEVER)) {
+            boolean transitionNeeded = !snapshotMode.equals(SnapshotMode.NEVER);
+            boolean streamingHeartbeatEnabled = !getHeartbeatInterval().isZero();
+
+            // No transition wait needed and no streaming heartbeat requested: nothing to do.
+            if (!transitionNeeded && !streamingHeartbeatEnabled) {
                 return Heartbeat.DEFAULT_NOOP_HEARTBEAT;
+            }
+
+            if (streamingHeartbeatEnabled && !Strings.isNullOrBlank(getHeartbeatActionQuery())) {
+                return new YBDatabaseHeartbeatImpl(
+                        getHeartbeatInterval(),
+                        topicNamingStrategy.heartbeatTopic(),
+                        getLogicalName(),
+                        connectionProvider.get(),
+                        getHeartbeatActionQuery(),
+                        errorHandler,
+                        schemaNameAdjuster);
             }
 
             return new YBHeartbeatImpl(getHeartbeatInterval(), topicNamingStrategy.heartbeatTopic(),
                     getLogicalName(), schemaNameAdjuster);
-        } else {
-            return super.createHeartbeat(topicNamingStrategy, schemaNameAdjuster, connectionProvider, errorHandler);
         }
+        return super.createHeartbeat(topicNamingStrategy, schemaNameAdjuster, connectionProvider, errorHandler);
     }
 
     @Override
