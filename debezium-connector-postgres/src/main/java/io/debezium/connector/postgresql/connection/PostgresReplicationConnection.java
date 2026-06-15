@@ -44,6 +44,7 @@ import io.debezium.connector.postgresql.PostgresSchema;
 import io.debezium.connector.postgresql.ReplicaIdentityMapper;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.YugabyteDBServer;
+import io.debezium.connector.postgresql.YugabyteDBVersion;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.jdbc.JdbcConnection;
@@ -126,7 +127,12 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         this.plugin = plugin;
         this.dropSlotOnClose = dropSlotOnClose;
         this.statusUpdateInterval = statusUpdateInterval;
-        this.messageDecoder = plugin.messageDecoder(new MessageDecoderContext(config, schema), jdbcConnection);
+        // Resolve the YugabyteDB server version once (with retry) for this per-task connection and
+        // hand it to the decoder context, so the decoder can gate version-specific behaviour without
+        // an out-of-band query on the streaming hot path.
+        final YugabyteDBVersion yugabyteDBVersion = jdbcConnection.getYugabyteDBVersion(config.maxRetries(), config.retryDelay());
+        LOGGER.info("Detected YugabyteDB version: {}", yugabyteDBVersion);
+        this.messageDecoder = plugin.messageDecoder(new MessageDecoderContext(config, schema, yugabyteDBVersion), jdbcConnection);
         this.jdbcConnection = jdbcConnection;
         this.typeRegistry = typeRegistry;
         this.streamParams = streamParams;
