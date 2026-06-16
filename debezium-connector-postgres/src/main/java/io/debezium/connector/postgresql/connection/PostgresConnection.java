@@ -40,7 +40,6 @@ import io.debezium.connector.postgresql.PostgresType;
 import io.debezium.connector.postgresql.PostgresValueConverter;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.YugabyteDBServer;
-import io.debezium.connector.postgresql.YugabyteDBVersion;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
 import io.debezium.data.SpecialValueDecimal;
@@ -615,55 +614,6 @@ public class PostgresConnection extends JdbcConnection {
                     });
         }
         return serverInfo;
-    }
-
-    /**
-     * Reads the YugabyteDB server version from the database via
-     * {@code SELECT substring(version() from 'YB-([^\s]+)')} (which yields the YugabyteDB version
-     * token, e.g. {@code 2.31.0.0-b0}), retrying transient failures up to {@code maxRetries} times.
-     *
-     * <p>The version is required to gate streaming behaviour correctly, so if it cannot be
-     * obtained at connector start — the query keeps failing, the thread is interrupted, or the
-     * server returns no recognizable {@code YB-<version>} token — this throws
-     * {@link DebeziumException} to fail start-up rather than guessing.
-     *
-     * @param maxRetries the maximum number of retries on a {@link SQLException}
-     * @param retryDelay the delay between attempts
-     * @return the resolved {@link YugabyteDBVersion}, never {@link YugabyteDBVersion#UNKNOWN}
-     * @throws DebeziumException if the YugabyteDB version cannot be determined
-     */
-    public YugabyteDBVersion getYugabyteDBVersion(int maxRetries, Duration retryDelay) {
-        final Metronome metronome = Metronome.parker(retryDelay, Clock.SYSTEM);
-        int attempt = 0;
-        while (true) {
-            try {
-                final YugabyteDBVersion[] holder = new YugabyteDBVersion[]{ YugabyteDBVersion.UNKNOWN };
-                query("SELECT substring(version() from 'YB-([^\\s]+)')", rs -> {
-                    if (rs.next()) {
-                        holder[0] = YugabyteDBVersion.parse(rs.getString(1));
-                    }
-                });
-                if (!holder[0].isKnown()) {
-                    throw new DebeziumException("Could not determine the YugabyteDB server version: "
-                            + "version() did not return a recognizable 'YB-<version>' token");
-                }
-                return holder[0];
-            }
-            catch (SQLException ex) {
-                if (++attempt > maxRetries) {
-                    throw new DebeziumException("Could not read the YugabyteDB server version after " + maxRetries + " retries", ex);
-                }
-                LOGGER.warn("Error reading YugabyteDB version; will attempt retry {} of {} after {} seconds. "
-                        + "Exception message: {}", attempt, maxRetries, retryDelay.getSeconds(), ex.getMessage());
-                try {
-                    metronome.pause();
-                }
-                catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new DebeziumException("Interrupted while reading the YugabyteDB server version", ie);
-                }
-            }
-        }
     }
 
     public Charset getDatabaseCharset() {

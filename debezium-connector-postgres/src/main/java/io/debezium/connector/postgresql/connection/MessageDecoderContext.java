@@ -18,12 +18,11 @@ public class MessageDecoderContext {
 
     private final PostgresConnectorConfig config;
     private final PostgresSchema schema;
-    private final YugabyteDBVersion yugabyteDBVersion;
+    private volatile YugabyteDBVersion yugabyteDBVersion = YugabyteDBVersion.UNKNOWN;
 
-    public MessageDecoderContext(PostgresConnectorConfig config, PostgresSchema schema, YugabyteDBVersion yugabyteDBVersion) {
+    public MessageDecoderContext(PostgresConnectorConfig config, PostgresSchema schema) {
         this.config = config;
         this.schema = schema;
-        this.yugabyteDBVersion = yugabyteDBVersion;
     }
 
     public PostgresConnectorConfig getConfig() {
@@ -35,12 +34,22 @@ public class MessageDecoderContext {
     }
 
     /**
-     * @return the YugabyteDB server version, resolved once (with retry) when the replication
-     *         connection was created; connector start-up fails earlier if it cannot be determined.
-     *         This is per-connection (hence per-task) state, so connectors targeting different
-     *         clusters in the same JVM each see their own version.
+     * @return the YugabyteDB server version of the node serving the replication stream. It is read
+     *         from the streaming connection itself when streaming starts (and re-read on every
+     *         reconnect), because the relation-message format and {@code version()} move together
+     *         per node — so this stays correct even mid-rolling-upgrade, when the metadata
+     *         connection may be on a different-version node. Defaults to
+     *         {@link YugabyteDBVersion#UNKNOWN} until streaming starts (UNKNOWN keeps the safe
+     *         pgoutput PK fallback enabled).
      */
     public YugabyteDBVersion getYugabyteDBVersion() {
         return yugabyteDBVersion;
+    }
+
+    /**
+     * Sets the YugabyteDB server version once it has been resolved from the streaming connection.
+     */
+    public void setYugabyteDBVersion(YugabyteDBVersion yugabyteDBVersion) {
+        this.yugabyteDBVersion = yugabyteDBVersion;
     }
 }
