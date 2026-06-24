@@ -338,8 +338,8 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         // For FULL (all flags=1) and NOTHING (all flags=0) the flags can't distinguish PK columns, so
         // we query the database.
         // CHANGE is YugabyteDB-specific: from 2025.2.3 the RELATION message carries the PK for CHANGE,
-        // so we trust the flags; on older versions it doesn't, so we resolve the PK with a DB query.
-        final boolean findPkFromRelationMessage = connection.getYugabyteDBVersion().pkInRelationMessage();
+        // so we trust the flags, on older versions it doesn't, so we resolve the PK with a DB query.
+        final boolean findPkFromRelationMessage = connection.getYugabyteDBVersion(decoderContext.getConfig().maxRetries()).pkInRelationMessage();
         boolean useFlags = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.DEFAULT
                 || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.INDEX
                 || (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE && findPkFromRelationMessage));

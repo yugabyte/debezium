@@ -93,6 +93,9 @@ public class PostgresConnection extends JdbcConnection {
 
     private static final Duration PAUSE_BETWEEN_REPLICATION_SLOT_RETRIEVAL_ATTEMPTS = Duration.ofSeconds(2);
 
+    /** Gap between attempts when reading the YugabyteDB version; the retry count comes from config. */
+    private static final Duration PAUSE_BETWEEN_YB_VERSION_ATTEMPTS = Duration.ofSeconds(30);
+
     private final TypeRegistry typeRegistry;
     private final PostgresDefaultValueConverter defaultValueConverter;
     private final JdbcConfiguration jdbcConfig;
@@ -621,16 +624,22 @@ public class PostgresConnection extends JdbcConnection {
     }
 
     /**
-     * Returns this connection's YugabyteDB version, resolving it from the database once and caching
-     * it. Returns {@link YugabyteDBVersion#UNKNOWN} if it cannot be read.
+     * Returns this connection's YugabyteDB version, resolving it from the database once (retrying up to
+     * {@code maxRetries} times) and caching it. Returns {@link YugabyteDBVersion#UNKNOWN} if it cannot
+     * be read.
      */
-    public YugabyteDBVersion getYugabyteDBVersion() {
+    public YugabyteDBVersion getYugabyteDBVersion(int maxRetries) {
         if (yugabyteDBVersion == null) {
             try {
-                fetchLatestYugabyteDbVersion();
+                fetchLatestYugabyteDbVersion(maxRetries);
+            }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOGGER.warn("Interrupted while resolving YugabyteDB version; treating it as UNKNOWN", e);
+                yugabyteDBVersion = YugabyteDBVersion.UNKNOWN;
             }
             catch (SQLException e) {
-                LOGGER.warn("Could not resolve YugabyteDB version; treating it as UNKNOWN", e);
+                LOGGER.warn("Could not resolve YugabyteDB version after retries; treating it as UNKNOWN", e);
                 yugabyteDBVersion = YugabyteDBVersion.UNKNOWN;
             }
         }
@@ -638,18 +647,33 @@ public class PostgresConnection extends JdbcConnection {
     }
 
     /**
-     * Queries the database for the current YugabyteDB version and refreshes the cached value. Unlike
-     * {@link #getYugabyteDBVersion()} this always hits the DB, so it can re-read the version later.
+     * Queries the database for the current YugabyteDB version and refreshes the cached value, retrying
+     * transient failures up to {@code maxRetries} times. Unlike {@link #getYugabyteDBVersion(int)} this
+     * always hits the DB, so it can re-read the version later.
      */
-    public YugabyteDBVersion fetchLatestYugabyteDbVersion() throws SQLException {
-        final YugabyteDBVersion[] holder = new YugabyteDBVersion[]{ YugabyteDBVersion.UNKNOWN };
-        query("SELECT substring(version() from 'YB-([^\\s]+)')", rs -> {
-            if (rs.next()) {
-                holder[0] = YugabyteDBVersion.parse(rs.getString(1));
+    public YugabyteDBVersion fetchLatestYugabyteDbVersion(int maxRetries) throws SQLException, InterruptedException {
+        final Metronome metronome = Metronome.parker(PAUSE_BETWEEN_YB_VERSION_ATTEMPTS, Clock.SYSTEM);
+        int attempt = 0;
+        while (true) {
+            try {
+                final YugabyteDBVersion[] holder = new YugabyteDBVersion[]{ YugabyteDBVersion.UNKNOWN };
+                query("SELECT substring(version() from 'YB-([^\\s]+)')", rs -> {
+                    if (rs.next()) {
+                        holder[0] = YugabyteDBVersion.parse(rs.getString(1));
+                    }
+                });
+                yugabyteDBVersion = holder[0];
+                return yugabyteDBVersion;
             }
-        });
-        yugabyteDBVersion = holder[0];
-        return yugabyteDBVersion;
+            catch (SQLException e) {
+                if (++attempt > maxRetries) {
+                    throw e;
+                }
+                LOGGER.warn("Error reading YugabyteDB version; retry {} of {} after {} s",
+                        attempt, maxRetries, PAUSE_BETWEEN_YB_VERSION_ATTEMPTS.getSeconds(), e);
+                metronome.pause();
+            }
+        }
     }
 
     public Charset getDatabaseCharset() {
