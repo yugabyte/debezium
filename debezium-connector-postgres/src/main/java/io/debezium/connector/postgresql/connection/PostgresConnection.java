@@ -93,9 +93,6 @@ public class PostgresConnection extends JdbcConnection {
 
     private static final Duration PAUSE_BETWEEN_REPLICATION_SLOT_RETRIEVAL_ATTEMPTS = Duration.ofSeconds(2);
 
-    /** Gap between attempts when reading the YugabyteDB version; the retry count comes from config. */
-    private static final Duration PAUSE_BETWEEN_YB_VERSION_ATTEMPTS = Duration.ofSeconds(30);
-
     private final TypeRegistry typeRegistry;
     private final PostgresDefaultValueConverter defaultValueConverter;
     private final JdbcConfiguration jdbcConfig;
@@ -623,24 +620,23 @@ public class PostgresConnection extends JdbcConnection {
         return serverInfo;
     }
 
+    /** Reads the cached YugabyteDB version with no retries; the version is normally primed at startup. */
+    public YugabyteDBVersion getYugabyteDBVersion() {
+        return getYugabyteDBVersion(0);
+    }
+
     /**
      * Returns this connection's YugabyteDB version, resolving it from the database once (retrying up to
-     * {@code maxRetries} times) and caching it. Returns {@link YugabyteDBVersion#UNKNOWN} if it cannot
-     * be read.
+     * {@code maxRetries} times) and caching it. Throws a {@link DebeziumException} if it cannot be read;
+     * returns {@link YugabyteDBVersion#UNKNOWN} only when the server reports no YugabyteDB version token.
      */
     public YugabyteDBVersion getYugabyteDBVersion(int maxRetries) {
         if (yugabyteDBVersion == null) {
             try {
                 fetchLatestYugabyteDbVersion(maxRetries);
             }
-            catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                LOGGER.warn("Interrupted while resolving YugabyteDB version; treating it as UNKNOWN", e);
-                yugabyteDBVersion = YugabyteDBVersion.UNKNOWN;
-            }
             catch (SQLException e) {
-                LOGGER.warn("Could not resolve YugabyteDB version after retries; treating it as UNKNOWN", e);
-                yugabyteDBVersion = YugabyteDBVersion.UNKNOWN;
+                throw new DebeziumException("Could not resolve YugabyteDB version", e);
             }
         }
         return yugabyteDBVersion;
@@ -651,8 +647,8 @@ public class PostgresConnection extends JdbcConnection {
      * transient failures up to {@code maxRetries} times. Unlike {@link #getYugabyteDBVersion(int)} this
      * always hits the DB, so it can re-read the version later.
      */
-    public YugabyteDBVersion fetchLatestYugabyteDbVersion(int maxRetries) throws SQLException, InterruptedException {
-        final Metronome metronome = Metronome.parker(PAUSE_BETWEEN_YB_VERSION_ATTEMPTS, Clock.SYSTEM);
+    public YugabyteDBVersion fetchLatestYugabyteDbVersion(int maxRetries) throws SQLException {
+        final Metronome metronome = Metronome.parker(Duration.ofSeconds(30), Clock.SYSTEM);
         int attempt = 0;
         while (true) {
             try {
@@ -669,9 +665,14 @@ public class PostgresConnection extends JdbcConnection {
                 if (++attempt > maxRetries) {
                     throw e;
                 }
-                LOGGER.warn("Error reading YugabyteDB version; retry {} of {} after {} s",
-                        attempt, maxRetries, PAUSE_BETWEEN_YB_VERSION_ATTEMPTS.getSeconds(), e);
-                metronome.pause();
+                LOGGER.warn("Error reading YugabyteDB version; retry {} of {} after 30 s", attempt, maxRetries, e);
+                try {
+                    metronome.pause();
+                }
+                catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
             }
         }
     }
