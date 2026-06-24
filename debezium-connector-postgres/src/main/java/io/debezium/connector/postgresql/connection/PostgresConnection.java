@@ -97,7 +97,7 @@ public class PostgresConnection extends JdbcConnection {
     private final PostgresDefaultValueConverter defaultValueConverter;
     private final JdbcConfiguration jdbcConfig;
 
-    /** Cached YugabyteDB server version for this connection (resolved once on first access). */
+    /* Cached YugabyteDB server version for this connection */
     private volatile YugabyteDBVersion yugabyteDBVersion;
 
     /**
@@ -621,11 +621,8 @@ public class PostgresConnection extends JdbcConnection {
     }
 
     /**
-     * Returns the YugabyteDB server version for this connection, resolving it from the database once
-     * and caching it for the lifetime of the connection. Returns {@link YugabyteDBVersion#UNKNOWN} if
-     * it cannot be read (the connector then takes the safe DB-query path for PK resolution).
-     *
-     * @return the {@link YugabyteDBVersion}, never {@code null}
+     * Returns this connection's YugabyteDB version, resolving it from the database once and caching
+     * it. Returns {@link YugabyteDBVersion#UNKNOWN} if it cannot be read.
      */
     public YugabyteDBVersion getYugabyteDBVersion() {
         if (yugabyteDBVersion == null) {
@@ -641,13 +638,8 @@ public class PostgresConnection extends JdbcConnection {
     }
 
     /**
-     * Queries the database for the current YugabyteDB version via
-     * {@code SELECT substring(version() from 'YB-([^\s]+)')} and refreshes the cached value. Unlike
-     * {@link #getYugabyteDBVersion()} this always hits the database, so it can be used to re-read the
-     * version should it ever need to be updated at runtime.
-     *
-     * @return the freshly read {@link YugabyteDBVersion}, never {@code null}
-     * @throws SQLException if the query fails
+     * Queries the database for the current YugabyteDB version and refreshes the cached value. Unlike
+     * {@link #getYugabyteDBVersion()} this always hits the DB, so it can re-read the version later.
      */
     public YugabyteDBVersion fetchLatestYugabyteDbVersion() throws SQLException {
         final YugabyteDBVersion[] holder = new YugabyteDBVersion[]{ YugabyteDBVersion.UNKNOWN };

@@ -339,11 +339,11 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         // we query the database.
         // CHANGE is YugabyteDB-specific: from 2026.1 (table rewrite / add-drop PK / non-PK tables) the
         // RELATION message is the authoritative PK source, so we trust the flags; on older versions
-        // the PK is immutable, so we resolve it with a point-in-time-correct DB query instead.
-        final boolean changePkFromRelation = connection.getYugabyteDBVersion().supportsMutablePrimaryKey();
+        // the PK can't change, so we resolve it with a DB query instead.
+        final boolean findPkFromRelationMessage = connection.getYugabyteDBVersion().supportsMutablePrimaryKey();
         boolean useFlags = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.DEFAULT
                 || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.INDEX
-                || (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE && changePkFromRelation));
+                || (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE && findPkFromRelationMessage));
 
         List<String> primaryKeyColumns;
         if (useFlags) {

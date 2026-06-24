@@ -54,11 +54,9 @@ public class YugabyteDBVersion implements Comparable<YugabyteDBVersion> {
     public static final YugabyteDBVersion UNKNOWN = new YugabyteDBVersion("unknown", null);
 
     /**
-     * First stable / year-based release that supports table rewrite / adding &amp; dropping a primary
-     * key / tables without a primary key. From this version the RELATION message is the authoritative
-     * source of PK information for {@code CHANGE} replica identity; below it the connector resolves
-     * the PK with a DB query (PKs are immutable on older versions, so a current-time query is always
-     * point-in-time correct).
+     * First stable / year-based release that supports table rewrite / add-drop primary key / non-PK
+     * tables. From here the RELATION message is the authoritative PK source for {@code CHANGE}; below
+     * it the connector resolves the PK with a DB query (the PK can't change on older versions).
      */
     private static final YugabyteDBVersion MUTABLE_PK_STABLE = parse("2026.1.0.0");
 
@@ -141,19 +139,10 @@ public class YugabyteDBVersion implements Comparable<YugabyteDBVersion> {
     }
 
     /**
-     * Indicates whether this YugabyteDB version supports table rewrite / adding &amp; dropping a
-     * primary key / tables without a primary key (from 2026.1.0.0).
-     *
-     * <p>At/above this version the connector trusts the RELATION message for the {@code CHANGE}
-     * replica-identity primary key (the message reflects the schema at the event's point in time);
-     * below it the connector resolves the PK with a DB query, which is always correct there because
-     * the primary key cannot change.
-     *
-     * <p>Thresholds: stable / year-based {@code >= 2026.1.0.0}; preview {@code >= 2.31.0.0}. An
-     * unknown version is conservatively treated as <em>not</em> supporting it, so the safe DB-query
-     * path is used.
-     *
-     * @return {@code true} if mutable primary keys are supported (RELATION message is authoritative).
+     * Whether this version supports table rewrite / add-drop primary key / non-PK tables (stable
+     * {@code >= 2026.1.0.0}, preview {@code >= 2.31.0.0}). At/above it the connector trusts the
+     * RELATION message for the {@code CHANGE} primary key; below it, or when unknown, it resolves the
+     * PK with a DB query.
      */
     public boolean supportsMutablePrimaryKey() {
         if (!isKnown()) {

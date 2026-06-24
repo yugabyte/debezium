@@ -128,9 +128,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         this.statusUpdateInterval = statusUpdateInterval;
         this.messageDecoder = plugin.messageDecoder(new MessageDecoderContext(config, schema), jdbcConnection);
         this.jdbcConnection = jdbcConnection;
-        // Resolve the YugabyteDB version once, up front, when the replication connection is created.
-        // Option 1 requires the connector not to run across the 2026.1 upgrade boundary, so this value
-        // is stable for the connector run; the pgoutput decoder reads it back via this same connection.
+        // Resolve the YugabyteDB version once, up front, when the replication connection is created
         LOGGER.info("Detected YugabyteDB version: {}", jdbcConnection.getYugabyteDBVersion());
         this.typeRegistry = typeRegistry;
         this.streamParams = streamParams;
