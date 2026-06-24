@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The two formats are never compared against each other for feature gating; instead a caller
  * compares against the threshold that matches the detected format (see
- * {@link #supportsChangeReplicaIdentityPkInRelation()}).
+ * {@link #supportsMutablePrimaryKey()}).
  *
  * @author Shishir Sharma (ssharma@yugabyte.com)
  */
@@ -54,16 +54,19 @@ public class YugabyteDBVersion implements Comparable<YugabyteDBVersion> {
     public static final YugabyteDBVersion UNKNOWN = new YugabyteDBVersion("unknown", null);
 
     /**
-     * First stable / year-based release that marks primary-key columns in the relation-message flags
-     * for {@code CHANGE} replica identity (yugabyte-db commit {@code 5de43f9c6f8c}).
+     * First stable / year-based release that supports table rewrite / adding &amp; dropping a primary
+     * key / tables without a primary key. From this version the RELATION message is the authoritative
+     * source of PK information for {@code CHANGE} replica identity; below it the connector resolves
+     * the PK with a DB query (PKs are immutable on older versions, so a current-time query is always
+     * point-in-time correct).
      */
-    private static final YugabyteDBVersion CHANGE_PK_FIX_STABLE = parse("2025.2.3.0");
+    private static final YugabyteDBVersion MUTABLE_PK_STABLE = parse("2026.1.0.0");
 
     /**
-     * First preview release that marks primary-key columns in the relation-message flags for
-     * {@code CHANGE} replica identity (yugabyte-db commit {@code 5de43f9c6f8c}).
+     * Preview-line equivalent of {@link #MUTABLE_PK_STABLE}.
+     * TODO(confirm): set to the preview release corresponding to 2026.1 (best guess: 2.31.0.0).
      */
-    private static final YugabyteDBVersion CHANGE_PK_FIX_PREVIEW = parse("2.29.0.0");
+    private static final YugabyteDBVersion MUTABLE_PK_PREVIEW = parse("2.31.0.0");
 
     private final String raw;
     /** Numeric version components padded to {@link #COMPONENTS}; {@code null} when the version is unknown. */
@@ -138,26 +141,27 @@ public class YugabyteDBVersion implements Comparable<YugabyteDBVersion> {
     }
 
     /**
-     * Indicates whether this YugabyteDB version marks primary-key columns in the relation-message
-     * flags byte for {@code CHANGE} replica identity (yugabyte-db commit {@code 5de43f9c6f8c}).
+     * Indicates whether this YugabyteDB version supports table rewrite / adding &amp; dropping a
+     * primary key / tables without a primary key (from 2026.1.0.0).
      *
-     * <p>When this returns {@code false} the pgoutput decoder must fall back to a DB query to
-     * resolve PKs for {@code CHANGE} replica identity, because the flags do not carry the PK on
-     * these older builds (YB#22555).
+     * <p>At/above this version the connector trusts the RELATION message for the {@code CHANGE}
+     * replica-identity primary key (the message reflects the schema at the event's point in time);
+     * below it the connector resolves the PK with a DB query, which is always correct there because
+     * the primary key cannot change.
      *
-     * <p>Thresholds: stable / year-based {@code >= 2025.2.3.0}; preview {@code >= 2.29.0.0}. An
-     * unknown version is conservatively treated as <em>not</em> having the fix, so the safe DB
-     * fallback is preserved.
+     * <p>Thresholds: stable / year-based {@code >= 2026.1.0.0}; preview {@code >= 2.31.0.0}. An
+     * unknown version is conservatively treated as <em>not</em> supporting it, so the safe DB-query
+     * path is used.
      *
-     * @return {@code true} if the flags reliably carry the PK for {@code CHANGE} replica identity.
+     * @return {@code true} if mutable primary keys are supported (RELATION message is authoritative).
      */
-    public boolean supportsChangeReplicaIdentityPkInRelation() {
+    public boolean supportsMutablePrimaryKey() {
         if (!isKnown()) {
             return false;
         }
         return isYearBased()
-                ? compareTo(CHANGE_PK_FIX_STABLE) >= 0
-                : compareTo(CHANGE_PK_FIX_PREVIEW) >= 0;
+                ? compareTo(MUTABLE_PK_STABLE) >= 0
+                : compareTo(MUTABLE_PK_PREVIEW) >= 0;
     }
 
     /**

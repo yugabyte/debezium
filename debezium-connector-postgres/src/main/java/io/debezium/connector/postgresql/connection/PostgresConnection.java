@@ -40,6 +40,7 @@ import io.debezium.connector.postgresql.PostgresType;
 import io.debezium.connector.postgresql.PostgresValueConverter;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.YugabyteDBServer;
+import io.debezium.connector.postgresql.YugabyteDBVersion;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
 import io.debezium.data.SpecialValueDecimal;
@@ -95,6 +96,9 @@ public class PostgresConnection extends JdbcConnection {
     private final TypeRegistry typeRegistry;
     private final PostgresDefaultValueConverter defaultValueConverter;
     private final JdbcConfiguration jdbcConfig;
+
+    /** Cached YugabyteDB server version for this connection (resolved once on first access). */
+    private volatile YugabyteDBVersion yugabyteDBVersion;
 
     /**
      * Creates a Postgres connection using the supplied configuration.
@@ -614,6 +618,46 @@ public class PostgresConnection extends JdbcConnection {
                     });
         }
         return serverInfo;
+    }
+
+    /**
+     * Returns the YugabyteDB server version for this connection, resolving it from the database once
+     * and caching it for the lifetime of the connection. Returns {@link YugabyteDBVersion#UNKNOWN} if
+     * it cannot be read (the connector then takes the safe DB-query path for PK resolution).
+     *
+     * @return the {@link YugabyteDBVersion}, never {@code null}
+     */
+    public YugabyteDBVersion getYugabyteDBVersion() {
+        if (yugabyteDBVersion == null) {
+            try {
+                fetchLatestYugabyteDbVersion();
+            }
+            catch (SQLException e) {
+                LOGGER.warn("Could not resolve YugabyteDB version; treating it as UNKNOWN", e);
+                yugabyteDBVersion = YugabyteDBVersion.UNKNOWN;
+            }
+        }
+        return yugabyteDBVersion;
+    }
+
+    /**
+     * Queries the database for the current YugabyteDB version via
+     * {@code SELECT substring(version() from 'YB-([^\s]+)')} and refreshes the cached value. Unlike
+     * {@link #getYugabyteDBVersion()} this always hits the database, so it can be used to re-read the
+     * version should it ever need to be updated at runtime.
+     *
+     * @return the freshly read {@link YugabyteDBVersion}, never {@code null}
+     * @throws SQLException if the query fails
+     */
+    public YugabyteDBVersion fetchLatestYugabyteDbVersion() throws SQLException {
+        final YugabyteDBVersion[] holder = new YugabyteDBVersion[]{ YugabyteDBVersion.UNKNOWN };
+        query("SELECT substring(version() from 'YB-([^\\s]+)')", rs -> {
+            if (rs.next()) {
+                holder[0] = YugabyteDBVersion.parse(rs.getString(1));
+            }
+        });
+        yugabyteDBVersion = holder[0];
+        return yugabyteDBVersion;
     }
 
     public Charset getDatabaseCharset() {

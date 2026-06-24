@@ -44,7 +44,6 @@ import io.debezium.connector.postgresql.PostgresSchema;
 import io.debezium.connector.postgresql.ReplicaIdentityMapper;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.YugabyteDBServer;
-import io.debezium.connector.postgresql.YugabyteDBVersion;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.jdbc.JdbcConnection;
@@ -77,7 +76,6 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     private final PostgresConnectorConfig connectorConfig;
     private final Duration statusUpdateInterval;
     private final MessageDecoder messageDecoder;
-    private final MessageDecoderContext messageDecoderContext;
     private final PostgresConnection jdbcConnection;
     private final TypeRegistry typeRegistry;
     private final Properties streamParams;
@@ -128,12 +126,12 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         this.plugin = plugin;
         this.dropSlotOnClose = dropSlotOnClose;
         this.statusUpdateInterval = statusUpdateInterval;
-        // The YugabyteDB version is resolved later from the streaming connection (see startStreaming),
-        // not here: the relation-message format is decided by the node serving the stream, which may
-        // differ from the metadata connection's node during a rolling upgrade.
-        this.messageDecoderContext = new MessageDecoderContext(config, schema);
-        this.messageDecoder = plugin.messageDecoder(messageDecoderContext, jdbcConnection);
+        this.messageDecoder = plugin.messageDecoder(new MessageDecoderContext(config, schema), jdbcConnection);
         this.jdbcConnection = jdbcConnection;
+        // Resolve the YugabyteDB version once, up front, when the replication connection is created.
+        // Option 1 requires the connector not to run across the 2026.1 upgrade boundary, so this value
+        // is stable for the connector run; the pgoutput decoder reads it back via this same connection.
+        LOGGER.info("Detected YugabyteDB version: {}", jdbcConnection.getYugabyteDBVersion());
         this.typeRegistry = typeRegistry;
         this.streamParams = streamParams;
         this.slotCreationInfo = null;
@@ -481,14 +479,6 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
         connect();
 
-        // Resolve the YugabyteDB version from the node actually serving this replication stream (this
-        // connection), not the metadata connection — which may be a different-version node during a
-        // rolling upgrade. version() and the relation-message PK-for-CHANGE format move together per
-        // node, so this is the authoritative signal for the decoder's CHANGE PK gate. Re-resolved on
-        // every reconnect, so it tracks the node currently serving the stream.
-        messageDecoderContext.setYugabyteDBVersion(resolveStreamingNodeVersion());
-        LOGGER.info("Detected YugabyteDB version on streaming node: {}", messageDecoderContext.getYugabyteDBVersion());
-
         if (connectorConfig.isYSQLMajorUpgrade()) {
             try (Statement stmt = pgConnection().createStatement()) {
                 LOGGER.info("Setting yb_ignore_read_time_in_walsender for walsender session");
@@ -736,45 +726,6 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
         catch (SQLException ex) {
             throw new ConnectException("Unable to parse create_replication_slot response", ex);
-        }
-    }
-
-    /**
-     * Reads the YugabyteDB version from the node serving this replication stream (this connection
-     * itself, not the metadata connection), retrying transient failures with the connector's
-     * configured slot retry settings. Because the relation-message PK-for-CHANGE format is produced
-     * by this node and moves together with its {@code version()}, this is the authoritative signal
-     * for the decoder's CHANGE PK gate. Throws {@link DebeziumException} if the version cannot be
-     * determined, to fail rather than gate on a guess.
-     */
-    private YugabyteDBVersion resolveStreamingNodeVersion() throws InterruptedException {
-        final int maxRetries = connectorConfig.maxRetries();
-        final Duration retryDelay = connectorConfig.retryDelay();
-        final Metronome metronome = Metronome.parker(retryDelay, Clock.SYSTEM);
-        int attempt = 0;
-        while (true) {
-            try {
-                final YugabyteDBVersion[] holder = new YugabyteDBVersion[]{ YugabyteDBVersion.UNKNOWN };
-                query("SELECT substring(version() from 'YB-([^\\s]+)')", rs -> {
-                    if (rs.next()) {
-                        holder[0] = YugabyteDBVersion.parse(rs.getString(1));
-                    }
-                });
-                if (!holder[0].isKnown()) {
-                    throw new DebeziumException("Could not determine the YugabyteDB server version from the "
-                            + "streaming connection: version() did not return a recognizable 'YB-<version>' token");
-                }
-                return holder[0];
-            }
-            catch (SQLException ex) {
-                if (++attempt > maxRetries) {
-                    throw new DebeziumException("Could not read the YugabyteDB server version from the streaming "
-                            + "connection after " + maxRetries + " retries", ex);
-                }
-                LOGGER.warn("Error reading YugabyteDB version from streaming connection; will attempt retry {} of {} "
-                        + "after {} seconds. Exception message: {}", attempt, maxRetries, retryDelay.getSeconds(), ex.getMessage());
-                metronome.pause();
-            }
         }
     }
 

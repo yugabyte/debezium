@@ -333,15 +333,17 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         final TableId tableId = new TableId(null, schemaName, tableName);
         final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = parseReplicaIdentity(replicaIdentityId);
 
-        // For DEFAULT, INDEX, and CHANGE identities the relation message flags byte reliably
-        // marks Primary Key columns, so we can avoid an out-of-band DB query.
-        // For FULL (all flags=1) and NOTHING (all flags=0) the flags are not useful for
-        // distinguishing PK columns, so we query the database.
-        // CHANGE is YugabyteDB-specific: older builds may not set the PK flags (YB#22555), so when
-        // the flags yield no PK we fall back to a DB query below, gated on the server version.
+        // For DEFAULT and INDEX the relation message flags byte reliably marks Primary Key columns,
+        // so we resolve the PK from the message and avoid an out-of-band DB query.
+        // For FULL (all flags=1) and NOTHING (all flags=0) the flags can't distinguish PK columns, so
+        // we query the database.
+        // CHANGE is YugabyteDB-specific: from 2026.1 (table rewrite / add-drop PK / non-PK tables) the
+        // RELATION message is the authoritative PK source, so we trust the flags; on older versions
+        // the PK is immutable, so we resolve it with a point-in-time-correct DB query instead.
+        final boolean changePkFromRelation = connection.getYugabyteDBVersion().supportsMutablePrimaryKey();
         boolean useFlags = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.DEFAULT
                 || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.INDEX
-                || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
+                || (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE && changePkFromRelation));
 
         List<String> primaryKeyColumns;
         if (useFlags) {
@@ -379,20 +381,6 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
 
             columns.add(new ColumnMetaData(columnName, postgresType, key, true, false, null, attypmod));
             columnNames.add(columnName);
-        }
-
-        // CHANGE identity is YugabyteDB-specific. Older YugabyteDB builds do not mark the primary-key
-        // columns in the relation-message flags for CHANGE replica identity (YB#22555, fixed by
-        // yugabyte-db commit 5de43f9c6f8c), so the flags yield no PK and we must fall back to a DB
-        // query to avoid emitting a null Kafka key. Versions that contain the fix mark the PK in the
-        // flags, so the fallback is skipped to avoid an out-of-band query on this hot path.
-        if (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE
-                && primaryKeyColumns.isEmpty()
-                && !decoderContext.getYugabyteDBVersion().supportsChangeReplicaIdentityPkInRelation()) {
-            LOGGER.debug("No key columns from flags for CHANGE identity on '{}.{}' and server version predates "
-                    + "the PK-in-relation fix; falling back to DB query", schemaName, tableName);
-            primaryKeyColumns = queryPrimaryKeysFromDatabase(tableId);
-            LOGGER.debug("DB fallback resolved PKs for '{}.{}': {}", schemaName, tableName, primaryKeyColumns);
         }
 
         // Remove any PKs that do not exist as part of this this relation message. This can occur when issuing
