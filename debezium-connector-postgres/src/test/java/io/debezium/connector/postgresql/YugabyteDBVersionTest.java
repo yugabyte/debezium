@@ -74,37 +74,36 @@ public class YugabyteDBVersionTest {
     }
 
     @Test
-    public void previewVersionsAtOrAboveThresholdSupportMutablePk() {
+    public void previewVersionsAtOrAboveThresholdHavePkInRelationMessage() {
         // Preview threshold is 2.31.0.0.
-        assertThat(YugabyteDBVersion.parse("2.31.0.0").supportsMutablePrimaryKey()).isTrue();
-        assertThat(YugabyteDBVersion.parse("2.31.1.0").supportsMutablePrimaryKey()).isTrue();
-        assertThat(YugabyteDBVersion.parse("2.33.0.0-b0").supportsMutablePrimaryKey()).isTrue();
+        assertThat(YugabyteDBVersion.parse("2.31.0.0").pkInRelationMessage()).isTrue();
+        assertThat(YugabyteDBVersion.parse("2.31.1.0").pkInRelationMessage()).isTrue();
+        assertThat(YugabyteDBVersion.parse("2.33.0.0-b0").pkInRelationMessage()).isTrue();
     }
 
     @Test
-    public void previewVersionsBelowThresholdDoNotSupportMutablePk() {
-        assertThat(YugabyteDBVersion.parse("2.29.0.0").supportsMutablePrimaryKey()).isFalse();
-        assertThat(YugabyteDBVersion.parse("2.30.9.9").supportsMutablePrimaryKey()).isFalse();
+    public void previewVersionsBelowThresholdDoNotHavePkInRelationMessage() {
+        assertThat(YugabyteDBVersion.parse("2.29.0.0").pkInRelationMessage()).isFalse();
+        assertThat(YugabyteDBVersion.parse("2.30.9.9").pkInRelationMessage()).isFalse();
     }
 
     @Test
-    public void yearBasedVersionsAtOrAboveThresholdSupportMutablePk() {
-        // Year-based threshold is 2026.1.0.0.
-        assertThat(YugabyteDBVersion.parse("2026.1.0.0").supportsMutablePrimaryKey()).isTrue();
-        assertThat(YugabyteDBVersion.parse("2026.1.1.0").supportsMutablePrimaryKey()).isTrue();
-        assertThat(YugabyteDBVersion.parse("2026.2.0.0").supportsMutablePrimaryKey()).isTrue();
+    public void yearBasedVersionsAtOrAboveThresholdHavePkInRelationMessage() {
+        // Year-based threshold is 2025.2.3.0.
+        assertThat(YugabyteDBVersion.parse("2025.2.3.0").pkInRelationMessage()).isTrue();
+        assertThat(YugabyteDBVersion.parse("2025.2.4.0").pkInRelationMessage()).isTrue();
+        assertThat(YugabyteDBVersion.parse("2026.1.0.0").pkInRelationMessage()).isTrue();
     }
 
     @Test
-    public void yearBasedVersionsBelowThresholdDoNotSupportMutablePk() {
-        assertThat(YugabyteDBVersion.parse("2025.2.4.0").supportsMutablePrimaryKey()).isFalse();
-        assertThat(YugabyteDBVersion.parse("2025.2.3.0").supportsMutablePrimaryKey()).isFalse();
-        assertThat(YugabyteDBVersion.parse("2024.2.0.0").supportsMutablePrimaryKey()).isFalse();
+    public void yearBasedVersionsBelowThresholdDoNotHavePkInRelationMessage() {
+        assertThat(YugabyteDBVersion.parse("2025.2.2.0").pkInRelationMessage()).isFalse();
+        assertThat(YugabyteDBVersion.parse("2025.1.0.0").pkInRelationMessage()).isFalse();
+        assertThat(YugabyteDBVersion.parse("2024.2.0.0").pkInRelationMessage()).isFalse();
     }
 
     @Test
-    public void unknownVersionConservativelyDoesNotSupportMutablePk() {
-        // When the version cannot be determined we take the safe DB-query path.
-        assertThat(YugabyteDBVersion.UNKNOWN.supportsMutablePrimaryKey()).isFalse();
+    public void unknownVersionDoesNotHavePkInRelationMessage() {
+        assertThat(YugabyteDBVersion.UNKNOWN.pkInRelationMessage()).isFalse();
     }
 }

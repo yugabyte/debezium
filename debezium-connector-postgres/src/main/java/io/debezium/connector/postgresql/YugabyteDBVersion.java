@@ -13,23 +13,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Represents a YugabyteDB server version and provides comparison helpers that can be used anywhere
- * in the connector to gate behaviour on the connected server version.
- *
- * <p>YugabyteDB advertises its version inside the standard Postgres {@code version()} string, for
- * example {@code "PostgreSQL 15.12-YB-2.31.0.0-b0 on ..."}. The YugabyteDB portion follows one of
- * two release formats:
- * <ul>
- *   <li><b>Stable / year-based</b> ({@code <year>.<minor>.<patch>.<revision>}) e.g. {@code 2024.1.0.0},
- *       {@code 2025.2.3.0}, {@code 2026.1.0.0}. Ordering: {@code 2024.1 < 2024.2 < 2025.1 < 2025.2}.</li>
- *   <li><b>Preview</b> ({@code <major>.<minor>.<patch>.<revision>}) e.g. {@code 2.27.0.0},
- *       {@code 2.29.0.0}, {@code 2.31.0.0}. Ordering: {@code 2.27 < 2.29 < 2.31}.</li>
- * </ul>
- * Any trailing build identifier such as {@code -b0} is ignored.
- *
- * <p>The two formats are never compared against each other for feature gating; instead a caller
- * compares against the threshold that matches the detected format (see
- * {@link #supportsMutablePrimaryKey()}).
+ * A YugabyteDB server version, parsed from the {@code version()} string (e.g.
+ * {@code "PostgreSQL 15.12-YB-2.31.0.0-b0 ..."}). Two release formats exist: stable/year-based
+ * (e.g. {@code 2025.2.3.0}) and preview (e.g. {@code 2.31.0.0}); any trailing build suffix is ignored.
+ * The two formats are never compared against each other — feature gates compare against the threshold
+ * matching the detected format (see {@link #pkInRelationMessage()}).
  *
  * @author Shishir Sharma (ssharma@yugabyte.com)
  */
@@ -37,37 +25,29 @@ public class YugabyteDBVersion implements Comparable<YugabyteDBVersion> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(YugabyteDBVersion.class);
 
-    /** Matches the YugabyteDB version token inside a Postgres {@code version()} string, e.g. {@code YB-2.31.0.0-b0}. */
     private static final Pattern YB_TOKEN_PATTERN = Pattern.compile("YB-([^\\s]+)");
 
-    /** Number of numeric components that are parsed and compared (major/year, minor, patch, revision). */
+    /** Number of numeric components parsed and compared (major/year, minor, patch, revision). */
     private static final int COMPONENTS = 4;
 
-    /**
-     * Major values at or above this boundary denote the stable / year-based release line
-     * (e.g. {@code 2024.x}, {@code 2025.x}); anything below denotes the preview line
-     * (e.g. {@code 2.27}, {@code 2.29}, {@code 2.31}).
-     */
+    /** Major component at/above this is the year-based line (2024.x, 2025.x); below it is preview (2.x). */
     private static final int YEAR_FORMAT_MAJOR_BOUNDARY = 2000;
 
     /** Sentinel used when the version cannot be determined or parsed. */
     public static final YugabyteDBVersion UNKNOWN = new YugabyteDBVersion("unknown", null);
 
     /**
-     * First stable / year-based release that supports table rewrite / add-drop primary key / non-PK
-     * tables. From here the RELATION message is the authoritative PK source for {@code CHANGE}; below
-     * it the connector resolves the PK with a DB query (the PK can't change on older versions).
+     * First stable / year-based release that marks the primary key in the RELATION message for
+     * {@code CHANGE} replica identity. At/above it the connector reads the PK from the message; below
+     * it the message omits the PK, so the connector resolves it with a DB query.
      */
-    private static final YugabyteDBVersion MUTABLE_PK_STABLE = parse("2026.1.0.0");
+    private static final YugabyteDBVersion PK_IN_RELATION_MESSAGE_RI_CHANGE_STABLE = parse("2025.2.3.0");
 
-    /**
-     * Preview-line equivalent of {@link #MUTABLE_PK_STABLE}.
-     * TODO(confirm): set to the preview release corresponding to 2026.1 (best guess: 2.31.0.0).
-     */
-    private static final YugabyteDBVersion MUTABLE_PK_PREVIEW = parse("2.31.0.0");
+    /** Preview equivalent of {@link #PK_IN_RELATION_MESSAGE_RI_CHANGE_STABLE}. */
+    private static final YugabyteDBVersion PK_IN_RELATION_MESSAGE_RI_CHANGE_PREVIEW = parse("2.31.0.0");
 
     private final String raw;
-    /** Numeric version components padded to {@link #COMPONENTS}; {@code null} when the version is unknown. */
+    /** Numeric components padded to {@link #COMPONENTS}; {@code null} when unknown. */
     private final int[] components;
 
     private YugabyteDBVersion(String raw, int[] components) {
@@ -75,13 +55,7 @@ public class YugabyteDBVersion implements Comparable<YugabyteDBVersion> {
         this.components = components;
     }
 
-    /**
-     * Extracts and parses the YugabyteDB version from a full Postgres {@code version()} string,
-     * e.g. {@code "PostgreSQL 15.12-YB-2.31.0.0-b0 on ..."}.
-     *
-     * @param fullVersionString the value returned by {@code SELECT version()}; may be {@code null}
-     * @return the parsed version, or {@link #UNKNOWN} if no YugabyteDB token is present
-     */
+    /** Extracts and parses the YB version from a full {@code version()} string; {@link #UNKNOWN} if absent. */
     public static YugabyteDBVersion fromVersionString(String fullVersionString) {
         if (fullVersionString == null) {
             return UNKNOWN;
@@ -94,14 +68,7 @@ public class YugabyteDBVersion implements Comparable<YugabyteDBVersion> {
         return parse(matcher.group(1));
     }
 
-    /**
-     * Parses a bare YugabyteDB version token such as {@code "2.31.0.0-b0"} or {@code "2025.2.3.0"}.
-     * This is the value produced by {@code SELECT substring(version() from 'YB-([^\\s]+)')}. Any
-     * trailing build / pre-release identifier (e.g. {@code -b0}) is ignored.
-     *
-     * @param versionToken the version token; may be {@code null}
-     * @return the parsed version, or {@link #UNKNOWN} if it cannot be parsed
-     */
+    /** Parses a bare version token (e.g. {@code "2.31.0.0-b0"}); trailing build suffix ignored, {@link #UNKNOWN} on failure. */
     public static YugabyteDBVersion parse(String versionToken) {
         if (versionToken == null || versionToken.trim().isEmpty()) {
             return UNKNOWN;
@@ -122,42 +89,31 @@ public class YugabyteDBVersion implements Comparable<YugabyteDBVersion> {
         return new YugabyteDBVersion(versionToken, parsed);
     }
 
-    /**
-     * @return {@code true} if this version was successfully parsed, {@code false} for {@link #UNKNOWN}.
-     */
+    /** @return {@code true} if parsed; {@code false} for {@link #UNKNOWN}. */
     public boolean isKnown() {
         return components != null;
     }
 
-    /**
-     * @return {@code true} if this is a stable / year-based version (e.g. {@code 2024.x},
-     *         {@code 2025.x}); {@code false} for the preview line (e.g. {@code 2.27}, {@code 2.29})
-     *         or when the version is unknown.
-     */
+    /** @return {@code true} for the year-based line (e.g. 2025.x); {@code false} for preview (2.x) or unknown. */
     public boolean isYearBased() {
         return isKnown() && components[0] >= YEAR_FORMAT_MAJOR_BOUNDARY;
     }
 
     /**
-     * Whether this version supports table rewrite / add-drop primary key / non-PK tables (stable
-     * {@code >= 2026.1.0.0}, preview {@code >= 2.31.0.0}). At/above it the connector trusts the
-     * RELATION message for the {@code CHANGE} primary key; below it, or when unknown, it resolves the
-     * PK with a DB query.
+     * Whether this version marks the primary key in the RELATION message for {@code CHANGE} replica
+     * identity (stable {@code >= 2025.2.3.0}, preview {@code >= 2.31.0.0}). At/above it the connector
+     * reads the PK from the message; below it (or when unknown) it resolves the PK with a DB query.
      */
-    public boolean supportsMutablePrimaryKey() {
+    public boolean pkInRelationMessage() {
         if (!isKnown()) {
             return false;
         }
         return isYearBased()
-                ? compareTo(MUTABLE_PK_STABLE) >= 0
-                : compareTo(MUTABLE_PK_PREVIEW) >= 0;
+                ? compareTo(PK_IN_RELATION_MESSAGE_RI_CHANGE_STABLE) >= 0
+                : compareTo(PK_IN_RELATION_MESSAGE_RI_CHANGE_PREVIEW) >= 0;
     }
 
-    /**
-     * Compares two versions component by component. Note that this is a purely numeric comparison,
-     * so a year-based version always sorts above a preview version (e.g. {@code 2025.x > 2.x}); for
-     * feature gating compare against a threshold of the same format instead.
-     */
+    /** Numeric, component-by-component; note a year-based version sorts above a preview one. */
     @Override
     public int compareTo(YugabyteDBVersion otherVersion) {
         // Unknown sorts lowest.
