@@ -622,6 +622,7 @@ public class PostgresConnection extends JdbcConnection {
 
     /** Reads the cached YugabyteDB version with no retries; the version is normally primed at startup. */
     public YugabyteDBVersion getYugabyteDBVersion() {
+        LOGGER.info("YugabyteDB version: {}", yugabyteDBVersion);
         return getYugabyteDBVersion(0);
     }
 
@@ -634,6 +635,8 @@ public class PostgresConnection extends JdbcConnection {
         if (yugabyteDBVersion == null) {
             try {
                 fetchLatestYugabyteDbVersion(maxRetries);
+                // TODO: REMOVE this shishir
+                LOGGER.info("Resolved YugabyteDB version: {}", yugabyteDBVersion);
             }
             catch (SQLException e) {
                 throw new DebeziumException("Could not resolve YugabyteDB version", e);
