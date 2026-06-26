@@ -346,13 +346,11 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
 
         List<String> primaryKeyColumns;
         if (useFlags) {
-            // TODO: Change back to debug
-            LOGGER.info("Using relation message flags to resolve PKs for '{}.{}'", schemaName, tableName);
+            LOGGER.debug("Using relation message flags to resolve PKs for '{}.{}'", schemaName, tableName);
             primaryKeyColumns = new ArrayList<>();
         }
         else {
-            // TODO: Change back to debug
-            LOGGER.info("Using DB metadata query to resolve PKs for '{}.{}' (replicaIdentity={})",
+            LOGGER.debug("Using DB metadata query to resolve PKs for '{}.{}' (replicaIdentity={})",
                     schemaName, tableName, replicaIdentity);
             primaryKeyColumns = queryPrimaryKeysFromDatabase(tableId);
         }

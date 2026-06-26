@@ -635,8 +635,6 @@ public class PostgresConnection extends JdbcConnection {
         if (yugabyteDBVersion == null) {
             try {
                 fetchLatestYugabyteDbVersion(maxRetries);
-                // TODO: REMOVE this shishir
-                LOGGER.info("Resolved YugabyteDB version: {}", yugabyteDBVersion);
             }
             catch (SQLException e) {
                 throw new DebeziumException("Could not resolve YugabyteDB version", e);
