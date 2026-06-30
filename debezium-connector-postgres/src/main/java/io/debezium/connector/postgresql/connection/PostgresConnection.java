@@ -622,7 +622,7 @@ public class PostgresConnection extends JdbcConnection {
 
     /** Reads the cached YugabyteDB version with no retries; the version is normally primed at startup. */
     public YugabyteDBVersion getYugabyteDBVersion() {
-        LOGGER.info("YugabyteDB version: {}", yugabyteDBVersion);
+        LOGGER.debug("YugabyteDB version: {}", yugabyteDBVersion);
         return getYugabyteDBVersion(0);
     }
 
