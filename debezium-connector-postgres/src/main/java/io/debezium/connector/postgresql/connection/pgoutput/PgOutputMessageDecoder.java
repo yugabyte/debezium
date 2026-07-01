@@ -333,13 +333,16 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         final TableId tableId = new TableId(null, schemaName, tableName);
         final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = parseReplicaIdentity(replicaIdentityId);
 
-        // For DEFAULT, INDEX, and CHANGE identities the relation message flags byte reliably
-        // marks Primary Key columns, so we can avoid an out-of-band DB query.
-        // For FULL (all flags=1) and NOTHING (all flags=0) the flags are not useful for
-        // distinguishing PK columns, so we query the database.
+        // For DEFAULT and INDEX the relation message flags byte reliably marks Primary Key columns,
+        // so we resolve the PK from the message and avoid an out-of-band DB query.
+        // For FULL (all flags=1) and NOTHING (all flags=0) the flags can't distinguish PK columns, so
+        // we query the database.
+        // CHANGE is YugabyteDB-specific: from 2025.2.3 the RELATION message carries the PK for CHANGE,
+        // so we trust the flags, on older versions it doesn't, so we resolve the PK with a DB query.
+        final boolean findPkFromRelationMessage = connection.getYugabyteDBVersion().pkInRelationMessage();
         boolean useFlags = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.DEFAULT
                 || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.INDEX
-                || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE);
+                || (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE && findPkFromRelationMessage));
 
         List<String> primaryKeyColumns;
         if (useFlags) {

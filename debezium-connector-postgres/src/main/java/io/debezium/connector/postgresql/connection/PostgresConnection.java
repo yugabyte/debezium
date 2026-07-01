@@ -40,6 +40,7 @@ import io.debezium.connector.postgresql.PostgresType;
 import io.debezium.connector.postgresql.PostgresValueConverter;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.YugabyteDBServer;
+import io.debezium.connector.postgresql.YugabyteDBVersion;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.connector.postgresql.transforms.yugabytedb.Pair;
 import io.debezium.data.SpecialValueDecimal;
@@ -95,6 +96,9 @@ public class PostgresConnection extends JdbcConnection {
     private final TypeRegistry typeRegistry;
     private final PostgresDefaultValueConverter defaultValueConverter;
     private final JdbcConfiguration jdbcConfig;
+
+    /* Cached YugabyteDB server version for this connection */
+    private volatile YugabyteDBVersion yugabyteDBVersion;
 
     /**
      * Creates a Postgres connection using the supplied configuration.
@@ -614,6 +618,64 @@ public class PostgresConnection extends JdbcConnection {
                     });
         }
         return serverInfo;
+    }
+
+    /** Reads the cached YugabyteDB version with no retries; the version is normally primed at startup. */
+    public YugabyteDBVersion getYugabyteDBVersion() {
+        LOGGER.debug("YugabyteDB version: {}", yugabyteDBVersion);
+        return getYugabyteDBVersion(0);
+    }
+
+    /**
+     * Returns this connection's YugabyteDB version, resolving it from the database once (retrying up to
+     * {@code maxRetries} times) and caching it. Throws a {@link DebeziumException} if it cannot be read;
+     * returns {@link YugabyteDBVersion#UNKNOWN} only when the server reports no YugabyteDB version token.
+     */
+    public YugabyteDBVersion getYugabyteDBVersion(int maxRetries) {
+        if (yugabyteDBVersion == null) {
+            try {
+                fetchLatestYugabyteDbVersion(maxRetries);
+            }
+            catch (SQLException e) {
+                throw new DebeziumException("Could not resolve YugabyteDB version", e);
+            }
+        }
+        return yugabyteDBVersion;
+    }
+
+    /**
+     * Queries the database for the current YugabyteDB version and refreshes the cached value, retrying
+     * transient failures up to {@code maxRetries} times. Unlike {@link #getYugabyteDBVersion(int)} this
+     * always hits the DB, so it can re-read the version later.
+     */
+    public YugabyteDBVersion fetchLatestYugabyteDbVersion(int maxRetries) throws SQLException {
+        final Metronome metronome = Metronome.parker(Duration.ofSeconds(30), Clock.SYSTEM);
+        int attempt = 0;
+        while (true) {
+            try {
+                final YugabyteDBVersion[] holder = new YugabyteDBVersion[]{ YugabyteDBVersion.UNKNOWN };
+                query("SELECT substring(version() from 'YB-([^\\s]+)')", rs -> {
+                    if (rs.next()) {
+                        holder[0] = YugabyteDBVersion.parse(rs.getString(1));
+                    }
+                });
+                yugabyteDBVersion = holder[0];
+                return yugabyteDBVersion;
+            }
+            catch (SQLException e) {
+                if (++attempt > maxRetries) {
+                    throw e;
+                }
+                LOGGER.warn("Error reading YugabyteDB version; retry {} of {} after 30 s", attempt, maxRetries, e);
+                try {
+                    metronome.pause();
+                }
+                catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
     }
 
     public Charset getDatabaseCharset() {
