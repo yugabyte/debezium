@@ -33,9 +33,13 @@ public class YBExtractNewRecordState<R extends ConnectRecord<R>> extends Extract
       return ret;
     }
 
-    Pair<Schema, Struct> p = getUpdatedValueAndSchema((Struct) ret.key());
-    Schema updatedSchemaForKey = p.getFirst();
-    Struct updatedValueForKey = p.getSecond();
+    Schema updatedSchemaForKey = ret.keySchema();
+    Object updatedValueForKey = ret.key();
+    if (ret.key() instanceof Struct) {
+      Pair<Schema, Struct> p = getUpdatedValueAndSchema((Struct) ret.key());
+      updatedSchemaForKey = p.getFirst();
+      updatedValueForKey = p.getSecond();
+    }
 
     Schema updatedSchemaForValue = null;
     Struct updatedValueForValue = null;
