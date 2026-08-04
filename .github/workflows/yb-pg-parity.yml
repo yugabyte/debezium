@@ -1,4 +1,4 @@
-name: YugabyteDB PG parity sanity
+name: YBPG build sanity
 
 on:
   push:
