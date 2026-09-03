@@ -54,6 +54,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
      */
     private static final int GROWING_WAL_WARNING_LOG_INTERVAL = 10_000;
     private static final long FILTERED_NO_PK_LOG_INTERVAL_MS = 5 * 60 * 1000L;
+    private static final long FLUSH_LSN_LOG_INTERVAL_MS = 5 * 60 * 1000L;
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresStreamingChangeEventSource.class);
 
     // PGOUTPUT decoder sends the messages with larger time gaps than other decoders
@@ -98,6 +99,7 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
     private long totalFilteredNoPkRecords = 0;
     private long filteredNoPkRecordsSinceLastLog = 0;
     private long lastFilteredNoPkLogTimeMs = 0;
+    private long lastFlushLsnLogTimeMs = 0;
 
     public PostgresStreamingChangeEventSource(PostgresConnectorConfig connectorConfig, Snapshotter snapshotter,
                                               PostgresConnection connection, PostgresEventDispatcher<TableId> dispatcher, ErrorHandler errorHandler, Clock clock,
@@ -590,6 +592,14 @@ public class PostgresStreamingChangeEventSource implements StreamingChangeEventS
 
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("Flushing LSN to server: {}", finalLsn);
+                }
+                else {
+                    final long currentTimeMs = clock.currentTimeAsInstant().toEpochMilli();
+                    if (lastFlushLsnLogTimeMs == 0L
+                            || currentTimeMs - lastFlushLsnLogTimeMs >= FLUSH_LSN_LOG_INTERVAL_MS) {
+                        LOGGER.info("Flushing LSN to server: {}", finalLsn);
+                        lastFlushLsnLogTimeMs = currentTimeMs;
+                    }
                 }
                 // tell the server the point up to which we've processed data, so it can be free to recycle WAL segments
                 replicationStream.flushLsn(finalLsn);

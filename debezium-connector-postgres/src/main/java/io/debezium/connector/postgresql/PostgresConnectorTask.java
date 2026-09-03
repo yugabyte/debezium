@@ -11,9 +11,11 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import io.debezium.connector.postgresql.metrics.YugabyteDBMetricsFactory;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -43,7 +45,9 @@ import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.metrics.DefaultChangeEventSourceMetricsFactory;
 import io.debezium.pipeline.notification.NotificationService;
 import io.debezium.pipeline.signal.SignalProcessor;
+import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.pipeline.spi.Offsets;
+import io.debezium.pipeline.spi.Partition;
 import io.debezium.relational.TableId;
 import io.debezium.schema.SchemaFactory;
 import io.debezium.schema.SchemaNameAdjuster;
@@ -72,6 +76,11 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
     private volatile PostgresSchema schema;
 
     public static boolean TEST_THROW_ERROR_BEFORE_COORDINATOR_STARTUP = false;
+
+    private Partition.Provider<PostgresPartition> partitionProvider = null;
+    private OffsetContext.Loader<PostgresOffsetContext> offsetContextLoader = null;
+
+    private final ReentrantLock commitLock = new ReentrantLock();
 
     @Override
     public ChangeEventSourceCoordinator<PostgresPartition, PostgresOffsetContext> start(Configuration config) {
@@ -125,9 +134,10 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
 
             schema = new PostgresSchema(connectorConfig, defaultValueConverter, topicNamingStrategy, valueConverter);
             this.taskContext = new PostgresTaskContext(connectorConfig, schema, topicNamingStrategy, connectorConfig.getTaskId());
-            final PostgresPartition.Provider partitionProvider = new PostgresPartition.Provider(connectorConfig, config);
+            this.partitionProvider = new PostgresPartition.Provider(connectorConfig, config);
+            this.offsetContextLoader = new PostgresOffsetContext.Loader(connectorConfig);
             final Offsets<PostgresPartition, PostgresOffsetContext> previousOffsets = getPreviousOffsets(
-                    partitionProvider, new PostgresOffsetContext.Loader(connectorConfig));
+                    this.partitionProvider, this.offsetContextLoader);
             final Clock clock = Clock.system();
             final PostgresOffsetContext previousOffset = previousOffsets.getTheOnlyOffset();
 
@@ -394,6 +404,47 @@ public class PostgresConnectorTask extends BaseSourceTask<PostgresPartition, Pos
     @Override
     protected Iterable<Field> getAllConfigurationFields() {
         return PostgresConnectorConfig.ALL_FIELDS;
+    }
+
+    @Override
+    public void commitRecord(SourceRecord record, RecordMetadata metadata) throws InterruptedException {
+        // Do nothing
+    }
+
+    @Override
+    public void commitRecord(SourceRecord record) throws InterruptedException {
+        // Do nothing
+    }
+
+    @Override
+    public void commit() throws InterruptedException {
+        boolean locked = commitLock.tryLock();
+
+        if (locked) {
+            try {
+                if (coordinator != null) {
+                    Offsets<PostgresPartition, PostgresOffsetContext> offsets = this.getPreviousOffsets(this.partitionProvider, this.offsetContextLoader);
+                    if (offsets.getOffsets() != null) {
+                        offsets.getOffsets()
+                                .entrySet()
+                                .stream()
+                                .filter(e -> e.getValue() != null)
+                                .forEach(entry -> {
+                                    Map<String, String> partition = entry.getKey().getSourcePartition();
+                                    Map<String, ?> lastOffset = entry.getValue().getOffset();
+                                    LOGGER.debug("Committing offset '{}' for partition '{}'", partition, lastOffset);
+                                    coordinator.commitOffset(partition, lastOffset);
+                                });
+                    }
+                }
+            }
+            finally {
+                commitLock.unlock();
+            }
+        }
+        else {
+            LOGGER.warn("Couldn't commit processed log positions with the source database due to a concurrent connector shutdown or restart");
+        }
     }
 
     public PostgresTaskContext getTaskContext() {
