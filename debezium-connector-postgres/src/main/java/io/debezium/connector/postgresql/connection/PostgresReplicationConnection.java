@@ -10,6 +10,7 @@ import static java.lang.Math.toIntExact;
 
 import java.nio.ByteBuffer;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
@@ -28,12 +29,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.connect.errors.ConnectException;
-import org.postgresql.core.BaseConnection;
-import org.postgresql.core.ServerVersion;
-import org.postgresql.replication.PGReplicationStream;
-import org.postgresql.replication.fluent.logical.ChainedLogicalStreamBuilder;
-import org.postgresql.util.PSQLException;
-import org.postgresql.util.PSQLState;
+import com.yugabyte.core.BaseConnection;
+import com.yugabyte.core.ServerVersion;
+import com.yugabyte.replication.PGReplicationStream;
+import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
+import com.yugabyte.util.PSQLException;
+import com.yugabyte.util.PSQLState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +43,7 @@ import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresSchema;
 import io.debezium.connector.postgresql.ReplicaIdentityMapper;
 import io.debezium.connector.postgresql.TypeRegistry;
+import io.debezium.connector.postgresql.YugabyteDBServer;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.jdbc.JdbcConfiguration;
 import io.debezium.jdbc.JdbcConnection;
@@ -64,6 +66,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     private static Logger LOGGER = LoggerFactory.getLogger(PostgresReplicationConnection.class);
 
     private final String slotName;
+    private final PostgresConnectorConfig.LsnType lsnType;
+    private final PostgresConnectorConfig.StreamingMode streamingMode;
     private final String publicationName;
     private final RelationalTableFilters tableFilter;
     private final PostgresConnectorConfig.AutoCreateMode publicationAutocreateMode;
@@ -114,6 +118,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
 
         this.connectorConfig = config;
         this.slotName = slotName;
+        this.lsnType = config.slotLsnType();
+        this.streamingMode = config.streamingMode();
         this.publicationName = publicationName;
         this.tableFilter = tableFilter;
         this.publicationAutocreateMode = publicationAutocreateMode;
@@ -122,6 +128,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         this.statusUpdateInterval = statusUpdateInterval;
         this.messageDecoder = plugin.messageDecoder(new MessageDecoderContext(config, schema), jdbcConnection);
         this.jdbcConnection = jdbcConnection;
+        // Resolve the YugabyteDB version once, up front, when the replication connection is created
+        LOGGER.info("Detected YugabyteDB version: {}", jdbcConnection.getYugabyteDBVersion(connectorConfig.maxRetries()));
         this.typeRegistry = typeRegistry;
         this.streamParams = streamParams;
         this.slotCreationInfo = null;
@@ -140,13 +148,14 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
     }
 
     private ServerInfo.ReplicationSlot getSlotInfo() throws SQLException, InterruptedException {
-        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_SLOT_INFO)) {
+        try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(),
+                PostgresConnection.CONNECTION_SLOT_INFO, connectorConfig.getYbLoadBalanceConnections())) {
             return connection.readReplicationSlotInfo(slotName, plugin.getPostgresPluginName());
         }
     }
 
     protected void initPublication() {
-        if (PostgresConnectorConfig.LogicalDecoder.PGOUTPUT.equals(plugin)) {
+        if (PostgresConnectorConfig.LogicalDecoder.PGOUTPUT.equals(plugin) || PostgresConnectorConfig.LogicalDecoder.YBOUTPUT.equals(plugin)) {
             LOGGER.info("Initializing PgOutput logical decoder publication");
             try {
                 // Unless the autocommit is disabled the SELECT publication query will stay running
@@ -188,7 +197,9 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                                             publicationName, plugin, database()));
                                 }
                                 else {
-                                    createOrUpdatePublicationModeFilterted(stmt, true);
+                                    if (isPublicationUpdateRequired(stmt)) {
+                                        createOrUpdatePublicationModeFilterted(stmt, true);
+                                    }
                                 }
                                 break;
                             default:
@@ -227,6 +238,80 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             throw new ConnectException(String.format("Unable to %s filtered publication %s for %s", isUpdate ? "update" : "create", publicationName, tableFilterString),
                     e);
         }
+    }
+
+    /**
+     * Gets the list of tables currently configured in the publication by querying pg_publication_tables.
+     *
+     * @param stmt the statement to use for the query
+     * @return Optional containing the Set of TableId objects in the publication, empty if unable to query
+     */
+    private Optional<Set<TableId>> getCurrentPublicationTables(Statement stmt) {
+        String getPublicationTablesQuery = String.format(
+                "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = '%s'", publicationName);
+
+        Set<TableId> publicationTables = new HashSet<>();
+        try (PreparedStatement prepStmt = stmt.getConnection().prepareStatement(getPublicationTablesQuery)) {
+            try (ResultSet rs = prepStmt.executeQuery()) {
+                while (rs.next()) {
+                    String schemaName = rs.getString("schemaname");
+                    String tableName = rs.getString("tablename");
+                    TableId tableId = jdbcConnection.createTableId(connectorConfig.databaseName(), schemaName, tableName);
+                    publicationTables.add(tableId);
+                }
+            }
+        }
+        catch (SQLException e) {
+            LOGGER.warn("Unable to query pg_publication_tables for publication '{}'. "
+                    + "Publication will be updated to ensure synchronization. Error: {}", publicationName, e.getMessage());
+            return Optional.empty();
+        }
+        return Optional.of(publicationTables);
+    }
+
+    /**
+     * Checks whether the publication's current table set differs from the desired captured tables.
+     *
+     * @param stmt the statement to use for database queries
+     * @return true if the publication needs to be updated, false otherwise
+     * @throws SQLException if database queries fail
+     */
+    public boolean isPublicationUpdateRequired(Statement stmt) throws SQLException {
+        Optional<Set<TableId>> currentPublicationTables = getCurrentPublicationTables(stmt);
+
+        if (currentPublicationTables.isEmpty()) {
+            LOGGER.info("Unable to determine current publication tables for '{}', will update publication to ensure synchronization",
+                    publicationName);
+            return true;
+        }
+
+        Set<TableId> desiredTables;
+        try {
+            desiredTables = determineCapturedTables();
+        }
+        catch (Exception e) {
+            throw new SQLException("Failed to determine captured tables", e);
+        }
+
+        if (desiredTables.isEmpty()) {
+            LOGGER.warn("No table filters found for filtered publication {}", publicationName);
+            return false;
+        }
+
+        Set<TableId> currentTables = currentPublicationTables.get();
+        if (currentTables.equals(desiredTables)) {
+            LOGGER.info("Publication '{}' is already up to date with desired tables", publicationName);
+            return false;
+        }
+
+        Set<TableId> toAdd = new HashSet<>(desiredTables);
+        toAdd.removeAll(currentTables);
+        Set<TableId> toRemove = new HashSet<>(currentTables);
+        toRemove.removeAll(desiredTables);
+
+        LOGGER.info("Publication '{}' needs update. Tables to add: {}, Tables to remove: {}",
+                publicationName, toAdd, toRemove);
+        return true;
     }
 
     /**
@@ -391,6 +476,14 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         initConnection();
 
         connect();
+
+        if (connectorConfig.isYSQLMajorUpgrade()) {
+            try (Statement stmt = pgConnection().createStatement()) {
+                LOGGER.info("Setting yb_ignore_read_time_in_walsender for walsender session");
+                stmt.execute("SET yb_ignore_read_time_in_walsender = true");
+            }
+        }
+
         if (offset == null || !offset.isValid()) {
             offset = defaultStartingPos;
         }
@@ -404,7 +497,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         int tryCount = 0;
         while (true) {
             try {
-                if (connectorConfig.slotSeekToKnownOffsetOnStart()) {
+                if (!YugabyteDBServer.isEnabled() && connectorConfig.slotSeekToKnownOffsetOnStart()) {
                     validateSlotIsInExpectedState(walPosition);
                 }
                 return createReplicationStream(lsn, walPosition);
@@ -497,6 +590,25 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
     }
 
+    public String getReplicationSlotCreationCommand(String tempPart, boolean canExportSnapshot) throws SQLException {
+        return String.format(
+            "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s %s %s",
+            slotName,
+            tempPart,
+            plugin.getPostgresPluginName(),
+            lsnType.getLsnTypeName().equalsIgnoreCase("SEQUENCE") ? "" : "HYBRID_TIME",
+            canExportSnapshot ? "EXPORT_SNAPSHOT" : "USE_SNAPSHOT");
+    }
+
+    public Boolean isExportSnapshotSupported(Exception exception) throws SQLException {
+        if (exception.getMessage() != null && (
+            exception.getMessage().contains("cannot export or import snapshot when ysql_enable_pg_export_snapshot is disabled") ||
+            exception.getMessage().contains("Exporting snapshot is not yet supported"))) {
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public Optional<SlotCreationResult> createReplicationSlot() throws SQLException {
         // note that some of these options are only supported in Postgres 9.4+, additionally
@@ -520,20 +632,46 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         // For pgoutput specifically, the publication must be created prior to the slot.
         initPublication();
 
+        // YB Note: We will only be specifying the LSN type when it is HYBRID_TIME, for other case(s)
+        // i.e. SEQUENCE, we will let the service handle it with the default value. This is to ensure
+        // that we stay backward compatible as the syntax is not recognizable by initial versions
+        // of logical replication in YugabyteDB.
         try (Statement stmt = pgConnection().createStatement()) {
-            String createCommand = String.format(
-                    "CREATE_REPLICATION_SLOT \"%s\" %s LOGICAL %s",
-                    slotName,
-                    tempPart,
-                    plugin.getPostgresPluginName());
-            LOGGER.info("Creating replication slot with command {}", createCommand);
-            stmt.execute(createCommand);
-            // when we are in Postgres 9.4+, we can parse the slot creation info,
-            // otherwise, it returns nothing
-            if (canExportSnapshot) {
-                this.slotCreationInfo = parseSlotCreation(stmt.getResultSet());
+            try {
+                // Use EXPORT_SNAPSHOT just like upstream debezium does.
+                String createCommand = getReplicationSlotCreationCommand(tempPart, true);
+                LOGGER.info("Creating replication slot with command {}", createCommand);
+                stmt.execute(createCommand);
+                if (canExportSnapshot) {
+                    this.slotCreationInfo = parseSlotCreation(stmt.getResultSet(), true);
+                }
             }
+            catch (Exception e) {
+                if (!isExportSnapshotSupported(e)) {
+                    LOGGER.warn("Failed to create replication slot with EXPORT_SNAPSHOT option, falling back to USE_SNAPSHOT, Exception: {}", e.getMessage());
+                    // YB: If the create replication slot command fails as a fallback mechanism
+                    // we will try to create the slot again with the USE_SNAPSHOT option.
+                    // This is to make it backward compatible with the old version of YugabyteDB.
+                    String createCommand = getReplicationSlotCreationCommand(tempPart, false);
 
+                    // Begin a read-only transaction when it is the parallel streaming mode because
+                    // we will be using this read-only transaction to take the snapshot further.
+                    if (connectorConfig.streamingMode().isParallel() ) {
+                        LOGGER.info("executing: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+                        stmt.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+                    }
+
+                    LOGGER.info("Creating replication slot with command {}", createCommand);
+                    stmt.execute(createCommand);
+
+                    if (canExportSnapshot) {
+                        this.slotCreationInfo = parseSlotCreation(stmt.getResultSet(), false);
+                    }
+                }
+                else {
+                    throw e;
+                }
+            }
             return Optional.ofNullable(slotCreationInfo);
         }
     }
@@ -542,7 +680,35 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         return (BaseConnection) connection(false);
     }
 
-    private SlotCreationResult parseSlotCreation(ResultSet rs) {
+    public String getBackendPid() {
+        try (Statement stmt = pgConnection().createStatement()) {
+            ResultSet rs = stmt.executeQuery("SELECT pg_backend_pid() backend_pid;");
+
+            if (rs.next()) {
+                return rs.getString("backend_pid");
+            }
+        } catch (SQLException sqle) {
+            LOGGER.warn("Unable to get the backend PID", sqle);
+        }
+
+        return "FAILED_TO_GET_BACKEND_PID";
+    }
+
+    public String getConnectedNodeIp() {
+        try (Statement stmt = pgConnection().createStatement()) {
+            ResultSet rs = stmt.executeQuery("SELECT inet_server_addr() connected_to_host;");
+
+            if (rs.next()) {
+                return rs.getString("connected_to_host");
+            }
+        } catch (SQLException sqle) {
+            LOGGER.warn("Unable to get the connected host node", sqle);
+        }
+
+        return "FAILED_TO_GET_CONNECTED_NODE";
+    }
+
+    private SlotCreationResult parseSlotCreation(ResultSet rs, boolean exportSnapshotUsed) {
         try {
             if (rs.next()) {
                 String slotName = rs.getString("slot_name");
@@ -550,7 +716,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                 String snapName = rs.getString("snapshot_name");
                 String pluginName = rs.getString("output_plugin");
 
-                return new SlotCreationResult(slotName, startPoint, snapName, pluginName);
+                return new SlotCreationResult(slotName, startPoint, snapName, pluginName, exportSnapshotUsed);
             }
             else {
                 throw new ConnectException("No replication slot found");
@@ -776,7 +942,8 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
         }
         if (dropSlotOnClose && dropSlot) {
             // we're dropping the replication slot via a regular - i.e. not a replication - connection
-            try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(), PostgresConnection.CONNECTION_DROP_SLOT)) {
+            try (PostgresConnection connection = new PostgresConnection(connectorConfig.getJdbcConfig(),
+                    PostgresConnection.CONNECTION_DROP_SLOT, connectorConfig.getYbLoadBalanceConnections())) {
                 connection.dropReplicationSlot(slotName);
             }
             catch (Throwable e) {

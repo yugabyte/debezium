@@ -138,6 +138,20 @@ public class PostgresOffsetContext extends CommonOffsetContext<SourceInfo> {
         sourceInfo.updateLastCommit(lsn);
     }
 
+    /**
+     * Updates the origin information in the source info.
+     *
+     * @param originName the name of the origin server
+     * @param originLsn the LSN on the origin server
+     */
+    public void updateOrigin(String originName, Lsn originLsn) {
+        sourceInfo.updateOrigin(originName, originLsn);
+    }
+
+    public void clearOrigin() {
+        sourceInfo.clearOrigin();
+    }
+
     boolean hasLastKnownPosition() {
         return sourceInfo.lsn() != null;
     }
@@ -231,7 +245,7 @@ public class PostgresOffsetContext extends CommonOffsetContext<SourceInfo> {
                                                        Lsn lastCompletelyProcessedLsn) {
         try {
             LOGGER.info("Creating initial offset context");
-            final Lsn lsn = Lsn.valueOf(jdbcConnection.currentXLogLocation());
+            final Lsn lsn = YugabyteDBServer.isEnabled() ? null : Lsn.valueOf(jdbcConnection.currentXLogLocation());
             final Long txId = jdbcConnection.currentTransactionId();
             LOGGER.info("Read xlogStart at '{}' from transaction '{}'", lsn, txId);
             return new PostgresOffsetContext(

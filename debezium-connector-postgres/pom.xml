@@ -3,12 +3,12 @@
     <parent>
         <groupId>io.debezium</groupId>
         <artifactId>debezium-parent</artifactId>
-        <version>2.5.2.Final</version>
+        <version>${revision}</version>
         <relativePath>../debezium-parent/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>debezium-connector-postgres</artifactId>
-    <name>Debezium Connector for PostgreSQL</name>
+    <artifactId>yugabytedb-source-connector</artifactId>
+    <name>YugabyteDB Source Connector</name>
     <packaging>jar</packaging>
     <properties>
         <!-- 
@@ -17,15 +17,15 @@
           work on all platforms. We'll set some of these as system properties during integration testing.
       -->
         <version.postgres.server>10</version.postgres.server>
-        <postgres.host>${docker.host.address}</postgres.host>
-        <postgres.port>5432</postgres.port>
-        <postgres.user>postgres</postgres.user>
-        <postgres.password>postgres</postgres.password>
-        <postgres.db.name>postgres</postgres.db.name>
+        <postgres.host>127.0.0.1</postgres.host>
+        <postgres.port>5433</postgres.port>
+        <postgres.user>yugabyte</postgres.user>
+        <postgres.password>yugabyte</postgres.password>
+        <postgres.db.name>yugabyte</postgres.db.name>
         <postgres.encoding>UTF8</postgres.encoding>
         <postgres.system.lang>en_US.utf8</postgres.system.lang>
-        <postgres.image>quay.io/debezium/postgres:${version.postgres.server}</postgres.image>
-        <postgres.config.file>/usr/share/postgresql/postgresql.conf.sample</postgres.config.file>
+<!--        <postgres.image>quay.io/debezium/postgres:${version.postgres.server}</postgres.image>-->
+<!--        <postgres.config.file>/usr/share/postgresql/postgresql.conf.sample</postgres.config.file>-->
         <docker.skip>false</docker.skip>
         <docker.showLogs>true</docker.showLogs>
         <docker.initimage>ln -fs /usr/share/zoneinfo/US/Samoa /etc/localtime &amp;&amp; echo timezone=US/Samoa &gt;&gt; ${postgres.config.file}</docker.initimage>
@@ -50,6 +50,11 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.yugabyte</groupId>
+            <artifactId>jdbc-yugabytedb</artifactId>
+            <version>42.7.3-yb-4</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
@@ -102,6 +107,11 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -161,6 +171,107 @@
 
     <build>
         <plugins>
+            <!-- Override parent's nexus-staging-maven-plugin to disable extensions 
+                 so that maven-deploy-plugin is used instead for S3 deployment -->
+            <plugin>
+                <groupId>org.sonatype.plugins</groupId>
+                <artifactId>nexus-staging-maven-plugin</artifactId>
+                <extensions>false</extensions>
+                <configuration>
+                    <skipNexusStagingDeployMojo>true</skipNexusStagingDeployMojo>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>3.1.1</version>
+                <configuration>
+                    <skip>false</skip>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>io.confluent</groupId>
+                <version>0.12.0</version>
+                <artifactId>kafka-connect-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>kafka-connect</goal>
+                        </goals>
+                        <configuration>
+                            <title>Kafka Connect YugabyteDB</title>
+                            <documentationUrl>https://docs.yugabyte.com/preview/explore/change-data-capture/using-logical-replication/yugabytedb-connector/</documentationUrl>
+                            <description>
+                                The YugabyteDB Connector is based on the Debezium API, and captures row-level changes in the schemas of a YugabyteDB database using the PostgreSQL replication protocol.
+
+                                The first time it connects to a YugabyteDB server, the connector takes a consistent snapshot of all schemas. After that snapshot is complete, the connector continuously captures row-level changes that insert, update, and delete database content, and that were committed to a YugabyteDB database.
+
+                                The connector generates data change event records and streams them to Kafka topics. For each table, the default behavior is that the connector streams all generated events to a separate Kafka topic for that table. Applications and services consume data change event records from that topic.
+                            </description>
+                            <logo>logos/yugabytedb.png</logo>
+
+                            <supportProviderName>Yugabyte Inc.</supportProviderName>
+                            <supportSummary>Yugabyte supports the YugabyteDB source connector.</supportSummary>
+                            <supportUrl>http://support.yugabyte.com/</supportUrl>
+                            <supportLogo>logos/yugabytedb.png</supportLogo>
+
+                            <ownerUsername>yugabyte</ownerUsername>
+                            <ownerType>organization</ownerType>
+                            <ownerName>Yugabyte Inc.</ownerName>
+                            <ownerUrl>https://www.yugabyte.com//</ownerUrl>
+                            <ownerLogo>logos/yugabytedb.png</ownerLogo>
+
+                            <dockerNamespace>quay.io/yugabyte</dockerNamespace>
+                            <dockerName>ybdb-debezium</dockerName>
+                            <dockerTag>${project.version}</dockerTag>
+
+                            <sourceUrl>https://github.com/yugabyte/debezium/tree/ybdb-debezium-2.5.2/debezium-connector-postgres</sourceUrl>
+
+                            <componentTypes>
+                                <componentType>source</componentType>
+                            </componentTypes>
+
+                            <tags>
+                                <tag>Yugabyte</tag>
+                                <tag>yugabytedb</tag>
+                                <tag>source</tag>
+                                <tag>cdc</tag>
+                                <tag>wal</tag>
+                                <tag>replication</tag>
+                            </tags>
+
+                            <requirements>
+                                <requirement>YugabyteDB 2024.1.x</requirement>
+                            </requirements>
+
+                            <deliveryGuarantee>
+                                <deliveryGuarantee>atLeastOnce</deliveryGuarantee>
+                            </deliveryGuarantee>
+
+                            <confluentControlCenterIntegration>true</confluentControlCenterIntegration>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.6.0</version>
+                <configuration>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>assemble-all</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>com.github.os72</groupId>
                 <artifactId>protoc-jar-maven-plugin</artifactId>
@@ -201,7 +312,7 @@
                                     <LANG>${postgres.system.lang}</LANG>
                                 </env>
                                 <ports>
-                                    <port>${postgres.port}:5432</port>
+                                    <port>${postgres.port}:5433</port>
                                 </ports>
                                 <log>
                                     <prefix>postgres</prefix>
@@ -344,6 +455,22 @@
             </testResource>
         </testResources>
     </build>
+    
+    <distributionManagement>
+        <site>
+            <id>s3.site</id>
+            <url>s3://repository.yugabyte.com/maven/site</url>
+        </site>
+        <repository>
+            <id>s3.release</id>
+            <url>s3://repository.yugabyte.com/maven/release</url>
+        </repository>
+        <snapshotRepository>
+            <id>s3.snapshot</id>
+            <url>s3://repository.yugabyte.com/snapshot</url>
+        </snapshotRepository>
+    </distributionManagement>
+    
     <!--
     Define several useful profiles
     -->
@@ -516,6 +643,214 @@
             <properties>
                 <docker.filter>${docker.dbs},apicurio/apicurio-registry-mem:${version.apicurio}</docker.filter>
             </properties>
+        </profile>
+        <!-- Profile to publish the connector to YB's s3 maven repository -->
+        <profile>
+            <id>s3-deploy</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+            <build>
+                <plugins>
+                    <!-- Skip attaching source jars -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <phase>none</phase>
+                            </execution>
+                            <execution>
+                                <id>attach-test-sources</id>
+                                <phase>none</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Skip attaching javadoc jars -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <phase>none</phase>
+                            </execution>
+                            <execution>
+                                <id>attach-test-javadocs</id>
+                                <phase>none</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Skip test jar from parent -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>test-jar</id>
+                                <phase>none</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <version>${version.assembly.plugin}</version>
+                        <executions>
+                            <!-- Skip the jar-with-dependencies assembly -->
+                            <execution>
+                                <id>assemble-all</id>
+                                <phase>none</phase>
+                            </execution>
+                            <!-- Build only the plugin zip -->
+                            <execution>
+                                <id>plugin-zip</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                                <configuration>
+                                    <finalName>${project.artifactId}-${project.version}</finalName>
+                                    <attach>false</attach>
+                                    <appendAssemblyId>true</appendAssemblyId>
+                                    <descriptors>
+                                        <descriptor>${project.basedir}/../debezium-assembly-descriptors/src/main/resources/assemblies/${assembly.descriptor}.xml</descriptor>
+                                    </descriptors>
+                                    <tarLongFileMode>posix</tarLongFileMode>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.confluent</groupId>
+                        <artifactId>kafka-connect-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>default</id>
+                                <phase>none</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Generate a standalone POM file with dependencies but no parent -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>generate-minimal-pom</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <echo file="${project.build.directory}/minimal-pom.xml"><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>io.debezium</groupId>
+    <artifactId>yugabytedb-source-connector</artifactId>
+    <version>${project.version}</version>
+    <packaging>jar</packaging>
+    <name>YugabyteDB Source Connector</name>
+    <description>YugabyteDB CDC Source Connector based on Debezium</description>
+    <dependencies>
+        <dependency>
+            <groupId>io.debezium</groupId>
+            <artifactId>debezium-core</artifactId>
+            <version>2.5.2.Final</version>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.6.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.yugabyte</groupId>
+            <artifactId>jdbc-yugabytedb</artifactId>
+            <version>42.7.3-yb-4</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.25.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-api</artifactId>
+            <version>3.6.1</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.36</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>
+]]></echo>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-deploy-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>default-deploy</id>
+                                <phase>none</phase>
+                            </execution>
+                            <!-- Deploy the main jar with minimal POM (no dependencies, no parent) -->
+                            <execution>
+                                <id>deploy-jar</id>
+                                <phase>deploy</phase>
+                                <goals>
+                                    <goal>deploy-file</goal>
+                                </goals>
+                                <configuration>
+                                    <skip>false</skip>
+                                    <file>${project.build.directory}/${project.artifactId}-${project.version}.jar</file>
+                                    <repositoryId>s3.release</repositoryId>
+                                    <url>s3://repository.yugabyte.com/maven/release</url>
+                                    <groupId>${project.groupId}</groupId>
+                                    <artifactId>${project.artifactId}</artifactId>
+                                    <version>${project.version}</version>
+                                    <packaging>jar</packaging>
+                                    <pomFile>${project.build.directory}/minimal-pom.xml</pomFile>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>deploy-plugin-zip</id>
+                                <phase>deploy</phase>
+                                <goals>
+                                    <goal>deploy-file</goal>
+                                </goals>
+                                <configuration>
+                                    <skip>false</skip>
+                                    <file>${project.build.directory}/${project.artifactId}-${project.version}-plugin.zip</file>
+                                    <repositoryId>s3.release</repositoryId>
+                                    <url>s3://repository.yugabyte.com/maven/release</url>
+                                    <groupId>${project.groupId}</groupId>
+                                    <artifactId>${project.artifactId}</artifactId>
+                                    <version>${project.version}</version>
+                                    <packaging>zip</packaging>
+                                    <classifier>plugin</classifier>
+                                    <generatePom>false</generatePom>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>
