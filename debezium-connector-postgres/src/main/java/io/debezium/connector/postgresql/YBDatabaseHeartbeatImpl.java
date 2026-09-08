@@ -22,7 +22,7 @@ import java.util.Map;
 public class YBDatabaseHeartbeatImpl extends DatabaseHeartbeatImpl {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(YBDatabaseHeartbeatImpl.class);
-    private static final long HEARTBEAT_LOG_INTERVAL_MS = 10 * 60 * 1000L;
+    private static final long HEARTBEAT_LOG_INTERVAL_MS = 5 * 60 * 1000L;
 
     private final Duration heartbeatInterval;
     private long lastHeartbeatLogTimeMs = 0;
