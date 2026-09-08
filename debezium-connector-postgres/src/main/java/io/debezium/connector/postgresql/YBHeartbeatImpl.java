@@ -19,14 +19,16 @@ import java.util.Map;
 public class YBHeartbeatImpl extends HeartbeatImpl {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(YBHeartbeatImpl.class);
-    private static final long HEARTBEAT_LOG_INTERVAL_MS = 5 * 60 * 1000L;
 
     private final Duration heartbeatInterval;
+    private final long heartbeatLogIntervalMs;
     private long lastHeartbeatLogTimeMs = 0;
 
-    public YBHeartbeatImpl(Duration heartbeatInterval, String topicName, String key, SchemaNameAdjuster schemaNameAdjuster) {
+    public YBHeartbeatImpl(Duration heartbeatInterval, Duration heartbeatLogInterval, String topicName, String key,
+                           SchemaNameAdjuster schemaNameAdjuster) {
         super(heartbeatInterval, topicName, key, schemaNameAdjuster);
         this.heartbeatInterval = heartbeatInterval;
+        this.heartbeatLogIntervalMs = heartbeatLogInterval.toMillis();
     }
 
     static boolean isInSnapshot(Map<String, ?> offset) {
@@ -63,7 +65,7 @@ public class YBHeartbeatImpl extends HeartbeatImpl {
 
     private void maybeLogHeartbeat() {
         final long currentTimeMs = System.currentTimeMillis();
-        if (lastHeartbeatLogTimeMs == 0L || currentTimeMs - lastHeartbeatLogTimeMs >= HEARTBEAT_LOG_INTERVAL_MS) {
+        if (lastHeartbeatLogTimeMs == 0L || currentTimeMs - lastHeartbeatLogTimeMs >= heartbeatLogIntervalMs) {
             LOGGER.info("Sent heartbeat record");
             lastHeartbeatLogTimeMs = currentTimeMs;
         }

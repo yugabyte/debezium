@@ -53,7 +53,7 @@ public class YBHeartbeatImplTest {
     }
 
     private static YBHeartbeatImpl heartbeatWithInterval(Duration interval) {
-        return new YBHeartbeatImpl(interval, TOPIC, KEY, SchemaNameAdjuster.NO_OP);
+        return new YBHeartbeatImpl(interval, Duration.ofMinutes(5), TOPIC, KEY, SchemaNameAdjuster.NO_OP);
     }
 
     private static final class RecordingConsumer implements BlockingConsumer<SourceRecord> {

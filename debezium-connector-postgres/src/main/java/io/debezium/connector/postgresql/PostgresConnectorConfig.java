@@ -680,6 +680,18 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             .withEnum(LsnType.class, LsnType.SEQUENCE)
             .withDescription("LSN type being used with the replication slot");
 
+    public static final Field HEARTBEAT_LOG_INTERVAL_MS = Field.create("heartbeat.log.interval.ms")
+            .withDisplayName("Heartbeat log interval (milli-seconds)")
+            .withType(Type.INT)
+            .withGroup(Field.createGroupEntry(Field.Group.ADVANCED_HEARTBEAT, 3))
+            .withWidth(Width.MEDIUM)
+            .withImportance(Importance.LOW)
+            .withDescription("Minimum length of an interval in milli-seconds between INFO log lines reporting that a heartbeat record was sent. "
+                    + "Use 0 to log every heartbeat record. "
+                    + "Defaults to 300000 (5 minutes).")
+            .withDefault(5 * 60 * 1000)
+            .withValidation(Field::isNonNegativeInteger);
+
     public static final Field SLOT_NAME = Field.create("slot.name")
             .withDisplayName("Slot")
             .withType(Type.STRING)
@@ -1422,7 +1434,8 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     SHOULD_FLUSH_LSN_IN_SOURCE_DB)
             .events(
                     INCLUDE_UNKNOWN_DATATYPES,
-                    SOURCE_INFO_STRUCT_MAKER)
+                    SOURCE_INFO_STRUCT_MAKER,
+                    HEARTBEAT_LOG_INTERVAL_MS)
             .connector(
                     SNAPSHOT_MODE,
                     SNAPSHOT_MODE_CLASS,
@@ -1568,6 +1581,10 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
         }
     }
 
+    public Duration getHeartbeatLogInterval() {
+        return Duration.ofMillis(getConfig().getInteger(HEARTBEAT_LOG_INTERVAL_MS));
+    }
+
     @Override
     public Heartbeat createHeartbeat(TopicNamingStrategy topicNamingStrategy,
                                      SchemaNameAdjuster schemaNameAdjuster,
@@ -1585,6 +1602,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
             if (streamingHeartbeatEnabled && !Strings.isNullOrBlank(getHeartbeatActionQuery())) {
                 return new YBDatabaseHeartbeatImpl(
                         getHeartbeatInterval(),
+                        getHeartbeatLogInterval(),
                         topicNamingStrategy.heartbeatTopic(),
                         getLogicalName(),
                         connectionProvider.get(),
@@ -1593,7 +1611,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                         schemaNameAdjuster);
             }
 
-            return new YBHeartbeatImpl(getHeartbeatInterval(), topicNamingStrategy.heartbeatTopic(),
+            return new YBHeartbeatImpl(getHeartbeatInterval(), getHeartbeatLogInterval(), topicNamingStrategy.heartbeatTopic(),
                     getLogicalName(), schemaNameAdjuster);
         }
         return super.createHeartbeat(topicNamingStrategy, schemaNameAdjuster, connectionProvider, errorHandler);

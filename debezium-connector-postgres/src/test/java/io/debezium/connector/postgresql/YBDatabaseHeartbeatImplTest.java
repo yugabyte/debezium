@@ -77,6 +77,7 @@ public class YBDatabaseHeartbeatImplTest {
     private YBDatabaseHeartbeatImpl heartbeatWithInterval(Duration interval) {
         return new YBDatabaseHeartbeatImpl(
                 interval,
+                Duration.ofMinutes(5),
                 TOPIC,
                 KEY,
                 jdbcConnection,
