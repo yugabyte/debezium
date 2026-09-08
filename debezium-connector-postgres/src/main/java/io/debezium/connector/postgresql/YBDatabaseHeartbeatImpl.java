@@ -6,6 +6,8 @@ import io.debezium.heartbeat.HeartbeatErrorHandler;
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.schema.SchemaNameAdjuster;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Map;
@@ -19,7 +21,11 @@ import java.util.Map;
  */
 public class YBDatabaseHeartbeatImpl extends DatabaseHeartbeatImpl {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(YBDatabaseHeartbeatImpl.class);
+    private static final long HEARTBEAT_LOG_INTERVAL_MS = 10 * 60 * 1000L;
+
     private final Duration heartbeatInterval;
+    private long lastHeartbeatLogTimeMs = 0;
 
     public YBDatabaseHeartbeatImpl(Duration heartbeatInterval, String topicName, String key, JdbcConnection jdbcConnection,
                                    String heartBeatActionQuery, HeartbeatErrorHandler errorHandler,
@@ -46,5 +52,21 @@ public class YBDatabaseHeartbeatImpl extends DatabaseHeartbeatImpl {
             return;
         }
         super.heartbeat(partition, () -> resolved, consumer);
+    }
+
+    @Override
+    public void forcedBeat(Map<String, ?> partition, Map<String, ?> offset, BlockingConsumer<SourceRecord> consumer) throws InterruptedException {
+        super.forcedBeat(partition, offset, record -> {
+            consumer.accept(record);
+            maybeLogHeartbeat();
+        });
+    }
+
+    private void maybeLogHeartbeat() {
+        final long currentTimeMs = System.currentTimeMillis();
+        if (lastHeartbeatLogTimeMs == 0L || currentTimeMs - lastHeartbeatLogTimeMs >= HEARTBEAT_LOG_INTERVAL_MS) {
+            LOGGER.info("Sent heartbeat record");
+            lastHeartbeatLogTimeMs = currentTimeMs;
+        }
     }
 }
