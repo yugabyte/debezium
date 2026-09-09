@@ -890,6 +890,7 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                 .logical()
                 .withSlotName("\"" + slotName + "\"")
                 .withStartPosition(lsn.asLogSequenceNumber())
+                .withAutomaticFlush(false)
                 .withSlotOptions(streamParams);
         streamBuilder = configurator.apply(streamBuilder, this::hasMinimumVersion);
 
