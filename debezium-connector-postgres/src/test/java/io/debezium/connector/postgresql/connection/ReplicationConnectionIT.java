@@ -6,6 +6,7 @@
 
 package io.debezium.connector.postgresql.connection;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -24,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import org.awaitility.Awaitility;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -222,7 +224,7 @@ public class ReplicationConnectionIT {
 
     @Test
     @FixFor("debezium/dbz#1489")
-    void shouldNotMoveFlushLsnBackwardsWhenFlushingOlderLsn() throws Exception {
+    public void shouldNotMoveFlushLsnBackwardsWhenFlushingOlderLsn() throws Exception {
         TestHelper.create().dropReplicationSlot("test");
 
         try (PostgresConnection connection = TestHelper.create();

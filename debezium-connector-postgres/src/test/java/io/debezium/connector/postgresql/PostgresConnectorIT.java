@@ -152,7 +152,6 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         stopConnector();
         TestHelper.dropDefaultReplicationSlot();
         TestHelper.dropPublication();
-        TestHelper.resetWalSenderTimeout();
     }
 
     @Test
@@ -3339,7 +3338,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, "false");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForSnapshotToBeCompleted();
 
@@ -3354,7 +3353,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
         TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
         TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
 
         assertConnectorIsRunning();
         waitForStreamingRunning();
@@ -3379,7 +3378,7 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, "false");
 
-        start(PostgresConnector.class, configBuilder.build());
+        start(YugabyteDBConnector.class, configBuilder.build());
         assertConnectorIsRunning();
         waitForStreamingRunning();
 
@@ -3405,119 +3404,26 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
     }
 
     @Test
-    @FixFor("DBZ-9641")
-    public void shouldNotFlushLsnOfUnmonitoredActivityInConnectorMode() throws Exception {
-        int walSenderTimeout = TestHelper.setAndGetWalSenderTimeout(2);
-        TestHelper.execute(SETUP_TABLES_STMT);
-
-        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, PostgresConnectorConfig.LsnFlushMode.CONNECTOR.getValue())
-                .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA);
-
-        start(PostgresConnector.class, configBuilder.build());
-        assertConnectorIsRunning();
-        waitForStreamingRunning();
-
-        final SlotState slotBefore = getDefaultReplicationSlot();
-
-        Lsn preActivityServerLsn;
-        try (PostgresConnection conn = TestHelper.create()) {
-            long walLocation = conn.currentXLogLocation();
-            preActivityServerLsn = Lsn.valueOf(walLocation);
-        }
-        // Generate unmonitored WAL activity
-        TestHelper.execute("CHECKPOINT;");
-        TestHelper.execute("SELECT pg_switch_wal();");
-        TestHelper.execute("CHECKPOINT;");
-        TestHelper.execute("SELECT pg_switch_wal();");
-
-        Lsn postActivityServerLsn;
-        try (PostgresConnection conn = TestHelper.create()) {
-            long walLocation = conn.currentXLogLocation();
-            postActivityServerLsn = Lsn.valueOf(walLocation);
-        }
-
-        Awaitility.await().atMost(waitTimeForRecords() * 2L, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-            assertThat(postActivityServerLsn)
-                    .describedAs("Physical WAL activity should have advanced the server LSN")
-                    .isGreaterThan(preActivityServerLsn);
-        });
-
-        TimeUnit.SECONDS.sleep(walSenderTimeout); // Wait to ensure pgjdbc driver doesn't flush LSN
-        final SlotState slotAfter = getDefaultReplicationSlot();
-
-        logger.info("Slot Before {}, Server LSN Before {},  Slot after {}, Server LSN After {}", slotBefore.slotLastFlushedLsn(), preActivityServerLsn,
-                slotAfter.slotLastFlushedLsn(), postActivityServerLsn);
-
-        assertThat(slotAfter.slotLastFlushedLsn())
-                .describedAs("LSN should not advanced due to unmonitored activity in connector mode")
-                .isEqualTo(slotBefore.slotLastFlushedLsn());
-        assertThat(slotAfter.slotLastFlushedLsn())
-                .describedAs("Slot LSN should be behind server LSN as pgjdbc keep alive flushing is disabled")
-                .isLessThan(postActivityServerLsn);
-
-        stopConnector();
-    }
-
-    @Test
-    @FixFor("DBZ-9641")
-    public void shouldFlushLsnOfUnmonitoredActivityInConnectorAndDriverMode() throws Exception {
-        int walSenderTimeout = TestHelper.setAndGetWalSenderTimeout(2);
-        TestHelper.execute(SETUP_TABLES_STMT);
-
-        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+    public void shouldNotStartWithDriverKeepaliveFlushForHybridTimeSlot() throws Exception {
+        // YB: the driver keepalive flush acknowledges the commit-time LSN of transactions the connector has not
+        // received yet, so connector_and_driver is rejected for HYBRID_TIME slots.
+        Configuration config = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_LSN_TYPE, PostgresConnectorConfig.LsnType.HYBRID_TIME.getValue())
                 .with(PostgresConnectorConfig.LSN_FLUSH_MODE, PostgresConnectorConfig.LsnFlushMode.CONNECTOR_AND_DRIVER.getValue())
-                .with(PostgresConnectorConfig.SCHEMA_INCLUDE_LIST, "s1")
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NO_DATA);
+                .build();
 
-        start(PostgresConnector.class, configBuilder.build());
-        assertConnectorIsRunning();
-        waitForStreamingRunning();
+        Config validation = new YugabyteDBConnector().validate(config.asMap());
+        var lsnFlushMode = validation.configValues().stream()
+                .filter(v -> v.name().equals(PostgresConnectorConfig.LSN_FLUSH_MODE.name()))
+                .findFirst().orElseThrow();
+        assertThat(lsnFlushMode.errorMessages()).hasSize(1);
+        assertThat(lsnFlushMode.errorMessages().get(0)).contains("not allowed with slot.lsn.type=HYBRID_TIME");
 
-        final SlotState slotBefore = getDefaultReplicationSlot();
-
-        Lsn preActivityServerLsn;
-        try (PostgresConnection conn = TestHelper.create()) {
-            long walLocation = conn.currentXLogLocation();
-            preActivityServerLsn = Lsn.valueOf(walLocation);
-        }
-        // Generate unmonitored WAL activity
-        TestHelper.execute("CHECKPOINT;");
-        TestHelper.execute("SELECT pg_switch_wal();");
-        TestHelper.execute("CHECKPOINT;");
-        TestHelper.execute("SELECT pg_switch_wal();");
-
-        Lsn postActivityServerLsn;
-        try (PostgresConnection conn = TestHelper.create()) {
-            long walLocation = conn.currentXLogLocation();
-            postActivityServerLsn = Lsn.valueOf(walLocation);
-        }
-
-        Awaitility.await().atMost(waitTimeForRecords() * 2L, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-            assertThat(postActivityServerLsn)
-                    .describedAs("Physical WAL activity should have advanced the server LSN")
-                    .isGreaterThan(preActivityServerLsn);
+        start(YugabyteDBConnector.class, config, (success, msg, error) -> {
+            assertThat(success).isFalse();
+            assertThat(error).isNotNull();
         });
-
-        Awaitility.await().atMost(walSenderTimeout, TimeUnit.SECONDS)
-                .pollInterval(Duration.ofMillis(500))
-                .untilAsserted(() -> {
-                    SlotState currentSlot = getDefaultReplicationSlot();
-                    assertThat(currentSlot.slotLastFlushedLsn())
-                            .describedAs("Slot LSN should have advanced been advanced by pgjdbc driver flushing of unmonitored activity")
-                            .isGreaterThan(slotBefore.slotLastFlushedLsn());
-                });
-        final SlotState slotAfter = getDefaultReplicationSlot();
-
-        logger.info("Slot Before {}, Server LSN Before {},  Slot after {}, Server LSN After {}", slotBefore.slotLastFlushedLsn(), preActivityServerLsn,
-                slotAfter.slotLastFlushedLsn(), postActivityServerLsn);
-
-        assertThat(slotAfter.slotLastFlushedLsn())
-                .describedAs("Slot LSN should match match server LSN as pgjdbc keep alive flushing is enabled")
-                .isEqualTo(postActivityServerLsn);
-
-        stopConnector();
+        assertConnectorNotRunning();
     }
 
     @Test

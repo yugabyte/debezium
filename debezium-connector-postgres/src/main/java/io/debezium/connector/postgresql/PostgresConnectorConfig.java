@@ -1257,7 +1257,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     public static final Field LSN_FLUSH_MODE = Field.create("lsn.flush.mode")
             .withDisplayName("LSN flush mode")
-            .withEnum(LsnFlushMode.class)
+            .withEnum(LsnFlushMode.class, LsnFlushMode.CONNECTOR)
             .withGroup(Field.createGroupEntry(Field.Group.CONNECTOR, 100))
             .withWidth(Width.SHORT)
             .withImportance(Importance.LOW)
@@ -1265,8 +1265,9 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                     "Determines the LSN flushing strategy. Options include: " +
                             "'connector' (default) for Debezium managed LSN flushing (replaces deprecated flush.lsn.source=true); " +
                             "'manual' for externally managed LSN flushing (replaces deprecated flush.lsn.source=false); " +
-                            "'connector_and_driver' for Debezium managed LSN flushing with the pgjdbc driver flushing unmonitored LSNs" +
-                            "using server keepalive LSN, which prevents WAL growth on low-activity databases.")
+                            "'connector_and_driver' for Debezium managed LSN flushing with the pgjdbc driver flushing unmonitored LSNs " +
+                            "using server keepalive LSN, which prevents WAL growth on low-activity databases. " +
+                            "'connector_and_driver' is only allowed with slot.lsn.type=SEQUENCE.")
             .withValidation(PostgresConnectorConfig::validateLsnFlushMode);
 
     public static final Field SOURCE_INFO_STRUCT_MAKER = CommonConnectorConfig.SOURCE_INFO_STRUCT_MAKER
@@ -1598,16 +1599,31 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
                 problems.accept(LSN_FLUSH_MODE, value, "Invalid LSN flush mode");
                 return 1;
             }
+            // YB: the driver keepalive flush acknowledges the LSN the walsender has decoded up to, which for a
+            // HYBRID_TIME slot is the commit time of a transaction the connector may not have received yet.
+            if (mode == LsnFlushMode.CONNECTOR_AND_DRIVER && isHybridTimeSlot(config)) {
+                problems.accept(LSN_FLUSH_MODE, value, "'" + LsnFlushMode.CONNECTOR_AND_DRIVER.getValue() + "' is not allowed with "
+                        + SLOT_LSN_TYPE.name() + "=" + LsnType.HYBRID_TIME.getValue()
+                        + ": the driver keepalive flush can acknowledge transactions the connector has not received yet. "
+                        + "Use '" + LsnFlushMode.CONNECTOR.getValue() + "' or " + SLOT_LSN_TYPE.name() + "=" + LsnType.SEQUENCE.getValue() + ".");
+                return 1;
+            }
         }
         return 0;
+    }
+
+    private static boolean isHybridTimeSlot(Configuration config) {
+        String lsnType = config.getString(SLOT_LSN_TYPE);
+        return lsnType != null && LsnType.HYBRID_TIME.getValue().equalsIgnoreCase(lsnType.trim());
     }
 
     private LsnFlushMode resolveLsnFlushMode(Configuration config) {
         LsnFlushMode mode = null;
 
-        String newModeValue = config.getString(LSN_FLUSH_MODE);
-        if (newModeValue != null) {
-            mode = LsnFlushMode.parse(newModeValue);
+        // YB: the field carries the 'connector' default because the enum validation in this Debezium version rejects an
+        // unset value, so only an explicitly configured lsn.flush.mode may override the deprecated flush.lsn.source.
+        if (config.hasKey(LSN_FLUSH_MODE)) {
+            mode = LsnFlushMode.parse(config.getString(LSN_FLUSH_MODE));
         }
         if (mode == null && config.hasKey(SHOULD_FLUSH_LSN_IN_SOURCE_DB)) {
             LOGGER.warn("Property '{}' is deprecated and replaced by '{}' and will be removed in a future build.",
