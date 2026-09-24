@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 import org.apache.kafka.connect.errors.ConnectException;
 import com.yugabyte.core.BaseConnection;
 import com.yugabyte.core.ServerVersion;
+import com.yugabyte.replication.LogSequenceNumber;
 import com.yugabyte.replication.PGReplicationStream;
 import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
 import com.yugabyte.util.PSQLException;
@@ -822,10 +823,14 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
             }
 
             private void doFlushLsn(Lsn lsn) throws SQLException {
-                stream.setFlushedLSN(lsn.asLogSequenceNumber());
-                stream.setAppliedLSN(lsn.asLogSequenceNumber());
-
-                stream.forceUpdateStatus();
+                LogSequenceNumber newLsn = lsn.asLogSequenceNumber();
+                if (stream.getLastFlushedLSN().compareTo(newLsn) < 0) {
+                    stream.setFlushedLSN(newLsn);
+                }
+                if (stream.getLastAppliedLSN().compareTo(newLsn) < 0) {
+                    stream.setAppliedLSN(newLsn);
+                }
+                stream.forceUpdateStatus(); // Force update regardless as this acts as a keep-alive mechanism
             }
 
             @Override
@@ -884,12 +889,17 @@ public class PostgresReplicationConnection extends JdbcConnection implements Rep
                                                          BiFunction<ChainedLogicalStreamBuilder, Function<Integer, Boolean>, ChainedLogicalStreamBuilder> configurator)
             throws SQLException {
         assert lsn != null;
+
+        boolean enableDriverKeepaliveFlush = (connectorConfig.getLsnFlushMode() == PostgresConnectorConfig.LsnFlushMode.CONNECTOR_AND_DRIVER);
+        LOGGER.info("Starting replication stream from LSN {} with automaticFlush={} (mode={})", lsn, enableDriverKeepaliveFlush, connectorConfig.getLsnFlushMode());
+
         ChainedLogicalStreamBuilder streamBuilder = pgConnection()
                 .getReplicationAPI()
                 .replicationStream()
                 .logical()
                 .withSlotName("\"" + slotName + "\"")
                 .withStartPosition(lsn.asLogSequenceNumber())
+                .withAutomaticFlush(enableDriverKeepaliveFlush)
                 .withSlotOptions(streamParams);
         streamBuilder = configurator.apply(streamBuilder, this::hasMinimumVersion);
 

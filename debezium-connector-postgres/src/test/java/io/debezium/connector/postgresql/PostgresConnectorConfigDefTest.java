@@ -7,6 +7,11 @@ package io.debezium.connector.postgresql;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.kafka.common.config.ConfigValue;
 import org.junit.Test;
 
 import io.debezium.config.ConfigDefinitionMetadataTest;
@@ -130,6 +135,97 @@ public class PostgresConnectorConfigDefTest extends ConfigDefinitionMetadataTest
                 configBuilder.build(), PostgresConnectorConfig.YB_LOAD_BALANCE_CONNECTIONS, (field, value, problemMessage) -> System.out.println(problemMessage));
 
         assertThat((problemCount == 1)).isTrue();
+    }
+
+    @Test
+    public void shouldDefaultLsnFlushModeToConnector() {
+        Configuration configuration = TestHelper.defaultConfig().build();
+        PostgresConnectorConfig config = new PostgresConnectorConfig(configuration);
+
+        assertThat(config.getLsnFlushMode()).isEqualTo(PostgresConnectorConfig.LsnFlushMode.CONNECTOR);
+        assertThat(config.isFlushLsnOnSource()).isTrue();
+
+        // a configuration that does not mention lsn.flush.mode at all must pass the full validation
+        Map<String, ConfigValue> results = configuration.validate(PostgresConnectorConfig.ALL_FIELDS);
+        assertThat(results.get(PostgresConnectorConfig.LSN_FLUSH_MODE.name()).errorMessages()).isEmpty();
+        assertThat(results.values().stream().filter(v -> !v.errorMessages().isEmpty()).map(ConfigValue::name)).isEmpty();
+    }
+
+    @Test
+    public void shouldMapDeprecatedFlushLsnSourceToLsnFlushMode() {
+        PostgresConnectorConfig manual = new PostgresConnectorConfig(TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SHOULD_FLUSH_LSN_IN_SOURCE_DB, false)
+                .build());
+        assertThat(manual.getLsnFlushMode()).isEqualTo(PostgresConnectorConfig.LsnFlushMode.MANUAL);
+        assertThat(manual.isFlushLsnOnSource()).isFalse();
+
+        PostgresConnectorConfig connector = new PostgresConnectorConfig(TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SHOULD_FLUSH_LSN_IN_SOURCE_DB, true)
+                .build());
+        assertThat(connector.getLsnFlushMode()).isEqualTo(PostgresConnectorConfig.LsnFlushMode.CONNECTOR);
+
+        // the new option wins when both are set
+        PostgresConnectorConfig both = new PostgresConnectorConfig(TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SHOULD_FLUSH_LSN_IN_SOURCE_DB, false)
+                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, "connector_and_driver")
+                .build());
+        assertThat(both.getLsnFlushMode()).isEqualTo(PostgresConnectorConfig.LsnFlushMode.CONNECTOR_AND_DRIVER);
+    }
+
+    @Test
+    public void shouldRejectInvalidLsnFlushMode() {
+        Configuration config = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, "sometimes")
+                .build();
+
+        List<String> problems = new ArrayList<>();
+        boolean valid = PostgresConnectorConfig.LSN_FLUSH_MODE.validate(config, (field, value, problemMessage) -> problems.add(problemMessage));
+
+        assertThat(valid).isFalse();
+        assertThat(problems).isNotEmpty();
+    }
+
+    @Test
+    public void shouldRejectDriverKeepaliveFlushForHybridTimeSlot() {
+        Configuration config = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_LSN_TYPE, "HYBRID_TIME")
+                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, "connector_and_driver")
+                .build();
+
+        List<String> problems = new ArrayList<>();
+        boolean valid = PostgresConnectorConfig.LSN_FLUSH_MODE.validate(config, (field, value, problemMessage) -> problems.add(problemMessage));
+
+        assertThat(valid).isFalse();
+        assertThat(problems).hasSize(1);
+        assertThat(problems.get(0)).contains("not allowed with slot.lsn.type=HYBRID_TIME");
+
+        // the same rule is enforced by the full configuration validation used by the connector and the task
+        Map<String, ConfigValue> results = config.validate(PostgresConnectorConfig.ALL_FIELDS);
+        assertThat(results.get(PostgresConnectorConfig.LSN_FLUSH_MODE.name()).errorMessages()).hasSize(1);
+    }
+
+    @Test
+    public void shouldAllowDriverKeepaliveFlushForSequenceSlot() {
+        Configuration explicitSequence = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_LSN_TYPE, "SEQUENCE")
+                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, "connector_and_driver")
+                .build();
+        Configuration defaultLsnType = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, "connector_and_driver")
+                .build();
+
+        for (Configuration config : List.of(explicitSequence, defaultLsnType)) {
+            assertThat(PostgresConnectorConfig.LSN_FLUSH_MODE.validate(config, (field, value, problemMessage) -> System.out.println(problemMessage))).isTrue();
+            assertThat(config.validate(PostgresConnectorConfig.ALL_FIELDS).get(PostgresConnectorConfig.LSN_FLUSH_MODE.name()).errorMessages()).isEmpty();
+            assertThat(new PostgresConnectorConfig(config).getLsnFlushMode()).isEqualTo(PostgresConnectorConfig.LsnFlushMode.CONNECTOR_AND_DRIVER);
+        }
+
+        // connector mode is fine with HYBRID_TIME
+        Configuration hybridTimeConnectorMode = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_LSN_TYPE, "HYBRID_TIME")
+                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, "connector")
+                .build();
+        assertThat(PostgresConnectorConfig.LSN_FLUSH_MODE.validate(hybridTimeConnectorMode, (field, value, problemMessage) -> System.out.println(problemMessage))).isTrue();
     }
 
     public void validateCorrectHostname(boolean multiNode) {

@@ -79,6 +79,7 @@ import io.debezium.config.Field;
 import io.debezium.connector.postgresql.PostgresConnectorConfig.LogicalDecoder;
 import io.debezium.connector.postgresql.PostgresConnectorConfig.SnapshotMode;
 import io.debezium.connector.postgresql.connection.AbstractMessageDecoder;
+import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.PostgresReplicationConnection;
 import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
@@ -3321,6 +3322,108 @@ public class PostgresConnectorIT extends AbstractConnectorTest {
 
         final SlotState slotAfterIncremental = getDefaultReplicationSlot();
         Assert.assertEquals(slotAfterSnapshot.slotLastFlushedLsn(), slotAfterIncremental.slotLastFlushedLsn());
+    }
+
+    @Test
+    @FixFor({ "DBZ-5811", "DBZ-9641" })
+    public void shouldNotAckLsnOnSourceInManualFlushMode() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.createDefaultReplicationSlot();
+        TestHelper.execute(SETUP_TABLES_STMT);
+
+        final SlotState slotAtTheBeginning = getDefaultReplicationSlot();
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, "manual")
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, "false");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForSnapshotToBeCompleted();
+
+        SourceRecords actualRecords = consumeRecordsByTopic(2);
+        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
+
+        stopConnector();
+
+        final SlotState slotAfterSnapshot = getDefaultReplicationSlot();
+        Assert.assertEquals(slotAtTheBeginning.slotLastFlushedLsn(), slotAfterSnapshot.slotLastFlushedLsn());
+
+        TestHelper.execute("INSERT INTO s2.a (aa,bb) VALUES (1, 'test');");
+        TestHelper.execute("UPDATE s2.a SET aa=2, bb='hello' WHERE pk=2;");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+
+        actualRecords = consumeRecordsByTopic(2);
+        assertThat(actualRecords.allRecordsInOrder().size()).isEqualTo(2);
+        stopConnector();
+
+        final SlotState slotAfterIncremental = getDefaultReplicationSlot();
+        Assert.assertEquals(slotAfterSnapshot.slotLastFlushedLsn(), slotAfterIncremental.slotLastFlushedLsn());
+    }
+
+    @Test
+    @FixFor("DBZ-9641")
+    public void shouldStartWithConnectorAndDriverMode() throws Exception {
+        TestHelper.dropDefaultReplicationSlot();
+        TestHelper.createDefaultReplicationSlot();
+        TestHelper.execute(SETUP_TABLES_STMT);
+
+        final Configuration.Builder configBuilder = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, "connector_and_driver")
+                .with(PostgresConnectorConfig.SLOT_NAME, ReplicationConnection.Builder.DEFAULT_SLOT_NAME)
+                .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, "false");
+
+        start(YugabyteDBConnector.class, configBuilder.build());
+        assertConnectorIsRunning();
+        waitForStreamingRunning();
+
+        // Consume snapshot records
+        SourceRecords snapshotRecords = consumeRecordsByTopic(2);
+        assertThat(snapshotRecords.allRecordsInOrder().size()).isEqualTo(2);
+
+        final SlotState slotAfterSnapshot = getDefaultReplicationSlot();
+
+        // Process streaming events
+        TestHelper.execute(INSERT_STMT);
+        SourceRecords streamingRecords = consumeRecordsByTopic(2);
+        assertThat(streamingRecords.allRecordsInOrder().size()).isEqualTo(2);
+
+        stopConnector();
+
+        final SlotState slotAfterStreaming = getDefaultReplicationSlot();
+
+        // Verify LSN advanced after processing events (connector flushes on event processing)
+        assertThat(slotAfterStreaming.slotLastFlushedLsn())
+                .describedAs("LSN should advance after processing events in connector_and_driver mode")
+                .isGreaterThan(slotAfterSnapshot.slotLastFlushedLsn());
+    }
+
+    @Test
+    public void shouldNotStartWithDriverKeepaliveFlushForHybridTimeSlot() throws Exception {
+        // YB: the driver keepalive flush acknowledges the commit-time LSN of transactions the connector has not
+        // received yet, so connector_and_driver is rejected for HYBRID_TIME slots.
+        Configuration config = TestHelper.defaultConfig()
+                .with(PostgresConnectorConfig.SLOT_LSN_TYPE, PostgresConnectorConfig.LsnType.HYBRID_TIME.getValue())
+                .with(PostgresConnectorConfig.LSN_FLUSH_MODE, PostgresConnectorConfig.LsnFlushMode.CONNECTOR_AND_DRIVER.getValue())
+                .build();
+
+        Config validation = new YugabyteDBConnector().validate(config.asMap());
+        var lsnFlushMode = validation.configValues().stream()
+                .filter(v -> v.name().equals(PostgresConnectorConfig.LSN_FLUSH_MODE.name()))
+                .findFirst().orElseThrow();
+        assertThat(lsnFlushMode.errorMessages()).hasSize(1);
+        assertThat(lsnFlushMode.errorMessages().get(0)).contains("not allowed with slot.lsn.type=HYBRID_TIME");
+
+        start(YugabyteDBConnector.class, config, (success, msg, error) -> {
+            assertThat(success).isFalse();
+            assertThat(error).isNotNull();
+        });
+        assertConnectorNotRunning();
     }
 
     @Test

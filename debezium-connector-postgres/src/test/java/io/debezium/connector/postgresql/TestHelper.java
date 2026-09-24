@@ -370,18 +370,18 @@ public final class TestHelper {
         }
     }
 
-    protected static void dropDefaultReplicationSlot() {
+    public static void dropDefaultReplicationSlot() {
         try {
             execute("SELECT pg_drop_replication_slot('" + ReplicationConnection.Builder.DEFAULT_SLOT_NAME + "')");
         }
         catch (Exception e) {
-            if (!Throwables.getRootCause(e).getMessage().equals("ERROR: replication slot \"debezium\" does not exist")) {
+            if (!Throwables.getRootCause(e).getMessage().startsWith("ERROR: replication slot \"debezium\" does not exist")) {
                 throw e;
             }
         }
     }
 
-    protected static void dropPublication() {
+    public static void dropPublication() {
         dropPublication(ReplicationConnection.Builder.DEFAULT_PUBLICATION_NAME);
     }
 

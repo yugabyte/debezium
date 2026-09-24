@@ -54,7 +54,7 @@
         <dependency>
             <groupId>com.yugabyte</groupId>
             <artifactId>jdbc-yugabytedb</artifactId>
-            <version>42.7.3-yb-4</version>
+            <version>42.7.3-yb-5</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
@@ -771,7 +771,7 @@
         <dependency>
             <groupId>com.yugabyte</groupId>
             <artifactId>jdbc-yugabytedb</artifactId>
-            <version>42.7.3-yb-4</version>
+            <version>42.7.3-yb-5</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
