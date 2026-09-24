@@ -10,6 +10,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.reflect.Field;
@@ -22,7 +23,7 @@ import java.util.concurrent.Future;
 import org.junit.After;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.postgresql.jdbc.PgConnection;
+import com.yugabyte.jdbc.PgConnection;
 
 import io.debezium.connector.postgresql.TestHelper;
 import io.debezium.doc.FixFor;
@@ -60,11 +61,14 @@ public class PostgresConnectionIT {
         }
     }
 
+    // YB: Note: pg_current_wal_lsn() is not supported in YugabyteDB since each tablet
+    // maintains its own WAL (yugabyte/yugabyte-db#30243).
     @Test
     public void shouldReportValidXLogPos() throws SQLException {
         try (PostgresConnection connection = TestHelper.create()) {
             connection.connect();
-            assertTrue(connection.currentXLogLocation() > 0);
+            SQLException exception = assertThrows(SQLException.class, connection::currentXLogLocation);
+            assertTrue(exception.getMessage().contains("pg_current_wal_lsn() is not yet supported"));
         }
     }
 
@@ -239,7 +243,7 @@ public class PostgresConnectionIT {
             assertTrue(replConnection.isConnected());
         }
         try (PostgresConnection withIdleTransaction = new PostgresConnection(JdbcConfiguration.adapt(TestHelper.defaultJdbcConfig()),
-                PostgresConnection.CONNECTION_GENERAL);
+                PostgresConnection.CONNECTION_GENERAL, "only-primary" /* loadBalance */);
                 PostgresConnection withEmptyConfirmedFlushLSN = buildConnectionWithEmptyConfirmedFlushLSN(slotName)) {
             withIdleTransaction.setAutoCommit(false);
             withIdleTransaction.query("select 1", connection -> {
@@ -253,7 +257,8 @@ public class PostgresConnectionIT {
 
     // "fake" a pg95 response by not returning confirmed_flushed_lsn
     private PostgresConnection buildPG95PGConn(String name) {
-        return new PostgresConnection(JdbcConfiguration.adapt(TestHelper.defaultJdbcConfig()), name) {
+        return new PostgresConnection(JdbcConfiguration.adapt(TestHelper.defaultJdbcConfig()), name,
+                "only-primary" /* loadBalance */) {
             @Override
             protected ServerInfo.ReplicationSlot queryForSlot(String slotName, String database, String pluginName,
                                                               ResultSetMapper<ServerInfo.ReplicationSlot> map)
@@ -270,7 +275,8 @@ public class PostgresConnectionIT {
     }
 
     private PostgresConnection buildConnectionWithEmptyConfirmedFlushLSN(String name) {
-        return new PostgresConnection(JdbcConfiguration.adapt(TestHelper.defaultJdbcConfig()), name) {
+        return new PostgresConnection(JdbcConfiguration.adapt(TestHelper.defaultJdbcConfig()), name,
+                "only-primary" /* loadBalance */) {
             @Override
             protected ServerInfo.ReplicationSlot queryForSlot(String slotName, String database, String pluginName,
                                                               ResultSetMapper<ServerInfo.ReplicationSlot> map)

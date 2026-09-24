@@ -80,13 +80,14 @@ public class TransactionMetadataIT extends AbstractConnectorTest {
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.PROVIDE_TRANSACTION_METADATA, true)
                 .build();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
         assertConnectorIsRunning();
-        TestHelper.waitForDefaultReplicationSlotBeActive();
 
         waitForAvailableRecords(100, TimeUnit.MILLISECONDS);
         // there shouldn't be any snapshot records
         assertNoRecordsToConsume();
+
+        TestHelper.waitFor(Duration.ofSeconds(15));
 
         // insert and verify 2 new records
         TestHelper.execute(INSERT_STMT);

@@ -4,7 +4,7 @@
   <parent>
     <groupId>io.debezium</groupId>
     <artifactId>debezium-build-parent</artifactId>
-    <version>2.5.2.Final</version>
+    <version>${revision}</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -30,7 +30,7 @@
         <!-- Set formatting default goals -->
         <format.formatter.goal>format</format.formatter.goal>
         <format.imports.goal>sort</format.imports.goal>
-        <format.imports.source.compliance>15</format.imports.source.compliance>
+        <format.imports.source.compliance>17</format.imports.source.compliance>
 
         <!-- No debug options by default -->
         <debug.argline />
@@ -68,6 +68,13 @@
     </dependencyManagement>
 
     <build>
+        <extensions>
+            <extension>
+                <groupId>com.gkatzioura.maven.cloud</groupId>
+                <artifactId>s3-storage-wagon</artifactId>
+                <version>2.3</version>
+            </extension>
+        </extensions>
         <pluginManagement>
             <plugins>
                 <plugin>

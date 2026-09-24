@@ -5,8 +5,6 @@
  */
 package io.debezium.connector.postgresql.connection.pgoutput;
 
-import static java.util.stream.Collectors.toMap;
-
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.sql.DatabaseMetaData;
@@ -21,25 +19,28 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
-import org.postgresql.replication.fluent.logical.ChainedLogicalStreamBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yugabyte.replication.fluent.logical.ChainedLogicalStreamBuilder;
 
 import io.debezium.connector.postgresql.PostgresStreamingChangeEventSource.PgConnectionSupplier;
 import io.debezium.connector.postgresql.PostgresType;
 import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.UnchangedToastedReplicationMessageColumn;
+import io.debezium.connector.postgresql.YugabyteDBServer;
 import io.debezium.connector.postgresql.connection.AbstractMessageDecoder;
 import io.debezium.connector.postgresql.connection.AbstractReplicationMessageColumn;
 import io.debezium.connector.postgresql.connection.LogicalDecodingMessage;
 import io.debezium.connector.postgresql.connection.Lsn;
 import io.debezium.connector.postgresql.connection.MessageDecoderContext;
+import io.debezium.connector.postgresql.connection.OriginMessage;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
+import io.debezium.connector.postgresql.connection.ReplicaIdentityInfo;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Column;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.NoopMessage;
 import io.debezium.connector.postgresql.connection.ReplicationMessage.Operation;
@@ -132,9 +133,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             LOGGER.trace("Message Type: {}", type);
             switch (type) {
                 case TYPE:
-                case ORIGIN:
-                    // TYPE/ORIGIN
-                    // These should be skipped without calling shouldMessageBeSkipped. DBZ-5792
+                    // TYPE messages should be skipped without calling shouldMessageBeSkipped. DBZ-5792
                     LOGGER.trace("{} messages are always skipped without calling shouldMessageBeSkipped", type);
                     return true;
                 case TRUNCATE:
@@ -152,6 +151,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 case COMMIT:
                 case BEGIN:
                 case RELATION:
+                case ORIGIN:
                     // BEGIN
                     // These types should always be processed due to the nature that they provide
                     // the stream with pertinent per-transaction boundary state we will need to
@@ -161,6 +161,12 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                     // RELATION
                     // These messages are always sent with a lastReceivedLSN=0; and we need to
                     // always accept these to keep per-stream table state cached properly.
+                    //
+                    // ORIGIN
+                    // These messages contain origin information that needs to be cached for
+                    // subsequent events. Even during restart recovery, we need to process
+                    // ORIGIN messages to have the correct origin info once we reach the
+                    // point where we start emitting events.
                     LOGGER.trace("{} messages are always reprocessed", type);
                     return false;
                 default:
@@ -200,6 +206,9 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
                 break;
             case RELATION:
                 handleRelationMessage(buffer, typeRegistry);
+                break;
+            case ORIGIN:
+                handleOriginMessage(buffer, processor);
                 break;
             case LOGICAL_DECODING_MESSAGE:
                 handleLogicalDecodingMessage(buffer, processor);
@@ -254,6 +263,7 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         final Lsn lsn = Lsn.valueOf(buffer.getLong()); // LSN
         this.commitTimestamp = PG_EPOCH.plus(buffer.getLong(), ChronoUnit.MICROS);
         this.transactionId = Integer.toUnsignedLong(buffer.getInt());
+
         LOGGER.trace("Event: {}", MessageType.BEGIN);
         LOGGER.trace("Final LSN of transaction: {}", lsn);
         LOGGER.trace("Commit timestamp of transaction: {}", commitTimestamp);
@@ -272,12 +282,36 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         final Lsn lsn = Lsn.valueOf(buffer.getLong()); // LSN of the commit
         final Lsn endLsn = Lsn.valueOf(buffer.getLong()); // End LSN of the transaction
         Instant commitTimestamp = PG_EPOCH.plus(buffer.getLong(), ChronoUnit.MICROS);
+
         LOGGER.trace("Event: {}", MessageType.COMMIT);
         LOGGER.trace("Flags: {} (currently unused and most likely 0)", flags);
         LOGGER.trace("Commit LSN: {}", lsn);
         LOGGER.trace("End LSN of transaction: {}", endLsn);
         LOGGER.trace("Commit timestamp of transaction: {}", commitTimestamp);
         processor.process(new TransactionMessage(Operation.COMMIT, transactionId, commitTimestamp));
+    }
+
+    /**
+     * Callback handler for the 'O' origin replication message.
+     * The origin message indicates that the transaction originated from another server
+     * (e.g., in a logical replication setup).
+     *
+     * Message format according to PostgreSQL protocol:
+     * - Int64: The LSN of the commit on the origin server
+     * - String: Name of the origin
+     *
+     * @param buffer The replication stream buffer
+     * @param processor The replication message processor
+     */
+    private void handleOriginMessage(ByteBuffer buffer, ReplicationMessageProcessor processor) throws SQLException, InterruptedException {
+        Lsn originLsn = Lsn.valueOf(buffer.getLong());
+        String originName = readString(buffer);
+
+        LOGGER.trace("Event: {}", MessageType.ORIGIN);
+        LOGGER.trace("Origin LSN: {}", originLsn);
+        LOGGER.trace("Origin name: {}", originName);
+
+        processor.process(new OriginMessage(originName, originLsn, transactionId, commitTimestamp));
     }
 
     /**
@@ -296,24 +330,29 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         LOGGER.trace("Event: {}, RelationId: {}, Replica Identity: {}, Columns: {}", MessageType.RELATION, relationId, replicaIdentityId, columnCount);
         LOGGER.trace("Schema: '{}', Table: '{}'", schemaName, tableName);
 
-        // Perform several out-of-bands database metadata queries
-        Map<String, Optional<String>> columnDefaults;
-        Map<String, Boolean> columnOptionality;
-        List<String> primaryKeyColumns;
-
-        final DatabaseMetaData databaseMetadata = connection.connection().getMetaData();
         final TableId tableId = new TableId(null, schemaName, tableName);
+        final ReplicaIdentityInfo.ReplicaIdentity replicaIdentity = parseReplicaIdentity(replicaIdentityId);
 
-        final List<io.debezium.relational.Column> readColumns = getTableColumnsFromDatabase(connection, databaseMetadata, tableId);
-        columnDefaults = readColumns.stream()
-                .filter(io.debezium.relational.Column::hasDefaultValue)
-                .collect(toMap(io.debezium.relational.Column::name, io.debezium.relational.Column::defaultValueExpression));
+        // For DEFAULT and INDEX the relation message flags byte reliably marks Primary Key columns,
+        // so we resolve the PK from the message and avoid an out-of-band DB query.
+        // For FULL (all flags=1) and NOTHING (all flags=0) the flags can't distinguish PK columns, so
+        // we query the database.
+        // CHANGE is YugabyteDB-specific: from 2025.2.3 the RELATION message carries the PK for CHANGE,
+        // so we trust the flags, on older versions it doesn't, so we resolve the PK with a DB query.
+        final boolean findPkFromRelationMessage = connection.getYugabyteDBVersion().pkInRelationMessage();
+        boolean useFlags = (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.DEFAULT
+                || replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.INDEX
+                || (replicaIdentity == ReplicaIdentityInfo.ReplicaIdentity.CHANGE && findPkFromRelationMessage));
 
-        columnOptionality = readColumns.stream().collect(toMap(io.debezium.relational.Column::name, io.debezium.relational.Column::isOptional));
-        primaryKeyColumns = connection.readPrimaryKeyNames(databaseMetadata, tableId);
-        if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
-            LOGGER.warn("Primary keys are not defined for table '{}', defaulting to unique indices", tableName);
-            primaryKeyColumns = connection.readTableUniqueIndices(databaseMetadata, tableId);
+        List<String> primaryKeyColumns;
+        if (useFlags) {
+            LOGGER.debug("Using relation message flags to resolve PKs for '{}.{}'", schemaName, tableName);
+            primaryKeyColumns = new ArrayList<>();
+        }
+        else {
+            LOGGER.debug("Using DB metadata query to resolve PKs for '{}.{}' (replicaIdentity={})",
+                    schemaName, tableName, replicaIdentity);
+            primaryKeyColumns = queryPrimaryKeysFromDatabase(tableId);
         }
 
         List<ColumnMetaData> columns = new ArrayList<>();
@@ -324,21 +363,22 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
             int columnType = buffer.getInt();
             int attypmod = buffer.getInt();
 
-            final PostgresType postgresType = typeRegistry.get(columnType);
-            boolean key = isColumnInPrimaryKey(schemaName, tableName, columnName, primaryKeyColumns);
+            LOGGER.debug("Column '{}' in '{}.{}': flags={}, typeOid={}", columnName, schemaName, tableName, flags, columnType);
 
-            Boolean optional = columnOptionality.get(columnName);
-            if (optional == null) {
-                if (decoderContext.getConfig().getColumnFilter().matches(tableId.catalog(), tableId.schema(), tableId.table(), columnName)) {
-                    LOGGER.warn("Column '{}' optionality could not be determined, defaulting to true", columnName);
+            final PostgresType postgresType = typeRegistry.get(columnType);
+
+            boolean key;
+            if (useFlags) {
+                key = (flags & 1) == 1;
+                if (key) {
+                    primaryKeyColumns.add(columnName);
                 }
-                optional = true;
+            }
+            else {
+                key = isColumnInPrimaryKey(schemaName, tableName, columnName, primaryKeyColumns);
             }
 
-            final boolean hasDefault = columnDefaults.containsKey(columnName);
-            final String defaultValueExpression = columnDefaults.getOrDefault(columnName, Optional.empty()).orElse(null);
-
-            columns.add(new ColumnMetaData(columnName, postgresType, key, optional, hasDefault, defaultValueExpression, attypmod));
+            columns.add(new ColumnMetaData(columnName, postgresType, key, true, false, null, attypmod));
             columnNames.add(columnName);
         }
 
@@ -359,8 +399,45 @@ public class PgOutputMessageDecoder extends AbstractMessageDecoder {
         // to reflect the actual primary key state at time `t0`.
         primaryKeyColumns.retainAll(columnNames);
 
+        LOGGER.trace("Final primaryKeyColumns for '{}.{}': {}", schemaName, tableName, primaryKeyColumns);
+
         Table table = resolveRelationFromMetadata(new PgOutputRelationMetaData(relationId, schemaName, tableName, columns, primaryKeyColumns));
-        decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
+        if (YugabyteDBServer.isEnabled()) {
+            decoderContext.getSchema().applySchemaChangesForTableWithReplicaIdentity(relationId, table, replicaIdentityId);
+        }
+        else {
+            decoderContext.getSchema().applySchemaChangesForTable(relationId, table);
+        }
+    }
+
+    /**
+     * Queries the database for primary key columns of the given table.
+     * Falls back to unique indices if no primary keys are found.
+     */
+    private List<String> queryPrimaryKeysFromDatabase(TableId tableId) throws SQLException {
+        final DatabaseMetaData databaseMetadata = connection.connection().getMetaData();
+        List<String> primaryKeyColumns = connection.readPrimaryKeyNames(databaseMetadata, tableId);
+        if (primaryKeyColumns == null || primaryKeyColumns.isEmpty()) {
+            LOGGER.warn("Primary keys are not defined for table '{}', defaulting to unique indices", tableId);
+            primaryKeyColumns = connection.readTableUniqueIndices(databaseMetadata, tableId);
+        }
+        return primaryKeyColumns;
+    }
+
+    /**
+     * @param replicaIdentityId the integer representation of the character for denoting replica identity.
+     * @return the parsed {@link ReplicaIdentityInfo.ReplicaIdentity} enum value.
+     */
+    private ReplicaIdentityInfo.ReplicaIdentity parseReplicaIdentity(int replicaIdentityId) {
+        return ReplicaIdentityInfo.ReplicaIdentity.parseFromDB(String.valueOf((char) replicaIdentityId));
+    }
+
+    /**
+     * @param replicaIdentityId the integer representation of the character for denoting replica identity.
+     * @return true if the replica identity is change, false otherwise.
+     */
+    private boolean isReplicaIdentityChange(int replicaIdentityId) {
+        return ReplicaIdentityInfo.ReplicaIdentity.CHANGE == parseReplicaIdentity(replicaIdentityId);
     }
 
     private List<io.debezium.relational.Column> getTableColumnsFromDatabase(PostgresConnection connection, DatabaseMetaData databaseMetadata, TableId tableId)
