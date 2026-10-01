@@ -1244,6 +1244,7 @@ public class EventRouterTest {
     }
 
     @Test
+    @FixFor("debezium/dbz#2743")
     public void shouldFallBackToRawStringWhenJsonExpansionFailsOnInconsistentArrayElementTypes() {
         // "details" is a nested object in one array element and a plain string in another, so the
         // inferred schema cannot hold both and toConnectData throws. The delegate must then fall
