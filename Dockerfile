@@ -27,8 +27,8 @@ WORKDIR /
 # Copy the Debezium Connector for Postgres adapted for YugabyteDB
 COPY debezium-connector-postgres/target/yugabytedb-source-connector-*.jar $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres/
 
-# Set the TLS version to be used by Kafka processes
-ENV KAFKA_OPTS="-Djdk.tls.client.protocols=TLSv1.2 -javaagent:/kafka/etc/jmx_prometheus_javaagent-0.17.2.jar=8080:/kafka/etc/jmx-exporter/metrics.yml"
+# Applies to every TLS client in the JVM, including the connection to YugabyteDB
+ENV KAFKA_OPTS="-Djdk.tls.client.protocols=TLSv1.3,TLSv1.2 -javaagent:/kafka/etc/jmx_prometheus_javaagent-0.17.2.jar=8080:/kafka/etc/jmx-exporter/metrics.yml"
 
 # Package all the Avro related jar files
 RUN mkdir -p $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres/avro-supporting-jars/
