@@ -59,9 +59,9 @@ public class PostgresMetricsIT extends AbstractRecordsProducerTest {
     @Test
     public void testLifecycle() throws Exception {
         // start connector
-        start(PostgresConnector.class,
+        start(YugabyteDBConnector.class,
                 TestHelper.defaultConfig()
-                        .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.ALWAYS)
+                        .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL)
                         .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                         .build());
 
@@ -100,7 +100,7 @@ public class PostgresMetricsIT extends AbstractRecordsProducerTest {
         TestHelper.execute(INIT_STATEMENTS, INSERT_STATEMENTS);
 
         // start connector
-        start(PostgresConnector.class,
+        start(YugabyteDBConnector.class,
                 TestHelper.defaultConfig()
                         .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL_ONLY)
                         .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
@@ -115,9 +115,9 @@ public class PostgresMetricsIT extends AbstractRecordsProducerTest {
         TestHelper.execute(INIT_STATEMENTS, INSERT_STATEMENTS);
 
         // start connector
-        start(PostgresConnector.class,
+        start(YugabyteDBConnector.class,
                 TestHelper.defaultConfig()
-                        .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.ALWAYS)
+                        .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL)
                         .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                         .build());
 
@@ -133,12 +133,12 @@ public class PostgresMetricsIT extends AbstractRecordsProducerTest {
 
         // start connector
         Configuration config = TestHelper.defaultConfig()
-                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.ALWAYS)
+                .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.INITIAL)
                 .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
                 .with(PostgresConnectorConfig.CUSTOM_METRIC_TAGS, "env=test,bu=bigdata")
                 .build();
         Map<String, String> customMetricTags = new PostgresConnectorConfig(config).getCustomMetricTags();
-        start(PostgresConnector.class, config);
+        start(YugabyteDBConnector.class, config);
 
         assertSnapshotWithCustomMetrics(customMetricTags);
         assertStreamingWithCustomMetrics(customMetricTags);
@@ -150,7 +150,7 @@ public class PostgresMetricsIT extends AbstractRecordsProducerTest {
         TestHelper.execute(INIT_STATEMENTS);
 
         // start connector
-        start(PostgresConnector.class,
+        start(YugabyteDBConnector.class,
                 TestHelper.defaultConfig()
                         .with(PostgresConnectorConfig.SNAPSHOT_MODE, SnapshotMode.NEVER)
                         .with(PostgresConnectorConfig.DROP_SLOT_ON_STOP, Boolean.TRUE)
@@ -275,7 +275,7 @@ public class PostgresMetricsIT extends AbstractRecordsProducerTest {
                 .with(PostgresConnectorConfig.MAX_BATCH_SIZE, 1)
                 .with(PostgresConnectorConfig.POLL_INTERVAL_MS, 100L)
                 .with(PostgresConnectorConfig.MAX_QUEUE_SIZE_IN_BYTES, 10000L);
-        start(PostgresConnector.class, configBuilder.build(), loggingCompletion(), null, x -> {
+        start(YugabyteDBConnector.class, configBuilder.build(), loggingCompletion(), null, x -> {
             LOGGER.info("Record '{}' arrived", x);
             step1.countDown();
             try {

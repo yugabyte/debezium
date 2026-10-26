@@ -18,12 +18,14 @@ public class SlotCreationResult {
     private final Lsn walStartLsn;
     private final String snapshotName;
     private final String pluginName;
+    private final boolean exportSnapshotUsed;
 
-    public SlotCreationResult(String name, String startLsn, String snapshotName, String pluginName) {
+    public SlotCreationResult(String name, String startLsn, String snapshotName, String pluginName, boolean exportSnapshotUsed) {
         this.slotName = name;
         this.walStartLsn = Lsn.valueOf(startLsn);
         this.snapshotName = snapshotName;
         this.pluginName = pluginName;
+        this.exportSnapshotUsed = exportSnapshotUsed;
     }
 
     /**
@@ -43,5 +45,9 @@ public class SlotCreationResult {
 
     public String pluginName() {
         return pluginName;
+    }
+
+    public boolean isExportSnapshotUsed() {
+        return exportSnapshotUsed;
     }
 }
