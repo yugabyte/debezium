@@ -127,6 +127,14 @@ public class YugabyteDBConnector extends RelationalBaseSourceConnector {
             YBValidate.slotRangesMatchSlotNames(slotNames, slotRanges);
             YBValidate.completeRangesProvided(slotRanges);
 
+            // Each slot gets its own task. Kafka Connect 3.8+ (KIP-1004) fails a connector that returns more
+            // task configs than tasks.max, so name the setting that fixes it before Connect rejects the tasks.
+            if (slotNames.size() > maxTasks) {
+                LOGGER.warn("Parallel streaming runs one task per replication slot, so it needs {} tasks but tasks.max is {}. "
+                        + "Kafka Connect 3.8 and later fail the connector in this case; set tasks.max to {}.",
+                        slotNames.size(), maxTasks, slotNames.size());
+            }
+
             return getTaskConfigsForParallelStreaming(slotNames, publicationNames, slotRanges);
         }
 
