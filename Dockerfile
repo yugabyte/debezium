@@ -1,31 +1,16 @@
 # On your terminal, run the following to build the image:
 # mvn clean package -Dquick
 
-FROM debezium/connect:2.5.2.Final
+# Kafka Connect 4.3.1 on Java 25, with the same /kafka layout, entrypoint and environment
+# variables as the debezium/connect:2.5.2.Final image used before
+FROM quay.io/debezium/connect:3.7.0.Final
 
-# Install Java 17 (required because connector JAR is compiled with Java 17)
-USER root
-RUN microdnf install -y java-17-openjdk-headless && microdnf clean all \
-    && ln -sfn /usr/lib/jvm/java-17-openjdk-* /usr/lib/jvm/java-17
-ENV JAVA_HOME=/usr/lib/jvm/java-17
-ENV PATH=$JAVA_HOME/bin:$PATH
-USER kafka
-
-WORKDIR $KAFKA_CONNECT_PLUGINS_DIR
-RUN rm -f debezium-connector-postgres/debezium-connector-postgres-*.jar
-RUN rm -rf debezium-connector-db2
-RUN rm -rf debezium-connector-informix
-RUN rm -rf debezium-connector-mongodb
-RUN rm -rf debezium-connector-jdbc
-RUN rm -rf debezium-connector-mysql
-RUN rm -rf debezium-connector-oracle
-RUN rm -rf debezium-connector-spanner
-RUN rm -rf debezium-connector-sqlserver
-RUN rm -rf debezium-connector-vitess
-WORKDIR /
+# Remove every upstream connector. Upstream's debezium-connector-postgres directory holds the
+# Debezium 3.x core jars, which must not share a class loader with the YugabyteDB connector.
+RUN rm -rf $KAFKA_CONNECT_PLUGINS_DIR/* && mkdir $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres
 
 # Copy the Debezium Connector for Postgres adapted for YugabyteDB
-COPY debezium-connector-postgres/target/yugabytedb-source-connector-*.jar $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres/
+COPY debezium-connector-postgres/target/yugabytedb-source-connector-*-jar-with-dependencies.jar $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres/
 
 # Applies to every TLS client in the JVM, including the connection to YugabyteDB
 ENV KAFKA_OPTS="-Djdk.tls.client.protocols=TLSv1.3,TLSv1.2 -javaagent:/kafka/etc/jmx_prometheus_javaagent-0.17.2.jar=8080:/kafka/etc/jmx-exporter/metrics.yml"
@@ -60,7 +45,7 @@ RUN curl -sLo logredactor-metrics-1.0.12.jar https://repo1.maven.org/maven2/io/c
 WORKDIR /
 
 # Add the required jar files to be packaged with the base connector
-RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo kafka-connect-jdbc-10.6.5-CUSTOM.7.jar https://github.com/yugabyte/kafka-connect-jdbc/releases/download/10.6.5-CUSTOM.7/kafka-connect-jdbc-10.6.5-CUSTOM.7.jar
+RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo kafka-connect-jdbc-10.6.5-CUSTOM.8.jar https://github.com/yugabyte/kafka-connect-jdbc/releases/download/10.6.5-CUSTOM.8/kafka-connect-jdbc-10.6.5-CUSTOM.8.jar
 RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo jdbc-yugabytedb-42.7.3-yb-5.jar https://repo1.maven.org/maven2/com/yugabyte/jdbc-yugabytedb/42.7.3-yb-5/jdbc-yugabytedb-42.7.3-yb-5.jar
 RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo transforms-for-apache-kafka-connect-1.5.0.zip https://github.com/Aiven-Open/transforms-for-apache-kafka-connect/releases/download/v1.5.0/transforms-for-apache-kafka-connect-1.5.0.zip
 RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && unzip transforms-for-apache-kafka-connect-1.5.0.zip
