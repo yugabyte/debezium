@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.connect.components.Versioned;
 import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -13,6 +14,8 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.transforms.Transformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.debezium.connector.postgresql.Module;
 
 /**
  * Custom extractor for YugabyteDB to be used to convert the output of yboutput/CHANGE to the
@@ -24,7 +27,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Vaibhav Kushwaha (vkushwaha@yugabyte.com)
  */
-public class PGCompatible<R extends ConnectRecord<R>> implements Transformation<R> {
+public class PGCompatible<R extends ConnectRecord<R>> implements Transformation<R>, Versioned {
     private static final Logger LOGGER = LoggerFactory.getLogger(PGCompatible.class);
 
     @Override
@@ -55,6 +58,11 @@ public class PGCompatible<R extends ConnectRecord<R>> implements Transformation<
 
     @Override
     public void close() {
+    }
+
+    @Override
+    public String version() {
+        return Module.version();
     }
 
     private boolean isValueSetStruct(Field field) {
