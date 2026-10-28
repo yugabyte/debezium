@@ -50,6 +50,11 @@ RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo jdbc-
 RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo transforms-for-apache-kafka-connect-1.5.0.zip https://github.com/Aiven-Open/transforms-for-apache-kafka-connect/releases/download/v1.5.0/transforms-for-apache-kafka-connect-1.5.0.zip
 RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && unzip transforms-for-apache-kafka-connect-1.5.0.zip
 
+# The Aiven transforms and the Confluent Avro converter ship without ServiceLoader manifests, so Kafka Connect
+# 4.x warns about them at startup and cannot load them with plugin.discovery=service_load. Generate the manifests.
+# KAFKA_OPTS is cleared because the JMX agent it loads is only downloaded further down.
+RUN KAFKA_OPTS= $KAFKA_HOME/bin/connect-plugin-path.sh sync-manifests --plugin-path $KAFKA_CONNECT_PLUGINS_DIR
+
 # Add Jmx agent and metrics pattern file to expose the metrics info
 RUN mkdir /kafka/etc && cd /kafka/etc && curl -so jmx_prometheus_javaagent-0.17.2.jar https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.17.2/jmx_prometheus_javaagent-0.17.2.jar
 
