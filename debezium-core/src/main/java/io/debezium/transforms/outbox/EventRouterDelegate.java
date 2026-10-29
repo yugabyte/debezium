@@ -179,11 +179,11 @@ public class EventRouterDelegate<R extends ConnectRecord<R>> {
                 }
                 catch (Exception e) {
                     // Keep the record as an unexpanded string (the documented fallback). Name the field
-                    // and chain the cause, but route the exception message through maybeRedactSensitiveData
-                    // because it can echo payload contents. The full throwable, with its stack trace and
-                    // nested causes, is logged at TRACE for diagnosis when verbose logging is enabled.
-                    LOGGER.warn("JSON expansion of the '{}' field failed; keeping it as an unexpanded string. Cause: {}: {}",
-                            fieldPayload, e.getClass().getName(), maybeRedactSensitiveData(e.getMessage()));
+                    // and the cause type, but not the exception message, because it can echo payload
+                    // contents. The full throwable, with its stack trace and nested causes, is logged at
+                    // TRACE for diagnosis when verbose logging is enabled.
+                    LOGGER.warn("JSON expansion of the '{}' field failed; keeping it as an unexpanded string. Cause: {}",
+                            fieldPayload, e.getClass().getName());
                     LOGGER.trace("JSON expansion failure detail for the '{}' field", fieldPayload, e);
                 }
             }
