@@ -5,7 +5,7 @@ import io.debezium.connector.common.CdcSourceTaskContext;
 import io.debezium.metrics.Metrics;
 import io.debezium.pipeline.JmxUtils;
 import io.debezium.util.Collect;
-import org.apache.kafka.common.utils.Sanitizer;
+import io.debezium.util.Sanitizer;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
