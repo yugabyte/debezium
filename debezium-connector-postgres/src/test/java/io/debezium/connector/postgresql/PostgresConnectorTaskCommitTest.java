@@ -15,6 +15,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.Test;
@@ -84,7 +86,7 @@ public class PostgresConnectorTaskCommitTest {
                 Offsets.of(new PostgresPartition("srv", "db", "0", "slot"), durable), coordinator);
 
         // A later record is acknowledged by the broker while earlier ones are still in flight...
-        task.commitRecord(recordAt(ACKED_LSN));
+        task.commitRecord(recordAt(ACKED_LSN), new RecordMetadata(new TopicPartition("topic", 0), 0L, 0, 0L, 0, 0));
         // ...and a later one still is dropped by an SMT, so it never reaches Kafka at all.
         task.commitRecord(recordAt(FILTERED_LSN), null);
 
