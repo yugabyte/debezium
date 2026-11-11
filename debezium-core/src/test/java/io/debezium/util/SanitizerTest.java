@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import javax.management.ObjectName;
 
-import org.junit.jupiter.api.Test;
+import org.junit.Test;
 
 import io.debezium.doc.FixFor;
 
