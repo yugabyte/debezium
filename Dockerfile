@@ -13,6 +13,8 @@ USER kafka
 
 WORKDIR $KAFKA_CONNECT_PLUGINS_DIR
 RUN rm -f debezium-connector-postgres/debezium-connector-postgres-*.jar
+# The connector jar bundles pgjdbc; the base image's older driver would load first and shadow it
+RUN rm -f debezium-connector-postgres/postgresql-*.jar
 RUN rm -rf debezium-connector-db2
 RUN rm -rf debezium-connector-informix
 RUN rm -rf debezium-connector-mongodb
