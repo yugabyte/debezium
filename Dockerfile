@@ -51,10 +51,10 @@ RUN curl -sLo re2j-1.6.jar https://repo1.maven.org/maven2/com/google/re2j/re2j/1
 RUN curl -sLo slf4j-api-1.7.36.jar https://repo1.maven.org/maven2/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar
 RUN curl -sLo snakeyaml-2.0.jar https://repo1.maven.org/maven2/org/yaml/snakeyaml/2.0/snakeyaml-2.0.jar 
 RUN curl -sLo swagger-annotations-2.1.10.jar https://repo1.maven.org/maven2/io/swagger/core/v3/swagger-annotations/2.1.10/swagger-annotations-2.1.10.jar 
-RUN curl -sLo jackson-databind-2.14.2.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.jar 
-RUN curl -sLo jackson-core-2.14.2.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.jar 
-RUN curl -sLo jackson-annotations-2.14.2.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.jar 
-RUN curl -sLo jackson-dataformat-csv-2.14.2.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-csv/2.14.2/jackson-dataformat-csv-2.14.2.jar 
+RUN curl -sLo jackson-databind-2.21.8.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.21.8/jackson-databind-2.21.8.jar 
+RUN curl -sLo jackson-core-2.21.8.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/2.21.8/jackson-core-2.21.8.jar 
+RUN curl -sLo jackson-annotations-2.21.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.21/jackson-annotations-2.21.jar 
+RUN curl -sLo jackson-dataformat-csv-2.21.8.jar https://repo1.maven.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-csv/2.21.8/jackson-dataformat-csv-2.21.8.jar 
 RUN curl -sLo logredactor-1.0.12.jar https://repo1.maven.org/maven2/io/confluent/logredactor/1.0.12/logredactor-1.0.12.jar
 RUN curl -sLo logredactor-metrics-1.0.12.jar https://repo1.maven.org/maven2/io/confluent/logredactor-metrics/1.0.12/logredactor-metrics-1.0.12.jar
 WORKDIR /
