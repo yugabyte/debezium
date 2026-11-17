@@ -824,7 +824,7 @@ public abstract class RelationalDatabaseConnectorConfig extends CommonConnectorC
         return problemCount;
     }
 
-    private static int validateHostname(Configuration config, Field field, ValidationOutput problems) {
+    protected static int validateHostname(Configuration config, Field field, ValidationOutput problems) {
         String hostName = config.getString(field);
         if (!Strings.isNullOrBlank(hostName)) {
             if (!HOSTNAME_PATTERN.asPredicate().test(hostName)) {
