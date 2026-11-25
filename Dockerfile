@@ -9,12 +9,43 @@ RUN microdnf install -y java-17-openjdk-headless && microdnf clean all \
     && ln -sfn /usr/lib/jvm/java-17-openjdk-* /usr/lib/jvm/java-17
 ENV JAVA_HOME=/usr/lib/jvm/java-17
 ENV PATH=$JAVA_HOME/bin:$PATH
+
+# Apache Kafka 4.3.2 replaces the base image's Kafka 3.6.1. No Debezium image ships Kafka 4.3.2, so the release is
+# installed here, as in the gRPC connector's base image, and checked against its published SHA-512. Of Kafka's
+# files, the base image adds only the Jolokia agent jar, which is kept. The base image's entrypoint is unchanged, and
+# Kafka 4.x still reads log4j.properties, through its log4j 1.x bridge. As in Debezium's Kafka 4.x images,
+# config.orig holds the Kafka 4.3.2 config files plus log4j.properties.
+ENV KAFKA_VERSION=4.3.2
+ARG KAFKA_SHA512=c2063485f90312bba795052df3e49b8eea337adf97f1111b946c60771c7a2f088055d2ccc7221d72fe30bd6a3f7a58348f14e14240eaddfe60446ea1c033618b
+RUN curl -fsSLo /tmp/kafka.tgz https://dlcdn.apache.org/kafka/$KAFKA_VERSION/kafka_$SCALA_VERSION-$KAFKA_VERSION.tgz \
+      || curl -fsSLo /tmp/kafka.tgz https://archive.apache.org/dist/kafka/$KAFKA_VERSION/kafka_$SCALA_VERSION-$KAFKA_VERSION.tgz \
+    && echo "$KAFKA_SHA512  /tmp/kafka.tgz" | sha512sum -c - \
+    && mkdir /tmp/kafka && tar -xzf /tmp/kafka.tgz -C /tmp/kafka --strip-components=1 \
+    && mv $KAFKA_HOME/libs/jolokia-jvm-$JOLOKIA_VERSION.jar /tmp/kafka/libs/ \
+    && rm -rf $KAFKA_HOME/libs $KAFKA_HOME/bin $KAFKA_HOME/licenses \
+    && mv /tmp/kafka/libs /tmp/kafka/bin /tmp/kafka/licenses /tmp/kafka/LICENSE /tmp/kafka/NOTICE $KAFKA_HOME/ \
+    && find $KAFKA_HOME/config.orig -mindepth 1 -maxdepth 1 ! -name log4j.properties -exec rm -rf {} + \
+    && cp /tmp/kafka/config/* $KAFKA_HOME/config.orig/ \
+    && chown -R root:root $KAFKA_HOME/libs $KAFKA_HOME/bin $KAFKA_HOME/licenses $KAFKA_HOME/LICENSE $KAFKA_HOME/NOTICE \
+    && chown -R kafka:kafka $KAFKA_HOME/config.orig \
+    && chmod -R a+rwX $KAFKA_HOME/libs $KAFKA_HOME/bin $KAFKA_HOME/licenses $KAFKA_HOME/config.orig \
+    && chmod a+rw $KAFKA_HOME/LICENSE $KAFKA_HOME/NOTICE \
+    && rm -rf /tmp/kafka /tmp/kafka.tgz
 USER kafka
+
+# Debezium's Kafka Connect REST extension (ENABLE_DEBEZIUM_KC_REST_EXTENSION=true) is built on javax.ws.rs, which
+# Kafka 4.x no longer has, and the worker does not start with it. Debezium's own Kafka 4.x images no longer ship it,
+# and without the directory the switch is ignored.
+RUN rm -rf $EXTERNAL_LIBS_DIR/debezium-connect-rest-extension
 
 WORKDIR $KAFKA_CONNECT_PLUGINS_DIR
 RUN rm -f debezium-connector-postgres/debezium-connector-postgres-*.jar
 # The connector jar bundles pgjdbc; the base image's older driver would load first and shadow it
 RUN rm -f debezium-connector-postgres/postgresql-*.jar
+# The connector jar bundles its own debezium-api, debezium-core and protobuf-java, with the changes for Kafka 4.x and
+# protobuf 3.25.5. Connect loads a plugin's jars in file name order, so the base image's copies (Debezium 2.5.2 as
+# released, protobuf 3.25.2) would load first.
+RUN rm -f debezium-connector-postgres/debezium-api-*.jar debezium-connector-postgres/debezium-core-*.jar debezium-connector-postgres/protobuf-java-*.jar
 RUN rm -rf debezium-connector-db2
 RUN rm -rf debezium-connector-informix
 RUN rm -rf debezium-connector-mongodb
@@ -62,7 +93,7 @@ RUN curl -sLo logredactor-metrics-1.0.12.jar https://repo1.maven.org/maven2/io/c
 WORKDIR /
 
 # Add the required jar files to be packaged with the base connector
-RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo kafka-connect-jdbc-10.6.5-CUSTOM.7.jar https://github.com/yugabyte/kafka-connect-jdbc/releases/download/10.6.5-CUSTOM.7/kafka-connect-jdbc-10.6.5-CUSTOM.7.jar
+RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo kafka-connect-jdbc-10.6.5-CUSTOM.8.jar https://github.com/yugabyte/kafka-connect-jdbc/releases/download/10.6.5-CUSTOM.8/kafka-connect-jdbc-10.6.5-CUSTOM.8.jar
 RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo jdbc-yugabytedb-42.7.3-yb-7.jar https://repo1.maven.org/maven2/com/yugabyte/jdbc-yugabytedb/42.7.3-yb-7/jdbc-yugabytedb-42.7.3-yb-7.jar
 RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && curl -sLo transforms-for-apache-kafka-connect-1.5.0.zip https://github.com/Aiven-Open/transforms-for-apache-kafka-connect/releases/download/v1.5.0/transforms-for-apache-kafka-connect-1.5.0.zip
 RUN cd $KAFKA_CONNECT_PLUGINS_DIR/debezium-connector-postgres && unzip transforms-for-apache-kafka-connect-1.5.0.zip
