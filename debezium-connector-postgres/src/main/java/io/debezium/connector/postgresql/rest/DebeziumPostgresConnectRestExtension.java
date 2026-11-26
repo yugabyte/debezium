@@ -7,9 +7,10 @@ package io.debezium.connector.postgresql.rest;
 
 import java.util.Map;
 
-import org.apache.kafka.common.utils.AppInfoParser;
 import org.apache.kafka.connect.rest.ConnectRestExtension;
 import org.apache.kafka.connect.rest.ConnectRestExtensionContext;
+
+import io.debezium.connector.postgresql.Module;
 
 /**
  * A Kafka Connect REST extension that enables some advanced features over
@@ -41,6 +42,6 @@ public class DebeziumPostgresConnectRestExtension implements ConnectRestExtensio
 
     @Override
     public String version() {
-        return AppInfoParser.getVersion();
+        return Module.version();
     }
 }
